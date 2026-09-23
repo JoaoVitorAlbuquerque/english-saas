@@ -1,0 +1,346 @@
+# CLAUDE.md
+
+Guia do projeto para o Claude Code. Leia antes de mexer em qualquer coisa.
+
+---
+
+## 1. O produto
+
+Plataforma de ensino de **inglês** (depois outros idiomas) para **alunos
+brasileiros**, cobrindo do **A1 ao C1** (CEFR).
+
+**Não existe aula gravada com professor.** Cada lição é interativa e segue
+sempre a mesma espinha:
+
+1. **Cena em áudio** com personagens fixos, em formato de série — o aluno
+   acompanha as mesmas pessoas ao longo do curso.
+2. **Cards de explicação em português**, curtos e diretos.
+3. **Prática em camadas**: reconhecer → montar → produzir.
+4. **Produção livre corrigida por IA**.
+5. **Roleplay com IA**, usando o que acabou de ser praticado.
+6. **Revisão espaçada** do que foi visto.
+
+### Regras de produto que valem para tudo
+
+- **Conteúdo base é igual para todos e todo liberado.** Lições, apostilas em
+  PDF e trilhas podem ser acessadas em qualquer ordem, a qualquer momento.
+  Nada de bloquear conteúdo por progresso.
+- **O cronograma personalizado é o caminho recomendado**, não uma trava. Ele
+  sugere o que estudar hoje; o aluno segue ou não.
+- **Questionários e provas são nivelados pelo aluno.** Os itens têm
+  dificuldade calibrada e os testes são adaptativos — dois alunos em níveis
+  diferentes não recebem a mesma prova.
+- **O sistema mantém um modelo do aluno**: nível por competência, conteúdo
+  que ele precisa, pontos fortes e fracos, erros recorrentes e interesses.
+  **Tudo que é gerado ou recomendado consulta esse modelo** e acompanha a
+  evolução dele ao longo do tempo.
+- **Registro falado × estrutura gramatical.** Textos e conversas sempre
+  mostram a diferença entre a forma gramatical padrão e como se fala no dia
+  a dia:
+  - `I'm going to` × `I'm gonna`
+  - `Are you coming?` × `You coming?`
+  - `Do you want to...?` × `Wanna...?`
+
+### Plano pago superior (Plus)
+
+Ferramentas de IA exclusivas:
+
+- **(a) Material a partir de um tema.** O aluno diz um interesse ("gosto de
+  História") e a IA gera um texto sobre um **acontecimento real**, com fatos
+  de **fonte verificável**, **no nível do aluno**, trabalhando **as estruturas
+  que ele precisa melhorar**, com destaques gramaticais, notas de registro
+  falado e exercícios.
+- **(b) Material a partir de um conteúdo do aluno.** Ele cola um texto, a URL
+  de uma reportagem ou a letra de uma música (depois: links de vídeo) e a IA
+  gera material de estudo e exercícios no nível dele.
+
+### Tom da interface
+
+Português do Brasil, **direto e amigável**. Sem formalidade de manual, sem
+gíria forçada, sem exclamação em excesso. Fale com o aluno como um professor
+que ele gosta falaria.
+
+---
+
+## 2. Stack
+
+Decidida. **Não troque nada aqui sem me perguntar antes.**
+
+| Camada        | Escolha                                                 |
+| ------------- | ------------------------------------------------------- |
+| Monorepo      | pnpm workspaces + Turborepo                             |
+| API           | NestJS (TypeScript strict), **monólito modular**        |
+| Banco         | PostgreSQL 16 + Prisma                                  |
+| Filas / jobs  | Redis + BullMQ (`@nestjs/bullmq`)                       |
+| Armazenamento | S3 (MinIO no ambiente local)                            |
+| Validação     | zod + nestjs-zod — schemas em `packages/shared`         |
+| Web           | React + Vite + Tailwind + TanStack Query                |
+| IA            | OpenAI                                                  |
+| Pagamento     | Asaas (Pix, boleto, cartão, assinaturas)                |
+| Testes        | Jest (unit) + Supertest (e2e), banco via docker compose |
+| Logs          | pino (`nestjs-pino`), estruturado, com `requestId`      |
+
+**Estado atual: foco é o back-end.** `apps/web` é só um placeholder; o
+front-end entra depois.
+
+### Layout do repositório
+
+```
+apps/
+  api/                  NestJS
+    src/
+      main.ts
+      app.module.ts
+      common/           config, filtros, decorators, pipes, erros
+      infra/            Prisma, Redis, filas, logger, S3
+      modules/          um diretório por módulo de negócio
+    prisma/             schema.prisma, migrations, seed.ts
+    test/               e2e (Supertest)
+  web/                  React + Vite + Tailwind (placeholder)
+packages/
+  shared/               tipos e schemas zod compartilhados (build: tsup)
+  eslint-config/        presets flat config (base, nest, react)
+  tsconfig/             tsconfig base, nestjs, library, react
+```
+
+### Versões que valem uma nota
+
+- **Prisma 6.x**, não a 7/8. Migrar depois, em PR próprio.
+- **ESLint 9 flat config** (`eslint.config.mjs`). Sob pnpm, o `.eslintrc`
+  não resolve plugins vindos de um pacote compartilhado.
+- **`@nestjs/event-emitter` 3.x**, não a 12.x. A 12 é ESM-only: roda no Node
+  24 via `require(esm)`, mas o Jest em CommonJS não consegue carregar, e os
+  testes e2e quebram na importação do `app.module`.
+- **`@typescript-eslint/consistent-type-imports` fica desligado na API.**
+  Um provider injetado só aparece como anotação de tipo no construtor;
+  trocá-lo por `import type` apaga o `design:paramtypes` e a DI do Nest
+  quebra **em runtime**, sem erro de compilação.
+
+---
+
+## 3. Módulos e ordem de dependência
+
+Construímos **um módulo por vez, nesta ordem**. Um módulo só pode depender
+dos que vêm antes dele.
+
+| #   | Módulo                          | Depende de | O que entrega                                                                                      |
+| --- | ------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| 0   | `setup`                         | —          | Monorepo, docker compose, lint/format/hooks, CI, `GET /health`. ✅ pronto                          |
+| 1   | `infra`                         | 0          | Prisma consolidado, S3/MinIO, BullMQ, logger, filtro de erro, paginação por cursor                 |
+| 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod da saída, isolamento de conteúdo não confiável  |
+| 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh), perfil, teste de nivelamento inicial, coleta de interesses        |
+| 4   | `curriculum`                    | 3          | Personagens, temporadas, trilhas, mapa A1→C1, objetivos por nível, catálogo de apostilas PDF       |
+| 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação |
+| 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                  |
+| 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                  |
+| 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                    |
+| 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                |
+| 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                            |
+| 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                  |
+| 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                 |
+| 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios               |
+| 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                       |
+| 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                  |
+| 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                          |
+| 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas                                            |
+| 18  | `deploy`                        | todos      | Infra de produção, migrations, observabilidade, backup                                             |
+
+---
+
+## 4. Convenções
+
+### Idioma
+
+- **Código, nomes de tabela, colunas, endpoints, códigos de erro e commits:
+  em inglês.**
+- **Texto exibido ao aluno: em pt-BR.** Isso inclui mensagens de erro da API
+  — o campo `code` é o identificador em inglês, o `message` é o texto pt-BR
+  pronto para exibir.
+- Comentários e documentação: pt-BR.
+
+### Anatomia de um módulo
+
+Todo módulo Nest vive em `apps/api/src/modules/<nome>/`:
+
+```
+<nome>/
+  <nome>.module.ts      declaração do módulo
+  controllers/          HTTP — só traduz request/response, sem regra
+  services/             orquestração: I/O, transação, chamada a outros módulos
+  dto/                  schemas zod de entrada e saída (createZodDto)
+  domain/               REGRA DE NEGÓCIO PURA — sem Nest, sem I/O
+  jobs/                 processors BullMQ
+  events/               eventos emitidos e handlers
+  <nome>.spec.ts        testes unitários do domain/
+```
+
+Diretório que o módulo não usa, não cria.
+
+### `domain/` é sagrado
+
+**Regra de negócio e algoritmo ficam em função pura em `domain/`, com teste
+unitário.** Nada de Nest, Prisma, HTTP, fila, `Date.now()` ou `Math.random()`
+lá dentro — o tempo e a aleatoriedade entram por parâmetro.
+
+O ESLint impõe isso: importar `@nestjs/*`, `@prisma/*`, `bullmq`, `ioredis`,
+`express`, `openai` ou `**/infra/**` dentro de `domain/` é erro.
+
+Isso vale principalmente para o que é coração do produto: cálculo de mastery,
+agendamento de revisão, seleção adaptativa de item, montagem do cronograma,
+calibração de dificuldade. É tudo testável sem subir nada.
+
+### Comunicação entre módulos
+
+- Um módulo conversa com outro por **serviço exportado** ou por **evento**
+  (`EventEmitter2`).
+- **Nunca acesse a tabela de outro módulo direto pelo Prisma quando existe um
+  serviço para isso.** Precisa de um dado do `learner-model`? Chame o serviço
+  dele. Se o serviço não existe, crie — não faça um `findMany` atravessado.
+- Evento para efeito colateral assíncrono (`attempt.submitted` →
+  `learner-model` recalcula, `srs` reagenda). Serviço para leitura síncrona.
+- Nome de evento: `<módulo>.<fato no passado>` — `lesson.completed`,
+  `subscription.activated`.
+
+### Trabalho pesado vai para a fila
+
+**Toda tarefa lenta ou que chama IA roda em BullMQ.** O request HTTP nunca
+bloqueia além de ~2s.
+
+O padrão é: o controller enfileira e devolve um id; o cliente acompanha por
+polling ou por evento. Filas declaradas em
+[queues.ts](apps/api/src/infra/queue/queues.ts).
+
+### Toda saída de IA é validada com zod
+
+Nenhuma resposta de IA é usada ou salva antes de passar por `schema.parse()`.
+Falhou o parse: retry com o erro no prompt; falhou de novo, o job falha e o
+aluno recebe uma mensagem honesta em pt-BR. Nunca salve JSON de IA "na fé".
+
+### Conteúdo do usuário é dado, nunca instrução
+
+Tudo que o aluno envia — texto colado, URL, letra de música, redação,
+mensagem de roleplay — é **dado não confiável**.
+
+- Vai numa mensagem **separada**, marcado como conteúdo do usuário. Nunca é
+  concatenado dentro do system prompt.
+- A instrução do que fazer vem **sempre** do nosso prompt, nunca do conteúdo.
+- Instrução que aparecer dentro do conteúdo do aluno é para ser **ignorada e
+  tratada como texto**.
+- Detalhes e helpers ficam no módulo 2 (`ai`).
+
+### Erros e logs
+
+- Erro de negócio: `AppException` (ou as subclasses em
+  [app.exception.ts](apps/api/src/common/errors/app.exception.ts)) com `code`
+  em inglês e `message` em pt-BR.
+- O filtro global normaliza tudo para o formato `ApiError` de
+  `packages/shared`. Detalhe interno de erro 500 **nunca** vaza — vai só para
+  o log.
+- Logs estruturados com pino, sempre com `requestId` — o mesmo id que volta
+  no corpo do erro.
+- **Nunca logue** token, senha, chave de API ou conteúdo enviado pelo aluno.
+
+### Paginação
+
+**Listagem pagina por cursor, nunca por offset.** Use
+`cursorPaginationQuerySchema` e o envelope `paginatedSchema` de
+`packages/shared`.
+
+### Banco
+
+- Model em PascalCase singular (`ReviewCard`), tabela em snake_case plural
+  via `@@map` (`review_cards`), coluna em snake_case via `@map`.
+- Toda tabela tem `id` (uuid), `created_at` e `updated_at`.
+- Uma migration por PR, com nome descritivo.
+
+### Commits
+
+Conventional Commits, com scope da tabela de módulos:
+
+```
+feat(srs): add sm2 scheduling algorithm
+fix(learning): keep attempt idempotent on retry
+```
+
+`husky` + `lint-staged` rodam prettier e eslint no commit; `commitlint`
+valida a mensagem.
+
+---
+
+## 5. Glossário do domínio
+
+| Termo                 | O que é                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **CEFR level**        | Nível do quadro europeu: A1, A2, B1, B2, C1. Usado para o aluno, para o conteúdo e para o item.                                      |
+| **Skill**             | Habilidade concreta e ensinável — "falar de rotina no presente simples", "pedir comida num restaurante".                             |
+| **Competency**        | Eixo de avaliação: `grammar`, `vocabulary`, `listening`, `reading`, `writing`, `speaking`. O aluno tem um nível **por eixo**.        |
+| **Lesson**            | Unidade de estudo completa: cena → cards → prática → produção → roleplay.                                                            |
+| **LessonStep**        | Um passo dentro da lição, com tipo próprio (`scene`, `explanation`, `recognize`, `assemble`, `produce`, `free_writing`, `roleplay`). |
+| **Item**              | Questão individual, com dificuldade calibrada, competência alvo e Skill associada. É o tijolo dos questionários e provas.            |
+| **Attempt**           | Uma resposta do aluno a um Item ou LessonStep: o que respondeu, se acertou, quanto tempo levou, que erro cometeu.                    |
+| **Mastery**           | Quanto o aluno domina uma Skill, estimado a partir dos Attempts. Decai com o tempo sem prática.                                      |
+| **ReviewCard**        | Cartão de revisão espaçada ligado a uma Skill ou item de vocabulário: quando revisar, intervalo atual, facilidade.                   |
+| **StudyPlan**         | Cronograma personalizado do aluno — o caminho recomendado ao longo de semanas. Recomendação, **não** bloqueio.                       |
+| **Agenda**            | O recorte de hoje do StudyPlan: o que fazer agora (lições sugeridas + fila de revisão).                                              |
+| **RegisterNote**      | Nota que contrasta a forma gramatical padrão com a forma falada no dia a dia (`I'm going to` × `I'm gonna`).                         |
+| **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
+| **AiCredit**          | Unidade de consumo das ferramentas de IA do plano Plus. Debitada por geração e reposta no ciclo da assinatura.                       |
+
+---
+
+## 6. Como trabalhar comigo
+
+### Antes de codar um módulo
+
+Apresente um **plano curto** — não um documento. Quatro blocos:
+
+1. **Entidades** — models Prisma novos ou alterados, com os campos que
+   importam.
+2. **Endpoints** — método, rota e para que serve.
+3. **Jobs e eventos** — o que vai para a fila, o que é emitido, quem escuta.
+4. **Testes** — que funções de `domain/` ganham teste unitário e que fluxo
+   ganha e2e.
+
+Aponte também o que ficou de fora e o que depende de decisão minha. Espere
+meu ok e então siga o plano.
+
+### Ao terminar
+
+1. Rode `pnpm lint` e `pnpm test` (e `pnpm test:e2e` se o módulo tem rota).
+2. Liste, em três partes:
+   - **O que foi feito** — arquivos e capacidades novas.
+   - **Decisões tomadas** — escolhas que eu não pedi explicitamente, com o
+     porquê.
+   - **Pendências** — o que ficou faltando, o que é dívida consciente e o que
+     precisa de decisão minha.
+3. Relate o resultado honestamente. Teste quebrado se reporta como quebrado,
+   com a saída junto.
+
+### Regras de convivência
+
+- **Não troque nada da stack** sem perguntar.
+- **Não implemente o módulo seguinte** porque "já estava ali". Um por vez.
+- Achou um problema no que eu pedi? Diga em uma ou duas frases e **continue**
+  — entregue o combinado e deixe a decisão comigo.
+- Em dúvida entre duas leituras do pedido: se mudam o resultado de verdade,
+  pergunte; se não, escolha, siga e me avise o que escolheu.
+
+---
+
+## 7. Ambiente local
+
+```bash
+cp .env.example .env
+docker compose up -d          # postgres, postgres-test, redis, minio
+pnpm install
+pnpm db:generate
+pnpm db:migrate
+pnpm dev                      # api em :3333, web em :5173
+curl http://localhost:3333/health
+```
+
+**Atenção às portas:** postgres em `5432`, postgres-test em `5433`, redis em
+`6379`, minio em `9000`/`9001`. Se você tem outros projetos usando essas
+portas, pare os containers deles antes.
+
+Verificação completa: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`

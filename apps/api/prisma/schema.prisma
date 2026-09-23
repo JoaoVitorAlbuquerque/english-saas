@@ -1,0 +1,19 @@
+// Schema do banco.
+//
+// Ainda sem modelos: as entidades entram módulo a módulo, na ordem da
+// tabela do CLAUDE.md (3 auth/users → 4 curriculum → 6 learning → ...).
+//
+// Convenções:
+//   - nomes de model em PascalCase singular (User, Lesson, ReviewCard);
+//   - nome físico da tabela em snake_case plural via @@map ("review_cards");
+//   - colunas em snake_case via @map;
+//   - toda tabela tem id (uuid), created_at e updated_at.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

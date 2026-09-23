@@ -1,0 +1,11 @@
+{
+  "name": "@english-saas/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "base.json",
+    "nestjs.json",
+    "library.json",
+    "react.json"
+  ]
+}

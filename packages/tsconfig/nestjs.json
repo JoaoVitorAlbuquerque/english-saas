@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "NestJS",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "declaration": true,
+    "sourceMap": true,
+    "incremental": true,
+    "removeComments": true,
+
+    // Decorators do Nest injetam parâmetros que o TS não enxerga como usados.
+    "noUnusedParameters": false,
+    // Exigido pelo emit de metadata dos decorators.
+    "isolatedModules": false
+  }
+}

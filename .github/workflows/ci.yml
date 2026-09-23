@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: lint · test · build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: english
+          POSTGRES_PASSWORD: english
+          POSTGRES_DB: english_saas
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U english"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      # Espelha o serviço `postgres-test` do docker-compose, na mesma porta,
+      # para que o `.env.example` valha sem alteração aqui.
+      postgres-test:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: english
+          POSTGRES_PASSWORD: english
+          POSTGRES_DB: english_saas_test
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U english"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Os defaults do .env.example já apontam para os serviços acima.
+      # Segredo de verdade (OpenAI, Asaas) não entra no CI.
+      - name: Prepare env
+        run: cp .env.example .env
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm db:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Migrate databases
+        run: |
+          pnpm db:deploy
+          DATABASE_URL="$DATABASE_TEST_URL" pnpm db:deploy
+        env:
+          DATABASE_TEST_URL: postgresql://english:english@localhost:5433/english_saas_test?schema=public
+
+      - name: E2E tests
+        run: pnpm test:e2e
+
+  commitlint:
+    name: commit messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validate commits
+        run: >-
+          pnpm exec commitlint
+          --from ${{ github.event.pull_request.base.sha }}
+          --to ${{ github.event.pull_request.head.sha }}
+          --verbose

@@ -1,0 +1,96 @@
+name: english-saas
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: english-saas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: english
+      POSTGRES_PASSWORD: english
+      POSTGRES_DB: english_saas
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U english -d english_saas']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Banco exclusivo dos testes e2e, em outra porta.
+  # Roda em tmpfs: é rápido e some quando o container para.
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: english-saas-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: english
+      POSTGRES_PASSWORD: english
+      POSTGRES_DB: english_saas_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U english -d english_saas_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: english-saas-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: english-saas-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000' # API S3
+      - '9001:9001' # Console web (http://localhost:9001)
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cria o bucket na primeira subida e encerra.
+  # `anonymous download` deixa os áudios/imagens de lição servíveis
+  # direto pela URL em desenvolvimento.
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: english-saas-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/english-saas &&
+      mc anonymous set download local/english-saas &&
+      echo 'bucket english-saas pronto'
+      "
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

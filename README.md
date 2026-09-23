@@ -1,99 +1,169 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# english-saas
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Plataforma de ensino de inglês para brasileiros, do A1 ao C1.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Lições interativas em formato de série: cena em áudio com personagens fixos →
+explicação em português → prática em camadas → produção livre corrigida por
+IA → roleplay → revisão espaçada. O conteúdo base é igual para todos e
+liberado em qualquer ordem; o cronograma personalizado é o caminho
+recomendado, não uma trava.
 
-## Description
+O contexto completo do produto e as convenções de código estão em
+[CLAUDE.md](CLAUDE.md).
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+> **Estado atual:** módulo 0 (setup). O foco é o back-end — `apps/web` é um
+> placeholder.
 
-## Project setup
+---
 
-```bash
-$ pnpm install
+## Stack
+
+pnpm workspaces + Turborepo · NestJS · PostgreSQL 16 + Prisma · Redis +
+BullMQ · S3 (MinIO local) · zod + nestjs-zod · React + Vite + Tailwind +
+TanStack Query · OpenAI · Asaas · Jest + Supertest
+
+## Estrutura
+
+```
+apps/
+  api/          NestJS — src/modules, src/common, src/infra
+  web/          React + Vite + Tailwind (placeholder)
+packages/
+  shared/       tipos e schemas zod compartilhados (tsup)
+  eslint-config/  presets ESLint flat config
+  tsconfig/     tsconfigs base
 ```
 
-## Compile and run the project
+---
+
+## Subindo o ambiente local
+
+### Pré-requisitos
+
+- Node.js 20+ (testado no 24)
+- pnpm 10+
+- Docker + Docker Compose
+
+### Passo a passo
 
 ```bash
-# development
-$ pnpm run start
+# 1. variáveis de ambiente (os defaults já apontam para o docker compose)
+cp .env.example .env
 
-# watch mode
-$ pnpm run start:dev
+# 2. postgres, postgres-test, redis e minio
+docker compose up -d
 
-# production mode
-$ pnpm run start:prod
+# 3. dependências
+pnpm install
+
+# 4. Prisma client + migrations
+pnpm db:generate
+pnpm db:migrate
+
+# 5. api (:3333) e web (:5173)
+pnpm dev
 ```
 
-## Run tests
+Confira que subiu:
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+curl http://localhost:3333/health
 ```
 
-## Deployment
+```json
+{
+  "status": "ok",
+  "uptimeSeconds": 12,
+  "version": "0.0.0",
+  "timestamp": "2026-09-23T21:27:09.262Z",
+  "dependencies": {
+    "database": { "status": "up", "latencyMs": 7 },
+    "redis": { "status": "up", "latencyMs": 4 }
+  }
+}
+```
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Responde **503** quando o banco ou o Redis estão fora.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Serviços e portas
+
+| Serviço         | Porta       | Observação                                 |
+| --------------- | ----------- | ------------------------------------------ |
+| `postgres`      | 5432        | banco de desenvolvimento                   |
+| `postgres-test` | 5433        | banco dos testes e2e, em tmpfs             |
+| `redis`         | 6379        | filas BullMQ e cache                       |
+| `minio`         | 9000 / 9001 | S3 local; console em http://localhost:9001 |
+| api             | 3333        |                                            |
+| web             | 5173        |                                            |
+
+O bucket `english-saas` é criado automaticamente na primeira subida (serviço
+`minio-init`). Credenciais do console: `minioadmin` / `minioadmin`.
+
+> **Conflito de portas:** se você já tem um Postgres em 5432 ou um Redis em
+> 6379 de outro projeto, pare aqueles containers antes de subir este.
+
+---
+
+## Scripts
+
+Todos rodam na raiz do monorepo, via Turborepo.
+
+| Comando            | O que faz                                     |
+| ------------------ | --------------------------------------------- |
+| `pnpm dev`         | api em watch + web em watch                   |
+| `pnpm build`       | build de todos os pacotes                     |
+| `pnpm lint`        | ESLint em tudo                                |
+| `pnpm test`        | testes unitários (Jest)                       |
+| `pnpm test:e2e`    | testes e2e (Supertest) contra `postgres-test` |
+| `pnpm typecheck`   | `tsc --noEmit` em tudo                        |
+| `pnpm format`      | Prettier (escrita)                            |
+| `pnpm db:migrate`  | cria e aplica migration em desenvolvimento    |
+| `pnpm db:deploy`   | aplica migrations pendentes (CI / produção)   |
+| `pnpm db:generate` | gera o Prisma Client                          |
+| `pnpm db:seed`     | popula o conteúdo base                        |
+| `pnpm db:studio`   | abre o Prisma Studio                          |
+| `pnpm db:reset`    | derruba e recria o banco de desenvolvimento   |
+
+Verificação completa, igual à do CI:
 
 ```bash
-$ pnpm install -g mau
-$ mau deploy
+pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## Testes
 
-Check out a few resources that may come in handy when working with NestJS:
+- **Unitários** (`pnpm test`): focam nas funções puras de `domain/` de cada
+  módulo. Não sobem banco nem Nest.
+- **E2E** (`pnpm test:e2e`): sobem a aplicação de verdade contra o
+  `postgres-test` (porta 5433, recriado a cada subida do container). O
+  `DATABASE_TEST_URL` do `.env` é aplicado automaticamente em
+  [test/setup-e2e.ts](apps/api/test/setup-e2e.ts).
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## Convenções rápidas
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- Código, tabelas, endpoints e commits em **inglês**; texto para o aluno em
+  **pt-BR**.
+- Regra de negócio vive em função pura em `domain/`, com teste unitário. O
+  ESLint bloqueia import de framework dentro de `domain/`.
+- Tarefa lenta ou que chama IA vai para a fila (BullMQ) — o request HTTP não
+  bloqueia.
+- Toda saída de IA passa por `zod.parse()` antes de ser usada ou salva.
+- Listagens paginam por cursor.
 
-## Stay in touch
+O detalhamento está em [CLAUDE.md](CLAUDE.md).
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## Commits
 
-## License
+Conventional Commits, com scope da tabela de módulos do CLAUDE.md:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```
+feat(srs): add sm2 scheduling algorithm
+fix(learning): keep attempt idempotent on retry
+```
+
+`husky` + `lint-staged` formatam e lintam no commit; `commitlint` valida a
+mensagem. O CI roda lint, format, testes e build em todo PR.
