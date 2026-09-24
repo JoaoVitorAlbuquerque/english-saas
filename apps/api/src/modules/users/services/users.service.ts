@@ -122,6 +122,19 @@ export class UsersService {
     };
   }
 
+  /**
+   * Fuso do aluno. Sem perfil (onboarding não feito), o padrão do schema.
+   * Sequência de estudo (6) e agenda (10) contam o dia por aqui.
+   */
+  async timezoneOf(userId: string): Promise<string> {
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { userId },
+      select: { timezone: true },
+    });
+
+    return profile?.timezone ?? 'America/Sao_Paulo';
+  }
+
   async updateProfile(userId: string, input: ProfileUpdate) {
     await this.findById(userId);
 

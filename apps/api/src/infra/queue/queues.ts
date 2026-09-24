@@ -18,6 +18,8 @@ export const QUEUES = {
   CONTENT_QA: 'content-qa',
   /** Síntese de voz das cenas e geração das apostilas em PDF. */
   MEDIA: 'media',
+  /** Trabalho em lote sobre o que o aluno fez: estatística dos itens. */
+  LEARNING: 'learning',
   /** Recálculo de mastery e do modelo do aluno após tentativas. */
   LEARNER_MODEL: 'learner-model',
   /** Reagendamento de revisão espaçada e do cronograma. */
@@ -37,4 +39,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.CONTENT_DRAFTS,
   QUEUES.CONTENT_QA,
   QUEUES.MEDIA,
+  QUEUES.LEARNING,
 ];

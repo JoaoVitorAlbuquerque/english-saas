@@ -206,6 +206,10 @@ model User {
   contentDrafts   ContentDraft[]
   contentComments ContentComment[]
 
+  lessonAttempts LessonAttempt[]
+  answers        Answer[]
+  learningStats  LearningStats?
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -728,6 +732,7 @@ model Lesson {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   versions LessonVersion[] @relation("LessonVersions")
+  attempts LessonAttempt[]
 
   @@unique([unitId, order])
   @@map("lessons")
@@ -764,6 +769,8 @@ model LessonVersion {
   drafts    ContentDraft[]
   qaReports ContentQaReport[]
   comments  ContentComment[]
+
+  attempts LessonAttempt[]
 
   @@unique([lessonId, version])
   @@index([status])
@@ -853,7 +860,9 @@ model Item {
   difficulty     Float
   discrimination Float     @default(1)
   exposureCount  Int       @default(0) @map("exposure_count")
-  /// Nulo até ter exposição suficiente. Recalculado no módulo 8.
+  /// Nulo até ter exposição suficiente. Taxa bruta de acerto na primeira
+  /// tentativa, recalculada em lote pelo learning (6); a calibração de
+  /// `difficulty` a partir dela é do assessment (8).
   correctRate    Float?    @map("correct_rate")
 
   status ContentStatus @default(DRAFT)
@@ -868,6 +877,7 @@ model Item {
 
   skills  ItemSkill[]
   lessons LessonVersionItem[]
+  answers Answer[]
 
   @@index([cefrLevel, status])
   @@index([status, difficulty])
@@ -1102,4 +1112,157 @@ model AudioRendition {
   @@unique([textHash, voiceId])
   @@index([assetId])
   @@map("audio_renditions")
+}
+
+// ===========================================================================
+// Módulo 6 — learning
+//
+// Tudo o que o aluno faz. É a fonte de dados do modelo do aluno (7), do
+// SRS (9) e da calibração dos itens (8): nada aqui é apagado ou reescrito
+// depois de gravado, só acrescentado.
+// ===========================================================================
+
+enum LessonAttemptStatus {
+  IN_PROGRESS @map("in_progress")
+  COMPLETED   @map("completed")
+  /// Largada: hoje, só quando a lição ganha versão nova no meio do caminho.
+  ABANDONED   @map("abandoned")
+
+  @@map("lesson_attempt_status")
+}
+
+/// De onde o aluno chegou na lição. Recomendação, nunca trava.
+enum LessonAttemptSource {
+  PLAN        @map("plan")
+  FREE_BROWSE @map("free_browse")
+  REVIEW      @map("review")
+
+  @@map("lesson_attempt_source")
+}
+
+enum AnswerContext {
+  LESSON             @map("lesson")
+  REVIEW             @map("review")
+  PLACEMENT          @map("placement")
+  CHECKPOINT         @map("checkpoint")
+  GENERATED_MATERIAL @map("generated_material")
+
+  @@map("answer_context")
+}
+
+/// Uma passada do aluno por uma lição.
+///
+/// Guarda a **versão** que ele fez, não só a lição: se a lição for
+/// republicada, a tentativa continua dizendo exatamente o que o aluno viu.
+///
+/// No máximo uma IN_PROGRESS por aluno e lição — índice único parcial,
+/// criado em SQL na migration (o Prisma não expressa `WHERE`).
+model LessonAttempt {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId          String        @map("user_id") @db.Uuid
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId        String        @map("lesson_id") @db.Uuid
+  lesson          Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lessonVersionId String        @map("lesson_version_id") @db.Uuid
+  lessonVersion   LessonVersion @relation(fields: [lessonVersionId], references: [id], onDelete: Cascade)
+  /// O número da versão, para leitura sem join. O id acima é a referência.
+  versionNumber   Int           @map("version_number")
+
+  status           LessonAttemptStatus @default(IN_PROGRESS)
+  source           LessonAttemptSource @default(FREE_BROWSE)
+  /// Próxima etapa ainda não concluída. Igual ao total de etapas quando todas foram.
+  currentStepIndex Int                 @default(0) @map("current_step_index")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  abandonedAt DateTime? @map("abandoned_at")
+  xpEarned    Int       @default(0) @map("xp_earned")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  steps   StepProgress[]
+  answers Answer[]
+
+  @@index([userId, startedAt])
+  @@index([userId, lessonId, status])
+  @@map("lesson_attempts")
+}
+
+/// Etapa concluída dentro de uma tentativa. Única por (tentativa, etapa):
+/// concluir de novo não duplica.
+model StepProgress {
+  id String @id @default(uuid()) @db.Uuid
+
+  attemptId   String         @map("attempt_id") @db.Uuid
+  attempt     LessonAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  stepIndex   Int            @map("step_index")
+  type        LessonStepType
+  completedAt DateTime       @default(now()) @map("completed_at")
+  timeSpentMs Int            @default(0) @map("time_spent_ms")
+  /// Texto da produção livre. Guardado sem nota: a correção é dos módulos 7 e 12.
+  /// Conteúdo do aluno — nunca vai para log.
+  response    Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([attemptId, stepIndex])
+  @@map("step_progress")
+}
+
+/// Resposta a uma questão objetiva, já corrigida.
+model Answer {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId    String         @map("user_id") @db.Uuid
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String         @map("item_id") @db.Uuid
+  item      Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  attemptId String?        @map("attempt_id") @db.Uuid
+  attempt   LessonAttempt? @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  stepIndex Int?           @map("step_index")
+  context   AnswerContext
+
+  /// O que o aluno mandou, no formato do tipo do item. Nunca vai para log.
+  response              Json
+  isCorrect             Boolean  @map("is_correct")
+  /// 0–1. Fracionário só em ORDER_WORDS e MATCH.
+  score                 Float
+  responseTimeMs        Int      @map("response_time_ms")
+  hintsUsed             Int      @default(0) @map("hints_used")
+  detectedErrorPatterns String[] @map("detected_error_patterns")
+  /// Primeira resposta do aluno a este item nesta tentativa. Estatística do
+  /// item e XP só contam a primeira: quem refaz até acertar não infla nada.
+  isFirstTry            Boolean  @map("is_first_try")
+  /// Id gerado pelo cliente. Reenvio pela rede devolve a mesma resposta.
+  clientAnswerId        String?  @map("client_answer_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, clientAnswerId])
+  @@index([itemId, isFirstTry])
+  @@index([attemptId, itemId])
+  @@index([userId, createdAt])
+  @@map("answers")
+}
+
+/// XP e sequência do aluno. Uma linha por aluno.
+model LearningStats {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId        String    @unique @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalXp       Int       @default(0) @map("total_xp")
+  currentStreak Int       @default(0) @map("current_streak")
+  longestStreak Int       @default(0) @map("longest_streak")
+  /// Último dia com estudo, **no fuso do aluno**.
+  lastStudyDate DateTime? @map("last_study_date") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("learning_stats")
 }

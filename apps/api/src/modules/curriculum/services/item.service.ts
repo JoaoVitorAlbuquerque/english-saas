@@ -334,6 +334,25 @@ export class ItemService {
   }
 
   /**
+   * Grava a estatística de exposição calculada pelo learning (6).
+   *
+   * Não passa pela trava de imutabilidade: `exposureCount` e `correctRate`
+   * são justamente o que muda num item publicado.
+   */
+  async applyStats(
+    itemId: string,
+    stats: { exposureCount: number; correctRate: number | null },
+  ): Promise<void> {
+    await this.prisma.item.update({
+      where: { id: itemId },
+      data: {
+        exposureCount: stats.exposureCount,
+        correctRate: stats.correctRate,
+      },
+    });
+  }
+
+  /**
    * Item preso a uma lição publicada não se arquiva: a lição no ar ficaria
    * apontando para uma questão que sumiu.
    */

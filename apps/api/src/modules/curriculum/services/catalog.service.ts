@@ -64,6 +64,40 @@ export type CatalogLesson = Omit<CachedLesson, 'assetIds'> & {
   assets: Record<string, ResolvedAsset>;
 };
 
+export type OutlineStep = {
+  index: number;
+  type: LessonStepInput['type'];
+  /** Só em PRACTICE; vazio nas outras. */
+  itemIds: string[];
+};
+
+export type PublishedOutline = {
+  lessonId: string;
+  slug: string;
+  versionId: string;
+  version: number;
+  title: string;
+  steps: OutlineStep[];
+};
+
+function outlineSteps(
+  steps: readonly { type: string; content: unknown }[],
+): OutlineStep[] {
+  return steps.map((step, index) => {
+    const content = step.content as { itemIds?: unknown } | null;
+    const itemIds =
+      step.type === 'PRACTICE' && Array.isArray(content?.itemIds)
+        ? content.itemIds.filter((id): id is string => typeof id === 'string')
+        : [];
+
+    return {
+      index,
+      type: step.type as LessonStepInput['type'],
+      itemIds,
+    };
+  });
+}
+
 @Injectable()
 export class CatalogService {
   constructor(
@@ -182,6 +216,108 @@ export class CatalogService {
       (await this.buildLesson(lesson.publishedVersionId, key));
 
     return this.signLesson(cached);
+  }
+
+  /**
+   * Esqueleto da versão publicada de uma lição, para o player (6).
+   *
+   * `index` é a posição da etapa na ordem da lição, começando em 0 — é o
+   * número que o aluno manda em `/attempts/:id/steps/:index/complete`.
+   * Só as etapas PRACTICE carregam `itemIds`.
+   */
+  async findPublishedOutline(lessonId: string): Promise<PublishedOutline> {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: {
+        id: true,
+        slug: true,
+        publishedVersion: {
+          select: {
+            id: true,
+            version: true,
+            title: true,
+            steps: {
+              orderBy: { order: 'asc' },
+              select: { type: true, content: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (lesson?.publishedVersion == null) {
+      throw new NotFoundError('Esta lição ainda não está disponível.');
+    }
+
+    const version = lesson.publishedVersion;
+
+    return {
+      lessonId: lesson.id,
+      slug: lesson.slug,
+      versionId: version.id,
+      version: version.version,
+      title: version.title,
+      steps: outlineSteps(version.steps),
+    };
+  }
+
+  /**
+   * O mesmo esqueleto, mas de uma versão específica — a de uma tentativa,
+   * que pode já não ser a publicada.
+   */
+  async findVersionOutline(versionId: string): Promise<PublishedOutline> {
+    const version = await this.prisma.lessonVersion.findUnique({
+      where: { id: versionId },
+      select: {
+        id: true,
+        version: true,
+        title: true,
+        lesson: { select: { id: true, slug: true } },
+        steps: {
+          orderBy: { order: 'asc' },
+          select: { type: true, content: true },
+        },
+      },
+    });
+
+    if (version === null) {
+      throw new NotFoundError('Não encontramos esta versão da lição.');
+    }
+
+    return {
+      lessonId: version.lesson.id,
+      slug: version.lesson.slug,
+      versionId: version.id,
+      version: version.version,
+      title: version.title,
+      steps: outlineSteps(version.steps),
+    };
+  }
+
+  /** Título e slug de várias versões. O histórico do aluno usa. */
+  async versionSummaries(versionIds: readonly string[]) {
+    if (versionIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.prisma.lessonVersion.findMany({
+      where: { id: { in: [...versionIds] } },
+      select: {
+        id: true,
+        version: true,
+        title: true,
+        cefrLevel: true,
+        lesson: { select: { slug: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      versionId: row.id,
+      version: row.version,
+      title: row.title,
+      cefrLevel: row.cefrLevel,
+      lessonSlug: row.lesson.slug,
+    }));
   }
 
   /** Monta a lição a partir do banco e guarda no cache. */

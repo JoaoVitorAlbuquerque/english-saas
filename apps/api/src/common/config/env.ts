@@ -182,6 +182,12 @@ export const envSchema = z.object({
    */
   CONTENT_QA_MAX_OUT_OF_LEVEL: z.coerce.number().min(0).max(1).default(0.05),
 
+  /**
+   * Quanto o recálculo da estatística de um item espera depois da primeira
+   * resposta. As respostas que chegam nessa janela entram no mesmo job.
+   */
+  ITEM_STATS_DELAY_MS: z.coerce.number().int().min(0).default(30_000),
+
   OPENAI_API_KEY: optional,
   /**
    * 'auto' escolhe sozinho: fake em NODE_ENV=test ou sem OPENAI_API_KEY,

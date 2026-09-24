@@ -21,3 +21,6 @@ process.env['QUEUE_PREFIX'] = `${
 
 // Worker de teste processa um job por vez: torna a ordem previsível.
 process.env['QUEUE_CONCURRENCY'] = '1';
+
+// Lote da estatística de item curto: o teste espera o job, não 30s.
+process.env['ITEM_STATS_DELAY_MS'] = '200';

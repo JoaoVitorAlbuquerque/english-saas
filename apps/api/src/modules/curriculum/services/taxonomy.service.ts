@@ -465,6 +465,26 @@ export class TaxonomyService {
     return rows.map((row) => row.id);
   }
 
+  /**
+   * O que mostrar ao aluno sobre os erros típicos que a resposta dele
+   * revelou. O player (6) usa no feedback da questão.
+   */
+  async errorPatternSummaries(ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.prisma.errorPattern.findMany({
+      where: { id: { in: [...ids] } },
+      select: {
+        id: true,
+        description: true,
+        correction: true,
+        explanation: true,
+      },
+    });
+  }
+
   private async assertSkillsExist(ids: readonly string[]): Promise<void> {
     if (ids.length === 0) {
       return;

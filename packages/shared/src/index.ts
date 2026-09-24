@@ -12,6 +12,7 @@ export * from './curriculum';
 export * from './wordlists';
 export * from './lesson-content';
 export * from './item-content';
+export * from './learning';
 export * from './pagination';
 export * from './api-error';
 export * from './health';

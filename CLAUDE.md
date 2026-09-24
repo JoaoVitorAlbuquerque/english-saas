@@ -83,6 +83,24 @@ Decidida. **Não troque nada aqui sem me perguntar antes.**
 **Estado atual: foco é o back-end.** `apps/web` é só um placeholder; o
 front-end entra depois.
 
+### Cliente do MVP: só web
+
+**O aluno acessa tudo pelo navegador**, no computador e no celular. O app
+nativo (módulo 16) está fora do escopo. Na prática:
+
+- A autenticação é desenhada para navegador: refresh em cookie `httpOnly`
+  com CSRF double-submit, login com Google redirecionando para o front.
+  Não crie um modo alternativo para app agora. Quando o app vier, o refresh
+  pelo corpo da resposta entra como um modo a mais, sem mexer no da web.
+- Pense em **web no celular com rede instável**: resposta idempotente
+  (`clientAnswerId`), payload enxuto, mídia por URL assinada.
+- Mídia em formato que toca em qualquer navegador, inclusive no Safari do
+  iPhone: áudio em MP3 ou AAC, não OGG/Opus.
+- Notificação (módulo 15) parte de e-mail. Web Push no iPhone só funciona
+  com o site instalado como PWA, então não pode ser o único canal.
+- A API continua REST com JSON, sem nada que dependa do cliente. O app
+  futuro usa as mesmas rotas.
+
 ### Layout do repositório
 
 ```
@@ -138,7 +156,7 @@ dos que vêm antes dele.
 | 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh rotativo), Google, roles, perfil, onboarding, LGPD. ✅ pronto          |
 | 4   | `curriculum`                    | 3          | Taxonomia, personagens, unidades, lições versionadas, banco de questões, apostilas PDF. ✅ pronto     |
 | 5   | `content-studio`                | 2, 4       | Rascunho por IA, QA automática, revisão humana, TTS e apostila em PDF. ✅ pronto                      |
-| 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                     |
+| 6   | `learning`                      | 5          | Player da lição: tentativas, etapas, correção de resposta objetiva, XP e sequência. ✅ pronto         |
 | 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                     |
 | 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                       |
 | 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                   |
@@ -332,6 +350,35 @@ A checagem de nível usa a lista de frequência de
 **não** conta como fora do nível, e o relatório traz `coverage` justamente
 para dizer o quanto aquele número vale.
 
+### Player da lição (learning)
+
+**O learning é a fonte de dados do modelo do aluno.** `LessonAttempt`,
+`StepProgress` e `Answer` só recebem linhas novas, e quem precisa reagir
+(learner-model, SRS) escuta `lesson.*` e `answer.submitted`.
+
+A tentativa guarda o **id da versão** que o aluno fez. Se a lição for
+republicada no meio do caminho, a tentativa aberta vira ABANDONED e começa
+outra na versão nova. Uma IN_PROGRESS por aluno e lição, garantido por
+índice único parcial escrito à mão na migration.
+
+A correção é pura, em
+[evaluate-answer.ts](apps/api/src/modules/learning/domain/evaluate-answer.ts),
+em cima da normalização do curriculum. Crédito parcial só em ORDER_WORDS e
+MATCH. Formato de resposta errado (alternativa inexistente, peça que não
+estava no item) é **422**, não resposta errada no histórico.
+
+**Estatística do item e XP contam só a primeira tentativa** (`isFirstTry`).
+Refazer até acertar não infla `correctRate` nem rende XP. A estatística é
+recalculada a partir das respostas, em lote, na fila `learning` — nunca
+dentro do request.
+
+A rota `POST /answers` aceita só os contextos LESSON e REVIEW. PLACEMENT,
+CHECKPOINT e GENERATED_MATERIAL são gravados pelo módulo dono, chamando
+`AnswerService.record` do lado do servidor.
+
+Sequência conta o dia **no fuso do aluno**, e perder um dia só faz ela
+recomeçar do um. Nada de vidas ou punição.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -359,9 +406,8 @@ para dizer o quanto aquele número vale.
 
 **Listagem pagina por cursor, nunca por offset.** Use
 `CursorPaginationQueryDto` no controller e, no service, `toPrismaCursorArgs`
-
-- `buildPage` de [cursor.ts](apps/api/src/common/pagination/cursor.ts). O
-  cursor é opaco (base64url) — o cliente só devolve o que recebeu.
+e `buildPage` de [cursor.ts](apps/api/src/common/pagination/cursor.ts). O
+cursor é opaco (base64url) — o cliente só devolve o que recebeu.
 
 ### Storage
 
@@ -413,8 +459,9 @@ valida a mensagem.
 | **Lesson**            | Unidade de estudo completa: cena → cards → prática → produção → roleplay.                                                            |
 | **LessonStep**        | Um passo dentro da lição, com tipo próprio (`scene`, `explanation`, `recognize`, `assemble`, `produce`, `free_writing`, `roleplay`). |
 | **Item**              | Questão individual, com dificuldade calibrada, competência alvo e Skill associada. É o tijolo dos questionários e provas.            |
-| **Attempt**           | Uma resposta do aluno a um Item ou LessonStep: o que respondeu, se acertou, quanto tempo levou, que erro cometeu.                    |
-| **Mastery**           | Quanto o aluno domina uma Skill, estimado a partir dos Attempts. Decai com o tempo sem prática.                                      |
+| **LessonAttempt**     | Uma passada do aluno por uma lição, presa à versão que ele fez: etapas concluídas, XP, de onde ele veio (plano, livre, revisão).     |
+| **Answer**            | Uma resposta a um Item, já corrigida: o que respondeu, score, tempo, dicas, erros típicos revelados e se foi a primeira tentativa.   |
+| **Mastery**           | Quanto o aluno domina uma Skill, estimado a partir das Answers. Decai com o tempo sem prática.                                       |
 | **ReviewCard**        | Cartão de revisão espaçada ligado a uma Skill ou item de vocabulário: quando revisar, intervalo atual, facilidade.                   |
 | **StudyPlan**         | Cronograma personalizado do aluno — o caminho recomendado ao longo de semanas. Recomendação, **não** bloqueio.                       |
 | **Agenda**            | O recorte de hoje do StudyPlan: o que fazer agora (lições sugeridas + fila de revisão).                                              |

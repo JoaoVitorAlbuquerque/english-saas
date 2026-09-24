@@ -120,6 +120,58 @@ export interface DomainEventPayloads {
     workbookId: string;
     sizeBytes: number;
   };
+
+  // --- módulo 6: learning ---
+  //
+  // O que o aluno faz. O modelo do aluno (7) e o SRS (9) escutam daqui —
+  // nenhum deles lê as tabelas do learning por fora.
+
+  /** Tentativa nova. Retomar uma aberta não emite de novo. */
+  'lesson.started': {
+    attemptId: string;
+    lessonId: string;
+    lessonVersionId: string;
+    version: number;
+    source: string;
+  };
+  'lesson.step_completed': {
+    attemptId: string;
+    lessonId: string;
+    stepIndex: number;
+    stepType: string;
+    timeSpentMs: number;
+  };
+  /**
+   * Resposta corrigida. É o evento que alimenta mastery e erros
+   * recorrentes (7) e a estatística do item (6, em lote).
+   */
+  'answer.submitted': {
+    answerId: string;
+    itemId: string;
+    attemptId: string | null;
+    context: string;
+    skillIds: string[];
+    isCorrect: boolean;
+    score: number;
+    errorPatterns: string[];
+    /** Dificuldade do item na escala logit, no momento da resposta. */
+    difficulty: number;
+    isFirstTry: boolean;
+    responseTimeMs: number;
+    hintsUsed: number;
+  };
+  'lesson.completed': {
+    attemptId: string;
+    lessonId: string;
+    lessonVersionId: string;
+    source: string;
+    xpEarned: number;
+    durationMs: number;
+    /** Questões respondidas e acertos de primeira. */
+    answeredItems: number;
+    correctFirstTries: number;
+    currentStreak: number;
+  };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;
