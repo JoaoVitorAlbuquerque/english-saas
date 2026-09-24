@@ -3,9 +3,11 @@ import { Global, Module } from '@nestjs/common';
 
 import { EnvService } from 'src/common/config/env.service';
 
+import { defaultJobOptions } from './register-queue';
+
 /**
- * Configuração base do BullMQ. Cada módulo registra as próprias filas com
- * `BullModule.registerQueue({ name: QUEUES.X })` e herda estes defaults.
+ * Conexão e defaults do BullMQ. As filas em si são registradas pelo módulo
+ * dono de cada uma, com o helper `registerQueue`.
  */
 @Global()
 @Module({
@@ -20,16 +22,11 @@ import { EnvService } from 'src/common/config/env.service';
           connection: {
             host: url.hostname,
             port: Number(url.port || 6379),
-            username: url.username || undefined,
-            password: url.password || undefined,
+            ...(url.username ? { username: url.username } : {}),
+            ...(url.password ? { password: url.password } : {}),
             maxRetriesPerRequest: null,
           },
-          defaultJobOptions: {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 2_000 },
-            removeOnComplete: { age: 24 * 3600, count: 1_000 },
-            removeOnFail: { age: 7 * 24 * 3600 },
-          },
+          defaultJobOptions: defaultJobOptions(),
         };
       },
     }),

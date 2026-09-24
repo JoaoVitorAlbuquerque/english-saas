@@ -123,27 +123,27 @@ packages/
 Construímos **um módulo por vez, nesta ordem**. Um módulo só pode depender
 dos que vêm antes dele.
 
-| #   | Módulo                          | Depende de | O que entrega                                                                                      |
-| --- | ------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
-| 0   | `setup`                         | —          | Monorepo, docker compose, lint/format/hooks, CI, `GET /health`. ✅ pronto                          |
-| 1   | `infra`                         | 0          | Prisma consolidado, S3/MinIO, BullMQ, logger, filtro de erro, paginação por cursor                 |
-| 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod da saída, isolamento de conteúdo não confiável  |
-| 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh), perfil, teste de nivelamento inicial, coleta de interesses        |
-| 4   | `curriculum`                    | 3          | Personagens, temporadas, trilhas, mapa A1→C1, objetivos por nível, catálogo de apostilas PDF       |
-| 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação |
-| 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                  |
-| 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                  |
-| 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                    |
-| 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                |
-| 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                            |
-| 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                  |
-| 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                 |
-| 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios               |
-| 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                       |
-| 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                  |
-| 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                          |
-| 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas                                            |
-| 18  | `deploy`                        | todos      | Infra de produção, migrations, observabilidade, backup                                             |
+| #   | Módulo                          | Depende de | O que entrega                                                                                         |
+| --- | ------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
+| 0   | `setup`                         | —          | Monorepo, docker compose, lint/format/hooks, CI, `GET /health`. ✅ pronto                             |
+| 1   | `infra`                         | 0          | Prisma, S3/MinIO, BullMQ + Bull Board, eventos, logger, filtro de erro, paginação, Swagger. ✅ pronto |
+| 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod da saída, isolamento de conteúdo não confiável     |
+| 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh), perfil, teste de nivelamento inicial, coleta de interesses           |
+| 4   | `curriculum`                    | 3          | Personagens, temporadas, trilhas, mapa A1→C1, objetivos por nível, catálogo de apostilas PDF          |
+| 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação    |
+| 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                     |
+| 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                     |
+| 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                       |
+| 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                   |
+| 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                               |
+| 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                     |
+| 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                    |
+| 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios                  |
+| 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                          |
+| 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                     |
+| 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                             |
+| 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas                                               |
+| 18  | `deploy`                        | todos      | Infra de produção, migrations, observabilidade, backup                                                |
 
 ---
 
@@ -233,18 +233,50 @@ mensagem de roleplay — é **dado não confiável**.
 - Erro de negócio: `AppException` (ou as subclasses em
   [app.exception.ts](apps/api/src/common/errors/app.exception.ts)) com `code`
   em inglês e `message` em pt-BR.
-- O filtro global normaliza tudo para o formato `ApiError` de
-  `packages/shared`. Detalhe interno de erro 500 **nunca** vaza — vai só para
-  o log.
-- Logs estruturados com pino, sempre com `requestId` — o mesmo id que volta
-  no corpo do erro.
+- O filtro global normaliza toda resposta de erro para:
+
+  ```json
+  {
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "Não encontramos o que você procura."
+    }
+  }
+  ```
+
+  `details` é opcional e carrega contexto (ex.: issues do zod). Detalhe
+  interno de erro 500 **nunca** vaza — vai só para o log.
+
+- Logs estruturados com pino, sempre com `requestId`. O mesmo id volta no
+  header **`x-request-id`** da resposta (o corpo do erro não o carrega).
 - **Nunca logue** token, senha, chave de API ou conteúdo enviado pelo aluno.
 
 ### Paginação
 
 **Listagem pagina por cursor, nunca por offset.** Use
-`cursorPaginationQuerySchema` e o envelope `paginatedSchema` de
-`packages/shared`.
+`CursorPaginationQueryDto` no controller e, no service, `toPrismaCursorArgs`
+
+- `buildPage` de [cursor.ts](apps/api/src/common/pagination/cursor.ts). O
+  cursor é opaco (base64url) — o cliente só devolve o que recebeu.
+
+### Storage
+
+Injete a classe abstrata `StorageService`, nunca a implementação S3. Toda
+chave nasce de `buildStorageKey()` com um dos prefixos: `content/`,
+`generated/`, `uploads/`, `exports/`.
+
+### Eventos
+
+Todo evento é declarado em [events.ts](apps/api/src/common/events.ts) e
+emitido pelo `EventBusService` — nunca pelo `EventEmitter2` cru. Nome e
+payload são conferidos em tempo de compilação.
+
+### Filas
+
+Registre com `registerQueue(QUEUES.X)` e decore o processor com
+`@Processor(QUEUES.X, defaultWorkerOptions())`. Isso já traz retry com
+backoff exponencial, limpeza e a concorrência do `QUEUE_CONCURRENCY`.
+O painel fica em `/admin/queues`.
 
 ### Banco
 

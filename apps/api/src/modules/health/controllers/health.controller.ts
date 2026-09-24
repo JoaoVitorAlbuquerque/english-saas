@@ -1,31 +1,40 @@
-import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
-import type { HealthResponse } from '@english-saas/shared';
-import type { Response } from 'express';
+import { Controller, Get } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
+import type { HealthCheckResult } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
+import { HEALTH_INDICATORS } from '@english-saas/shared';
 
 import { IsPublic } from 'src/common/decorators/is-public.decorator';
 
-import { HealthService } from '../services/health.service';
+import { DatabaseHealthIndicator } from '../indicators/database.indicator';
+import { RedisHealthIndicator } from '../indicators/redis.indicator';
+import { StorageHealthIndicator } from '../indicators/storage.indicator';
 
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly healthService: HealthService) {}
+  constructor(
+    private readonly health: HealthCheckService,
+    private readonly database: DatabaseHealthIndicator,
+    private readonly redis: RedisHealthIndicator,
+    private readonly storage: StorageHealthIndicator,
+  ) {}
 
   /**
-   * Usado pelo `docker compose`, pelo deploy e pelo monitoramento.
-   * Responde 503 quando banco ou Redis estão fora.
+   * Usado pelo docker compose, pelo deploy e pelo monitoramento.
+   * Responde 503 quando qualquer dependência está fora.
    */
   @IsPublic()
+  @SkipThrottle()
   @Get()
-  @HttpCode(HttpStatus.OK)
-  async check(
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<HealthResponse> {
-    const result = await this.healthService.check();
-
-    if (result.status === 'error') {
-      response.status(HttpStatus.SERVICE_UNAVAILABLE);
-    }
-
-    return result;
+  @HealthCheck()
+  @ApiOperation({ summary: 'Saúde da API: banco, Redis e storage' })
+  check(): Promise<HealthCheckResult> {
+    return this.health.check([
+      () => this.database.check(HEALTH_INDICATORS.DATABASE),
+      () => this.redis.check(HEALTH_INDICATORS.REDIS),
+      () => this.storage.check(HEALTH_INDICATORS.STORAGE),
+    ]);
   }
 }

@@ -11,8 +11,8 @@ recomendado, não uma trava.
 O contexto completo do produto e as convenções de código estão em
 [CLAUDE.md](CLAUDE.md).
 
-> **Estado atual:** módulo 0 (setup). O foco é o back-end — `apps/web` é um
-> placeholder.
+> **Estado atual:** módulo 1 (infra) concluído. O foco é o back-end —
+> `apps/web` é um placeholder.
 
 ---
 
@@ -73,17 +73,34 @@ curl http://localhost:3333/health
 ```json
 {
   "status": "ok",
-  "uptimeSeconds": 12,
-  "version": "0.0.0",
-  "timestamp": "2026-09-23T21:27:09.262Z",
-  "dependencies": {
-    "database": { "status": "up", "latencyMs": 7 },
-    "redis": { "status": "up", "latencyMs": 4 }
-  }
+  "info": {
+    "database": { "status": "up", "latencyMs": 9 },
+    "redis": { "status": "up", "latencyMs": 8 },
+    "storage": { "status": "up", "latencyMs": 13 }
+  },
+  "error": {},
+  "details": { "...": "igual a info" }
 }
 ```
 
-Responde **503** quando o banco ou o Redis estão fora.
+Responde **503** quando banco, Redis ou storage estão fora.
+
+### Rotas da API
+
+| Rota                       | O que é                                            |
+| -------------------------- | -------------------------------------------------- |
+| `GET /health`              | Saúde: banco, Redis e storage (`@nestjs/terminus`) |
+| `GET /docs`                | Swagger, gerado a partir dos DTOs zod              |
+| `GET /docs-json`           | Documento OpenAPI cru                              |
+| `GET /admin/queues`        | Bull Board — basic auth (`BULL_BOARD_*`)           |
+| `POST /admin/example-jobs` | Enfileira o job de demonstração — mesma basic auth |
+
+Teste o caminho da fila ponta a ponta:
+
+```bash
+curl -u admin:change_me_please -X POST http://localhost:3333/admin/example-jobs   -H 'Content-Type: application/json' -d '{"message":"ping"}'
+# {"jobId":"1"}  — e o job aparece concluído em /admin/queues
+```
 
 ### Serviços e portas
 
@@ -137,9 +154,13 @@ pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
 - **Unitários** (`pnpm test`): focam nas funções puras de `domain/` de cada
   módulo. Não sobem banco nem Nest.
 - **E2E** (`pnpm test:e2e`): sobem a aplicação de verdade contra o
-  `postgres-test` (porta 5433, recriado a cada subida do container). O
-  `DATABASE_TEST_URL` do `.env` é aplicado automaticamente em
-  [test/setup-e2e.ts](apps/api/test/setup-e2e.ts).
+  `postgres-test` (porta 5433, recriado a cada subida do container).
+  [test/global-setup.ts](apps/api/test/global-setup.ts) aplica as migrations
+  antes da primeira suíte; [test/setup-e2e.ts](apps/api/test/setup-e2e.ts)
+  troca o `DATABASE_URL` pelo `DATABASE_TEST_URL` e isola o namespace das
+  filas (`QUEUE_PREFIX` ganha o sufixo `-test`), para o teste não brigar com
+  uma API rodando em desenvolvimento. Cada suíte usa `createTestApp()`, que
+  limpa o banco na entrada e na saída.
 
 ---
 
@@ -153,6 +174,12 @@ pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
   bloqueia.
 - Toda saída de IA passa por `zod.parse()` antes de ser usada ou salva.
 - Listagens paginam por cursor.
+- Erro sai sempre como `{ error: { code, message, details? } }`, com o
+  `requestId` no header `x-request-id`.
+- Storage: injete `StorageService` (a abstração) e monte chaves com
+  `buildStorageKey()` — prefixos `content/`, `generated/`, `uploads/`,
+  `exports/`.
+- Eventos: declare em `src/common/events.ts` e emita pelo `EventBusService`.
 
 O detalhamento está em [CLAUDE.md](CLAUDE.md).
 

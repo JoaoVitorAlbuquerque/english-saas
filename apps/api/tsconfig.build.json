@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "test", "prisma/seed.ts", "**/*spec.ts"]
+  // `prisma/` inteiro fica de fora: o seed roda por ts-node, não pelo build.
+  // Se qualquer .ts de lá entrar aqui, o rootDir inferido sobe para apps/api
+  // e a saída vira dist/src/main.js em vez de dist/main.js.
+  "exclude": ["node_modules", "dist", "test", "prisma", "**/*spec.ts"]
 }

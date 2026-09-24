@@ -17,9 +17,10 @@ const optional = z.preprocess(
 /**
  * Contrato das variáveis de ambiente da API.
  *
- * Obrigatórias já no módulo 0: banco, Redis e JWT — sem elas a API não sobe.
- * Opcionais por enquanto: S3, OpenAI e Asaas. Elas passam a ser exigidas
- * quando os módulos 1 (infra), 2 (ai) e 11 (billing) forem implementados.
+ * Obrigatórias: banco, Redis, JWT, S3 e a credencial do Bull Board — sem
+ * qualquer uma delas a API não sobe, e a mensagem diz exatamente qual falta.
+ * Opcionais por enquanto: OpenAI e Asaas. Passam a ser exigidas quando os
+ * módulos 2 (ai) e 11 (billing) forem implementados.
  */
 export const envSchema = z.object({
   NODE_ENV: z
@@ -37,14 +38,28 @@ export const envSchema = z.object({
 
   REDIS_URL: z.string().min(1, 'REDIS_URL é obrigatória'),
   QUEUE_PREFIX: z.string().min(1).default('english-saas'),
+  /** Quantos jobs um worker processa em paralelo, por fila. */
+  QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  /** Tentativas por job antes de ele ir para a lista de falhas. */
+  QUEUE_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  /** Atraso inicial do backoff exponencial entre tentativas. */
+  QUEUE_BACKOFF_MS: z.coerce.number().int().positive().default(2_000),
+  /** Credencial do painel Bull Board em /admin/queues. */
+  BULL_BOARD_USER: z.string().min(1, 'BULL_BOARD_USER é obrigatória'),
+  BULL_BOARD_PASSWORD: z
+    .string()
+    .min(8, 'BULL_BOARD_PASSWORD precisa de ao menos 8 caracteres'),
 
-  S3_ENDPOINT: optional,
+  S3_ENDPOINT: z.string().min(1, 'S3_ENDPOINT é obrigatória'),
   S3_REGION: z.string().min(1).default('us-east-1'),
-  S3_BUCKET: optional,
-  S3_ACCESS_KEY_ID: optional,
-  S3_SECRET_ACCESS_KEY: optional,
+  S3_BUCKET: z.string().min(1, 'S3_BUCKET é obrigatória'),
+  S3_ACCESS_KEY_ID: z.string().min(1, 'S3_ACCESS_KEY_ID é obrigatória'),
+  S3_SECRET_ACCESS_KEY: z.string().min(1, 'S3_SECRET_ACCESS_KEY é obrigatória'),
   S3_FORCE_PATH_STYLE: booleanFromString.default(true),
+  /** Base das URLs públicas. Sem ela, montamos a partir do endpoint. */
   S3_PUBLIC_URL: optional,
+  /** Validade padrão de uma URL assinada. */
+  S3_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 
   JWT_SECRET: z
     .string()

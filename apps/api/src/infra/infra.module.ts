@@ -1,16 +1,40 @@
 import { Module } from '@nestjs/common';
 
-import { DatabaseModule } from './database/database.module';
+import { EventsModule } from './events/events.module';
 import { LoggerModule } from './logger/logger.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
+import { QueueAdminModule } from './queue/bull-board/queue-admin.module';
 import { RedisModule } from './redis/redis.module';
+import { StorageModule } from './storage/storage.module';
+import { ThrottlerModule } from './throttler/throttler.module';
 
 /**
- * Tudo que fala com o mundo externo: banco, Redis, filas, logs e (no módulo
- * 1) armazenamento S3. Nenhuma regra de negócio mora aqui.
+ * Tudo que fala com o mundo externo: banco, Redis, filas, storage, logs,
+ * eventos e rate limit. Nenhuma regra de negócio mora aqui.
+ *
+ * A ordem importa: RedisModule antes de QueueModule e ThrottlerModule, que
+ * dependem da mesma conexão.
  */
 @Module({
-  imports: [LoggerModule, DatabaseModule, RedisModule, QueueModule],
-  exports: [LoggerModule, DatabaseModule, RedisModule, QueueModule],
+  imports: [
+    LoggerModule,
+    PrismaModule,
+    RedisModule,
+    QueueModule,
+    QueueAdminModule,
+    StorageModule,
+    EventsModule,
+    ThrottlerModule,
+  ],
+  exports: [
+    LoggerModule,
+    PrismaModule,
+    RedisModule,
+    QueueModule,
+    StorageModule,
+    EventsModule,
+    ThrottlerModule,
+  ],
 })
 export class InfraModule {}
