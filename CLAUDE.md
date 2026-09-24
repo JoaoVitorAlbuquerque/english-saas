@@ -128,7 +128,7 @@ dos que vêm antes dele.
 | 0   | `setup`                         | —          | Monorepo, docker compose, lint/format/hooks, CI, `GET /health`. ✅ pronto                             |
 | 1   | `infra`                         | 0          | Prisma, S3/MinIO, BullMQ + Bull Board, eventos, logger, filtro de erro, paginação, Swagger. ✅ pronto |
 | 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod, cache, custo, isolamento de untrusted. ✅ pronto  |
-| 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh), perfil, teste de nivelamento inicial, coleta de interesses           |
+| 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh rotativo), Google, roles, perfil, onboarding, LGPD. ✅ pronto          |
 | 4   | `curriculum`                    | 3          | Personagens, temporadas, trilhas, mapa A1→C1, objetivos por nível, catálogo de apostilas PDF          |
 | 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação    |
 | 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                     |
@@ -239,6 +239,20 @@ mensagem de roleplay — é **dado não confiável**.
 - Instrução que aparecer dentro do conteúdo do aluno é para ser **ignorada e
   tratada como texto**.
 - Detalhes e helpers ficam no módulo 2 (`ai`).
+
+### Autenticação
+
+Access token de 15 minutos no header `Authorization: Bearer`, guardado só em
+memória no front. Refresh rotativo em cookie **httpOnly** com `Path=/auth`,
+protegido por CSRF double-submit (`csrf_token` legível + header
+`x-csrf-token`) nas rotas que dependem do cookie.
+
+Reuso de um refresh token já rotacionado revoga a **família** inteira: é o
+sinal de que alguém está com uma cópia.
+
+Rota nova nasce protegida — o `JwtAuthGuard` é global. Use `@IsPublic()` para
+abrir e `@Roles('ADMIN')` para restringir por papel. O papel viaja dentro do
+JWT, então promover alguém só vale no próximo login.
 
 ### Erros e logs
 

@@ -116,7 +116,45 @@ export const envSchema = z.object({
     .min(16, 'JWT_SECRET precisa de ao menos 16 caracteres'),
   JWT_EXPIRES_IN: z.string().min(1).default('15m'),
   JWT_REFRESH_SECRET: optional,
-  JWT_REFRESH_EXPIRES_IN: z.string().min(1).default('30d'),
+  /** Validade do refresh token, em dias. */
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+
+  /**
+   * Cookie do refresh token.
+   *
+   * `AUTH_COOKIE_DOMAIN` precisa ser o domínio pai (ex.: `.exemplo.com.br`)
+   * para o cookie valer entre `app.` e `api.`. Em localhost fica vazio: o
+   * browser recusa cookie com domínio para host sem ponto.
+   */
+  AUTH_COOKIE_DOMAIN: optional,
+  AUTH_COOKIE_SECURE: booleanFromString.default(false),
+  AUTH_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+
+  /** OAuth do Google. Sem client id, o login social fica desligado. */
+  GOOGLE_CLIENT_ID: optional,
+  GOOGLE_CLIENT_SECRET: optional,
+  /** Precisa bater exatamente com o cadastrado no console do Google. */
+  GOOGLE_REDIRECT_URI: z
+    .string()
+    .min(1)
+    .default('http://localhost:5173/auth/google/callback'),
+
+  /**
+   * E-mail transacional.
+   * 'auto' usa o Resend quando há RESEND_API_KEY, senão imprime no console.
+   */
+  MAIL_PROVIDER: z.enum(['auto', 'resend', 'console']).default('auto'),
+  RESEND_API_KEY: optional,
+  MAIL_FROM: z
+    .string()
+    .min(1)
+    .default('english-saas <nao-responda@exemplo.com.br>'),
+
+  /** Versão corrente dos documentos de consentimento (LGPD). */
+  TERMS_VERSION: z.string().min(1).default('2026-01-01'),
+  PRIVACY_POLICY_VERSION: z.string().min(1).default('2026-01-01'),
+  /** Validade da URL assinada do export de dados. */
+  DATA_EXPORT_TTL_HOURS: z.coerce.number().int().positive().default(48),
 
   OPENAI_API_KEY: optional,
   /**

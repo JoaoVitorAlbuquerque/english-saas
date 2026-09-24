@@ -1,5 +1,8 @@
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
+import type { Response } from 'supertest';
 
 import { AppModule } from 'src/app.module';
 import { setupSwagger } from 'src/common/swagger/setup-swagger';
@@ -13,6 +16,13 @@ export type TestApp = {
   resetDatabase: () => Promise<void>;
   /** Apaga as chaves de cache de IA do Redis. */
   flushAiCache: () => Promise<void>;
+  /**
+   * Zera o contador do rate limit.
+   *
+   * Todas as requisições do e2e saem de 127.0.0.1 e o contador vive no
+   * Redis, então sem isto uma suíte estoura o limite da seguinte.
+   */
+  resetRateLimit: () => Promise<void>;
   close: () => Promise<void>;
 };
 
@@ -33,7 +43,10 @@ export async function createTestApp(
     imports: [AppModule],
   }).compile();
 
-  const app = moduleRef.createNestApplication();
+  const app = moduleRef.createNestApplication<NestExpressApplication>();
+
+  // Mesmo middleware do bootstrap: sem ele o refresh por cookie não roda.
+  app.use(cookieParser());
 
   if (options.swagger === true) {
     setupSwagger(app, 'http://localhost:3333');
@@ -54,18 +67,74 @@ export async function createTestApp(
     }
   };
 
+  // O @nest-lab/throttler-storage-redis grava em `{<key>:<name>}:hits`.
+  const resetRateLimit = async (): Promise<void> => {
+    const keys = await redis.client.keys('{*');
+
+    if (keys.length > 0) {
+      await redis.client.del(...keys);
+    }
+  };
+
   await resetDatabase();
   await flushAiCache();
+  await resetRateLimit();
 
   return {
     app,
     prisma,
     resetDatabase,
     flushAiCache,
+    resetRateLimit,
     close: async () => {
       await resetDatabase();
       await flushAiCache();
+      await resetRateLimit();
       await app.close();
     },
+  };
+}
+
+export type ParsedCookies = {
+  /** Valor de cada cookie, já decodificado. */
+  values: Record<string, string>;
+  /** `Set-Cookie` cru, para conferir HttpOnly, SameSite e Path. */
+  raw: Record<string, string>;
+  /** Header `Cookie` pronto para a próxima requisição. */
+  header: string;
+  refreshToken: string;
+  csrfToken: string;
+};
+
+/** Lê os `Set-Cookie` de uma resposta do supertest. */
+export function extractCookies(response: Response): ParsedCookies {
+  const setCookie = response.headers['set-cookie'] as unknown;
+  const list = Array.isArray(setCookie) ? (setCookie as string[]) : [];
+  const values: Record<string, string> = {};
+  const raw: Record<string, string> = {};
+
+  for (const cookie of list) {
+    const [pair] = cookie.split(';');
+    const separator = pair?.indexOf('=') ?? -1;
+
+    if (pair === undefined || separator === -1) {
+      continue;
+    }
+
+    const name = pair.slice(0, separator);
+    values[name] = decodeURIComponent(pair.slice(separator + 1));
+    raw[name] = cookie;
+  }
+
+  const header = Object.entries(values)
+    .map(([name, value]) => `${name}=${encodeURIComponent(value)}`)
+    .join('; ');
+
+  return {
+    values,
+    raw,
+    header,
+    refreshToken: values['refresh_token'] ?? '',
+    csrfToken: values['csrf_token'] ?? '',
   };
 }

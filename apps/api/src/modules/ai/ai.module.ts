@@ -40,7 +40,7 @@ function resolveProvider(
     return fake;
   }
 
-  if (envService.get('OPENAI_API_KEY') === undefined) {
+  if (!envService.has('OPENAI_API_KEY')) {
     new Logger('AiModule').warn(
       'OPENAI_API_KEY ausente — o módulo ai vai responder com o provider fake',
     );

@@ -8,6 +8,8 @@
 export const QUEUES = {
   /** Fila de demonstração da infraestrutura. Sai quando houver fila real. */
   EXAMPLE: 'example',
+  /** Export de dados (LGPD) e anonimização de conta após a carência. */
+  USERS: 'users',
   /** Chamadas de IA: correção de produção livre, geração de material. */
   AI: 'ai',
   /** Síntese e transcodificação de áudio das cenas. */
@@ -25,4 +27,4 @@ export const QUEUES = {
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
 /** Filas já registradas na aplicação — as demais entram com seus módulos. */
-export const REGISTERED_QUEUES: QueueName[] = [QUEUES.EXAMPLE];
+export const REGISTERED_QUEUES: QueueName[] = [QUEUES.EXAMPLE, QUEUES.USERS];

@@ -7,6 +7,7 @@
  */
 export * from './cefr';
 export * from './competency';
+export * from './user';
 export * from './pagination';
 export * from './api-error';
 export * from './health';

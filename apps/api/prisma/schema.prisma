@@ -56,12 +56,12 @@ model AiUsage {
   costUsdMicros Int @map("cost_usd_micros")
   latencyMs     Int @map("latency_ms")
 
-  status   AiCallStatus
-  cacheHit Boolean      @default(false) @map("cache_hit")
+  status         AiCallStatus
+  cacheHit       Boolean      @default(false) @map("cache_hit")
   /// Preenchido quando status != OK. Nunca guarda o conteúdo do aluno.
-  errorCode String?     @map("error_code")
+  errorCode      String?      @map("error_code")
   /// Quantas tentativas de reparo do JSON foram necessárias (0, 1).
-  repairAttempts Int    @default(0) @map("repair_attempts")
+  repairAttempts Int          @default(0) @map("repair_attempts")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -94,4 +94,276 @@ model AiCacheEntry {
   @@index([promptId, promptVersion])
   @@index([expiresAt])
   @@map("ai_cache_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Módulo 3 — auth / users / onboarding
+// ---------------------------------------------------------------------------
+
+enum Role {
+  STUDENT @map("student")
+  EDITOR  @map("editor")
+  ADMIN   @map("admin")
+
+  @@map("role")
+}
+
+enum OAuthProvider {
+  GOOGLE @map("google")
+
+  @@map("oauth_provider")
+}
+
+enum AuthTokenPurpose {
+  EMAIL_VERIFICATION @map("email_verification")
+  PASSWORD_RESET     @map("password_reset")
+
+  @@map("auth_token_purpose")
+}
+
+enum LearningGoal {
+  TRAVEL        @map("travel")
+  WORK          @map("work")
+  EXAMS         @map("exams")
+  SCHOOL        @map("school")
+  MOVING_ABROAD @map("moving_abroad")
+  CONVERSATION  @map("conversation")
+  OTHER         @map("other")
+
+  @@map("learning_goal")
+}
+
+enum SelfReportedLevel {
+  NONE         @map("none")
+  BASIC        @map("basic")
+  INTERMEDIATE @map("intermediate")
+  ADVANCED     @map("advanced")
+
+  @@map("self_reported_level")
+}
+
+enum PreferredStudyTime {
+  MORNING   @map("morning")
+  AFTERNOON @map("afternoon")
+  EVENING   @map("evening")
+  NIGHT     @map("night")
+  ANY       @map("any")
+
+  @@map("preferred_study_time")
+}
+
+/// De onde veio o interesse: o aluno escolheu, ou o sistema aprendeu.
+enum InterestSource {
+  ONBOARDING @map("onboarding")
+  LEARNED    @map("learned")
+
+  @@map("interest_source")
+}
+
+enum ConsentType {
+  TERMS                @map("terms")
+  PRIVACY_POLICY       @map("privacy_policy")
+  DATA_PERSONALIZATION @map("data_personalization")
+  MARKETING            @map("marketing")
+
+  @@map("consent_type")
+}
+
+enum DataExportStatus {
+  PENDING @map("pending")
+  READY   @map("ready")
+  FAILED  @map("failed")
+
+  @@map("data_export_status")
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+
+  email        String  @unique
+  name         String
+  /// Nulo quando a conta nasceu pelo Google e nunca definiu senha.
+  passwordHash String? @map("password_hash")
+  role         Role    @default(STUDENT)
+
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  /// Soft delete imediato pedido pelo aluno (LGPD).
+  deletedAt       DateTime? @map("deleted_at")
+  /// Preenchido pelo job de anonimização, 30 dias após o soft delete.
+  anonymizedAt    DateTime? @map("anonymized_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile       StudentProfile?
+  interests     StudentInterest[]
+  refreshTokens RefreshToken[]
+  oauthAccounts OAuthAccount[]
+  authTokens    AuthToken[]
+  consents      Consent[]
+  dataExports   DataExport[]
+
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// Refresh token rotativo. Guardamos só o hash: o valor puro vive no cookie.
+model RefreshToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId    String @map("user_id") @db.Uuid
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String @unique @map("token_hash")
+
+  /// Toda a cadeia de rotação compartilha a mesma família. Reuso de um token
+  /// já rotacionado revoga a família inteira: sinal clássico de roubo.
+  family       String  @db.Uuid
+  replacedById String? @map("replaced_by_id") @db.Uuid
+
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  userAgent String? @map("user_agent")
+  ip        String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([family])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model OAuthAccount {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId            String        @map("user_id") @db.Uuid
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          OAuthProvider
+  providerAccountId String        @map("provider_account_id")
+  email             String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+/// Token de uso único: verificação de e-mail e recuperação de senha.
+model AuthToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId    String           @map("user_id") @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique @map("token_hash")
+
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+model StudentProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  goals    LearningGoal[]
+  /// Texto livre quando o objetivo não cabe nas opções.
+  goalNote String?        @map("goal_note")
+
+  /// Minutos por dia da semana: mon, tue, wed, thu, fri, sat, sun.
+  availabilityMinutes Json               @default("{}") @map("availability_minutes")
+  preferredStudyTime  PreferredStudyTime @default(ANY) @map("preferred_study_time")
+  /// Data em que o aluno quer chegar no objetivo. Opcional.
+  targetDate          DateTime?          @map("target_date")
+
+  selfReportedLevel SelfReportedLevel @default(NONE) @map("self_reported_level")
+  timezone          String            @default("America/Sao_Paulo")
+  nativeLanguage    String            @default("pt-BR") @map("native_language")
+
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("student_profiles")
+}
+
+/// Tema de interesse com peso. O aluno escolhe no onboarding; o sistema
+/// acrescenta e reajusta pesos conforme observa o uso (módulo 7).
+model StudentInterest {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Slug em inglês: history, football, technology, music, agriculture...
+  topic  String
+  /// 0 a 100. Quanto maior, mais o conteúdo gerado puxa para este tema.
+  weight Int            @default(50)
+  source InterestSource @default(ONBOARDING)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, topic])
+  @@index([userId])
+  @@map("student_interests")
+}
+
+/// Consentimento LGPD, com versão do documento aceito.
+model Consent {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId  String      @map("user_id") @db.Uuid
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    ConsentType
+  /// Versão do documento aceito, ex.: 2026-01-15.
+  version String
+
+  granted   Boolean
+  grantedAt DateTime? @map("granted_at")
+  revokedAt DateTime? @map("revoked_at")
+  ip        String?
+  userAgent String?   @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, type, version])
+  @@index([userId])
+  @@map("consents")
+}
+
+/// Pedido de portabilidade de dados (LGPD art. 18).
+model DataExport {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status     DataExportStatus @default(PENDING)
+  /// Chave no S3, sob o prefixo exports/. Nula enquanto não está pronto.
+  storageKey String?          @map("storage_key")
+  sizeBytes  Int?             @map("size_bytes")
+  errorCode  String?          @map("error_code")
+  /// Depois disso o arquivo é apagado do bucket.
+  expiresAt  DateTime?        @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@map("data_exports")
 }

@@ -33,6 +33,36 @@ export interface DomainEventPayloads {
     message: string;
     processedAt: string;
   };
+
+  // --- módulo 3: auth / users / onboarding ---
+
+  /** Conta criada. O e-mail ainda pode não estar verificado. */
+  'user.registered': {
+    userId: string;
+    email: string;
+    via: 'password' | 'google';
+  };
+  /**
+   * Onboarding concluído: objetivos, disponibilidade e interesses salvos.
+   * O planejador (10) e o nivelamento (8) escutam para montar o primeiro
+   * cronograma e agendar o teste inicial.
+   */
+  'user.onboarded': {
+    userId: string;
+    goals: string[];
+    weeklyMinutes: number;
+    selfReportedLevel: string;
+    interests: string[];
+    targetDate: string | null;
+  };
+  /** Aluno pediu exclusão da conta. Soft delete já foi aplicado. */
+  'user.deletion_requested': {
+    userId: string;
+    deletedAt: string;
+    anonymizeAt: string;
+  };
+  /** Conta anonimizada em definitivo pelo job de carência. */
+  'user.anonymized': { userId: string; anonymizedAt: string };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

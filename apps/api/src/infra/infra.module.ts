@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { EventsModule } from './events/events.module';
 import { LoggerModule } from './logger/logger.module';
+import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { QueueAdminModule } from './queue/bull-board/queue-admin.module';
@@ -24,6 +25,7 @@ import { ThrottlerModule } from './throttler/throttler.module';
     QueueModule,
     QueueAdminModule,
     StorageModule,
+    MailModule,
     EventsModule,
     ThrottlerModule,
   ],
@@ -33,6 +35,7 @@ import { ThrottlerModule } from './throttler/throttler.module';
     RedisModule,
     QueueModule,
     StorageModule,
+    MailModule,
     EventsModule,
     ThrottlerModule,
   ],
