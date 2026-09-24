@@ -164,6 +164,24 @@ export const envSchema = z.object({
   /** TTL do catálogo no Redis. 0 desliga o cache. */
   CATALOG_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(600),
 
+  /**
+   * Síntese de voz (módulo 5). Só existe o fake: o adapter do fornecedor
+   * de verdade entra como mais um valor aqui, sem tocar em chamador.
+   */
+  TTS_PROVIDER: z.enum(['fake']).default('fake'),
+  /** Voz usada quando o personagem não tem `voiceId` próprio. */
+  TTS_DEFAULT_VOICE: z.string().min(1).default('en-us-neutral-01'),
+  /** Fala mais pausada em nível baixo. 1 = velocidade natural. */
+  TTS_SPEAKING_RATE_A1: z.coerce.number().min(0.5).max(2).default(0.9),
+  /** Teto por requisição. Fala de cena não chega perto; é rede de segurança. */
+  TTS_MAX_CHARS: z.coerce.number().int().positive().default(2_000),
+
+  /**
+   * Teto de palavras acima do nível num rascunho, em fração.
+   * Acima disso a QA acusa. 0.05 = 5%.
+   */
+  CONTENT_QA_MAX_OUT_OF_LEVEL: z.coerce.number().min(0).max(1).default(0.05),
+
   OPENAI_API_KEY: optional,
   /**
    * 'auto' escolhe sozinho: fake em NODE_ENV=test ou sem OPENAI_API_KEY,

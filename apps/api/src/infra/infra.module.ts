@@ -9,6 +9,7 @@ import { QueueAdminModule } from './queue/bull-board/queue-admin.module';
 import { RedisModule } from './redis/redis.module';
 import { StorageModule } from './storage/storage.module';
 import { ThrottlerModule } from './throttler/throttler.module';
+import { TtsModule } from './tts/tts.module';
 
 /**
  * Tudo que fala com o mundo externo: banco, Redis, filas, storage, logs,
@@ -26,6 +27,7 @@ import { ThrottlerModule } from './throttler/throttler.module';
     QueueAdminModule,
     StorageModule,
     MailModule,
+    TtsModule,
     EventsModule,
     ThrottlerModule,
   ],
@@ -36,6 +38,7 @@ import { ThrottlerModule } from './throttler/throttler.module';
     QueueModule,
     StorageModule,
     MailModule,
+    TtsModule,
     EventsModule,
     ThrottlerModule,
   ],

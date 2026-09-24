@@ -21,6 +21,8 @@
     "db:studio": "dotenv -e .env -- pnpm --filter @english-saas/api exec prisma studio",
     "db:seed": "dotenv -e .env -- pnpm --filter @english-saas/api run db:seed",
     "db:reset": "dotenv -e .env -- pnpm --filter @english-saas/api exec prisma migrate reset",
+    "wordlist:import": "node --experimental-strip-types scripts/import-wordlist.ts",
+    "wordlist:check": "node --experimental-strip-types scripts/import-wordlist.ts --check",
     "prepare": "husky"
   },
   "devDependencies": {

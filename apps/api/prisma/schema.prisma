@@ -203,6 +203,9 @@ model User {
   consents      Consent[]
   dataExports   DataExport[]
 
+  contentDrafts   ContentDraft[]
+  contentComments ContentComment[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -452,6 +455,8 @@ enum ItemType {
 
 enum ItemSource {
   HUMAN             @map("human")
+  /// Saiu do content-studio e ainda não passou por revisão humana.
+  AI_DRAFT          @map("ai_draft")
   AI_DRAFT_REVIEWED @map("ai_draft_reviewed")
 
   @@map("item_source")
@@ -756,6 +761,10 @@ model LessonVersion {
   usedItems    LessonVersionItem[]
   publishedFor Lesson?             @relation("LessonPublishedVersion")
 
+  drafts    ContentDraft[]
+  qaReports ContentQaReport[]
+  comments  ContentComment[]
+
   @@unique([lessonId, version])
   @@index([status])
   @@map("lesson_versions")
@@ -903,6 +912,7 @@ model MediaAsset {
   unitCovers    Unit[]
   avatars       Character[]
   workbooks     Workbook[]
+  renditions    AudioRendition[]
 
   @@index([kind])
   @@map("media_assets")
@@ -924,10 +934,172 @@ model Workbook {
   assetId String     @map("asset_id") @db.Uuid
   asset   MediaAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
 
+  /// Quando o PDF foi gerado e de qual conteúdo. Se o hash do conteúdo
+  /// publicado da unidade mudar, a apostila está velha (módulo 5).
+  generatedAt DateTime? @map("generated_at")
+  sourceHash  String?   @map("source_hash")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([unitId, order])
   @@index([status])
   @@map("workbooks")
+}
+
+// ---------------------------------------------------------------------------
+// Módulo 5 — content-studio
+// ---------------------------------------------------------------------------
+
+enum ContentDraftKind {
+  LESSON         @map("lesson")
+  ITEMS          @map("items")
+  REGISTER_NOTES @map("register_notes")
+
+  @@map("content_draft_kind")
+}
+
+enum ContentDraftStatus {
+  QUEUED     @map("queued")
+  GENERATING @map("generating")
+  QA_RUNNING @map("qa_running")
+  READY      @map("ready")
+  FAILED     @map("failed")
+  DISCARDED  @map("discarded")
+
+  @@map("content_draft_status")
+}
+
+/// Gravidade de um aviso de QA. BLOCKER impede a aprovação da versão;
+/// WARNING e INFO só aparecem para o revisor.
+enum QaSeverity {
+  INFO    @map("info")
+  WARNING @map("warning")
+  BLOCKER @map("blocker")
+
+  @@map("qa_severity")
+}
+
+enum CommentTarget {
+  VERSION @map("version")
+  STEP    @map("step")
+  ITEM    @map("item")
+
+  @@map("comment_target")
+}
+
+/// Um pedido de rascunho para a IA.
+///
+/// Não guarda o conteúdo: o job materializa direto em linha de verdade —
+/// `LessonVersion` em DRAFT, `Item` com source AI_DRAFT — e esta tabela fica
+/// com a proveniência (qual prompt, qual versão, quanto custou, quem pediu).
+model ContentDraft {
+  id String @id @default(uuid()) @db.Uuid
+
+  kind          ContentDraftKind
+  status        ContentDraftStatus @default(QUEUED)
+  params        Json
+  requestedById String             @map("requested_by_id") @db.Uuid
+  requestedBy   User               @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+
+  promptId      String? @map("prompt_id")
+  promptVersion Int?    @map("prompt_version")
+  model         String?
+  costUsdMicros Int?    @map("cost_usd_micros")
+  jobId         String? @map("job_id")
+
+  lessonVersionId        String?        @map("lesson_version_id") @db.Uuid
+  lessonVersion          LessonVersion? @relation(fields: [lessonVersionId], references: [id], onDelete: SetNull)
+  createdItemIds         String[]       @map("created_item_ids") @db.Uuid
+  createdRegisterNoteIds String[]       @map("created_register_note_ids")
+
+  errorCode   String?   @map("error_code")
+  generatedAt DateTime? @map("generated_at")
+  discardedAt DateTime? @map("discarded_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  qaReports ContentQaReport[]
+
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
+  @@index([lessonVersionId])
+  @@map("content_drafts")
+}
+
+/// Resultado do job de QA: checagem de nível, de consistência e a revisão
+/// linguística por IA. **Nunca altera o conteúdo** — só descreve o que viu.
+model ContentQaReport {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonVersionId String?        @map("lesson_version_id") @db.Uuid
+  lessonVersion   LessonVersion? @relation(fields: [lessonVersionId], references: [id], onDelete: Cascade)
+  contentDraftId  String?        @map("content_draft_id") @db.Uuid
+  contentDraft    ContentDraft?  @relation(fields: [contentDraftId], references: [id], onDelete: Cascade)
+
+  /// [{ code, severity, message, path }]
+  warnings   Json @default("[]")
+  /// { totalWords, outOfLevel, ratio, words[] }
+  levelStats Json @default("{}")
+
+  blockerCount Int @default(0) @map("blocker_count")
+  warningCount Int @default(0) @map("warning_count")
+  infoCount    Int @default(0) @map("info_count")
+
+  ranAt     DateTime @default(now()) @map("ran_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([lessonVersionId, ranAt])
+  @@index([contentDraftId])
+  @@map("content_qa_reports")
+}
+
+/// Comentário de revisão, preso a uma etapa ou a um item da versão.
+model ContentComment {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonVersionId String        @map("lesson_version_id") @db.Uuid
+  lessonVersion   LessonVersion @relation(fields: [lessonVersionId], references: [id], onDelete: Cascade)
+
+  target    CommentTarget @default(VERSION)
+  /// Ordem da etapa ou id do item, conforme o `target`.
+  targetRef String?       @map("target_ref")
+  body      String
+
+  authorId     String    @map("author_id") @db.Uuid
+  author       User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  resolvedAt   DateTime? @map("resolved_at")
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([lessonVersionId, createdAt])
+  @@index([authorId])
+  @@map("content_comments")
+}
+
+/// Áudio já sintetizado, indexado por hash(texto normalizado + voz).
+///
+/// TTS é produção única: a mesma fala com a mesma voz nunca é sintetizada
+/// duas vezes, nem quando a lição ganha uma versão nova.
+model AudioRendition {
+  id String @id @default(uuid()) @db.Uuid
+
+  textHash String     @map("text_hash")
+  voiceId  String     @map("voice_id")
+  assetId  String     @map("asset_id") @db.Uuid
+  asset    MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  provider  String
+  charCount Int    @map("char_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([textHash, voiceId])
+  @@index([assetId])
+  @@map("audio_renditions")
 }

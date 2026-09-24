@@ -80,6 +80,46 @@ export interface DomainEventPayloads {
     targetSkillIds: string[];
     publishedAt: string;
   };
+
+  /**
+   * Um revisor aprovou a versão. O content-studio (5) escuta para sintetizar
+   * o áudio — o editor precisa ouvir antes de deixar ir ao ar, e o publish é
+   * recusado enquanto faltar fala sem áudio.
+   */
+  'curriculum.lesson_approved': {
+    lessonId: string;
+    lessonSlug: string;
+    lessonVersionId: string;
+    version: number;
+    cefrLevel: string;
+    approvedAt: string;
+  };
+
+  // --- módulo 5: content-studio ---
+
+  /** Rascunho gerado e checado. Já existe conteúdo em DRAFT para revisar. */
+  'content.draft_ready': {
+    draftId: string;
+    kind: string;
+    lessonVersionId: string | null;
+    createdItemCount: number;
+    blockerCount: number;
+    warningCount: number;
+  };
+  /** A geração falhou. O rascunho fica em FAILED com o código do erro. */
+  'content.draft_failed': { draftId: string; kind: string; errorCode: string };
+  /** Áudio de uma versão sintetizado (ou reaproveitado do cache). */
+  'content.audio_generated': {
+    lessonVersionId: string;
+    generated: number;
+    reused: number;
+  };
+  /** Apostila em PDF de uma unidade gerada. */
+  'content.workbook_generated': {
+    unitId: string;
+    workbookId: string;
+    sizeBytes: number;
+  };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

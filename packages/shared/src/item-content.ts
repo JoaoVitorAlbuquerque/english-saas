@@ -110,8 +110,20 @@ export const multipleChoiceContentSchema = z
   .object({ ...choiceFields })
   .superRefine(checkChoice);
 
+/**
+ * Campos de áudio de um item de escuta.
+ *
+ * `audioText` é o que vai ser falado — o TTS (módulo 5) lê daqui.
+ * `audioAssetId` nasce nulo: a síntese roda quando o editor aprova a versão,
+ * e o publish é recusado enquanto algum item de escuta estiver sem áudio.
+ */
+const audioFields = {
+  audioText: z.string().min(1).max(300),
+  audioAssetId: z.uuid().nullable().default(null),
+};
+
 export const listenChooseContentSchema = z
-  .object({ audioAssetId: z.uuid(), ...choiceFields })
+  .object({ ...audioFields, ...choiceFields })
   .superRefine(checkChoice);
 
 export const orderWordsContentSchema = z.object({
@@ -159,7 +171,7 @@ export const matchContentSchema = z
   );
 
 export const dictationContentSchema = z.object({
-  audioAssetId: z.uuid(),
+  ...audioFields,
   /** Quantas vezes o aluno pode ouvir. 0 = sem limite. */
   maxPlays: z.number().int().min(0).max(10).default(0),
 });

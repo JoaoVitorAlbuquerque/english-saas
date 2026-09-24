@@ -12,7 +12,11 @@ export const QUEUES = {
   USERS: 'users',
   /** Chamadas de IA: correção de produção livre, geração de material. */
   AI: 'ai',
-  /** Síntese e transcodificação de áudio das cenas. */
+  /** Geração de rascunho de lição, item e nota de registro pela IA. */
+  CONTENT_DRAFTS: 'content-drafts',
+  /** Checagem de nível, consistência e revisão linguística de rascunho. */
+  CONTENT_QA: 'content-qa',
+  /** Síntese de voz das cenas e geração das apostilas em PDF. */
   MEDIA: 'media',
   /** Recálculo de mastery e do modelo do aluno após tentativas. */
   LEARNER_MODEL: 'learner-model',
@@ -27,4 +31,10 @@ export const QUEUES = {
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
 /** Filas já registradas na aplicação — as demais entram com seus módulos. */
-export const REGISTERED_QUEUES: QueueName[] = [QUEUES.EXAMPLE, QUEUES.USERS];
+export const REGISTERED_QUEUES: QueueName[] = [
+  QUEUES.EXAMPLE,
+  QUEUES.USERS,
+  QUEUES.CONTENT_DRAFTS,
+  QUEUES.CONTENT_QA,
+  QUEUES.MEDIA,
+];

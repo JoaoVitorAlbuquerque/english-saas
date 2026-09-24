@@ -145,13 +145,22 @@ const ASSETS: {
     mimeType: 'image/webp',
     durationMs: null,
   })),
+  // As duas notas de registro que a lição marca. Sem áudio nelas, o publish
+  // pela API seria recusado pela trava do módulo 5.
+  ...['im-contraction', 'be-contraction-third'].map((id) => ({
+    key: `note-${id}`,
+    storageKey: `content/audio/notes/${id}.mp3`,
+    kind: 'AUDIO' as MediaKind,
+    mimeType: 'audio/mpeg',
+    durationMs: 1_200,
+  })),
 ];
 
 export const curriculumSeed: SeedModule = {
   name: '4 curriculum',
   async run(prisma: PrismaClient): Promise<void> {
     const assets = await seedAssets(prisma);
-    await seedTaxonomy(prisma);
+    await seedTaxonomy(prisma, assets);
     const characters = await seedCharacters(prisma, assets);
     const unit = await seedStructure(prisma, assets, characters);
     const items = await seedItems(prisma, assets);
@@ -202,7 +211,10 @@ async function seedAssets(
   return map;
 }
 
-async function seedTaxonomy(prisma: PrismaClient): Promise<void> {
+async function seedTaxonomy(
+  prisma: PrismaClient,
+  assets: Record<string, string>,
+): Promise<void> {
   for (const pattern of SEED_ERROR_PATTERNS) {
     await prisma.errorPattern.upsert({
       where: { id: pattern.id },
@@ -256,9 +268,11 @@ async function seedTaxonomy(prisma: PrismaClient): Promise<void> {
   }
 
   for (const note of SEED_REGISTER_NOTES) {
+    const audioAssetId = assets[`note-${note.id}`] ?? null;
+
     await prisma.registerNote.upsert({
       where: { id: note.id },
-      create: note,
+      create: { ...note, audioAssetId },
       update: {
         spokenForm: note.spokenForm,
         standardForm: note.standardForm,
@@ -267,6 +281,7 @@ async function seedTaxonomy(prisma: PrismaClient): Promise<void> {
         whenToAvoid: note.whenToAvoid,
         cefrLevel: note.cefrLevel,
         skillId: note.skillId,
+        audioAssetId,
       },
     });
   }

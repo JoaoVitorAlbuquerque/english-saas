@@ -29,10 +29,17 @@ export type StudentItem = {
   skillIds: string[];
 };
 
-/** Campos de conteúdo que carregam o gabarito, por tipo. */
+/**
+ * Campos de conteúdo que carregam o gabarito, por tipo.
+ *
+ * `audioText` é o texto que o TTS fala. Num ditado ele **é** a resposta, e
+ * num item de escuta é a alternativa certa escrita por extenso — mandar
+ * junto do áudio entregaria a questão de graça.
+ */
 const ANSWER_FIELDS: Partial<Record<ItemType, string[]>> = {
   MULTIPLE_CHOICE: ['correctOptionIds'],
-  LISTEN_CHOOSE: ['correctOptionIds'],
+  LISTEN_CHOOSE: ['correctOptionIds', 'audioText'],
+  DICTATION: ['audioText'],
   READING_COMPREHENSION: ['correctOptionIds', 'passageTranslation'],
 };
 

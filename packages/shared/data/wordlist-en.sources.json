@@ -1,0 +1,18 @@
+{
+  "language": "en",
+  "note": "Cada chave é o valor da coluna `source` do CSV. O script de import recusa uma fonte que não esteja declarada aqui, para nenhuma palavra entrar sem procedência.",
+  "sources": {
+    "ogden-basic": {
+      "name": "Ogden's Basic English (850 palavras)",
+      "license": "Domínio público",
+      "url": "https://en.wikipedia.org/wiki/Basic_English",
+      "note": "Publicado em 1930 por C. K. Ogden; direitos expirados."
+    },
+    "curated-a1": {
+      "name": "Curadoria interna — vocabulário A1 da unidade 1",
+      "license": "Proprietário (english-saas)",
+      "url": "",
+      "note": "Palavras que aparecem nas lições A1 já escritas e que não estão no Basic English. Provisório: sai quando entrar a lista definitiva."
+    }
+  }
+}

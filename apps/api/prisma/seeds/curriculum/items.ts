@@ -65,6 +65,7 @@ export function buildSeedItems(audio: Record<string, string>): SeedItem[] {
       type: 'LISTEN_CHOOSE',
       prompt: 'Ouça e escolha o que a Maya disse.',
       content: {
+        audioText: "He's very friendly.",
         audioAssetId: hesFriendly,
         options: [
           { id: 'contracted', text: "He's very friendly." },
@@ -204,7 +205,11 @@ export function buildSeedItems(audio: Record<string, string>): SeedItem[] {
       slug: 'a1-dictation-im-from-brazil',
       type: 'DICTATION',
       prompt: 'Ouça e escreva exatamente o que você ouviu.',
-      content: { audioAssetId: dictation, maxPlays: 3 },
+      content: {
+        audioText: "I'm from Brazil.",
+        audioAssetId: dictation,
+        maxPlays: 3,
+      },
       acceptedAnswers: ["I'm from Brazil."],
       explanation: 'A forma curta "I\'m" é o que se ouve na fala normal.',
       cefrLevel: 'A1',

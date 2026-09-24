@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   ContentStatus,
   type CefrLevel,
@@ -19,6 +19,7 @@ import {
   SlugInUseError,
 } from '../curriculum.errors';
 import { collectStepReferences, missingReferences } from '../domain/references';
+import { ContentGate } from '../gates/content-gate';
 import { validateSteps, type StepInput } from '../domain/step-content';
 import {
   clearsApproval,
@@ -99,6 +100,11 @@ export class LessonAuthoringService {
     private readonly items: ItemService,
     private readonly cache: CatalogCacheService,
     private readonly events: EventBusService,
+    /**
+     * Fornecido pelo módulo 5. Sem ele, aprovar e publicar não têm trava
+     * extra nenhuma — é o comportamento de antes do content-studio.
+     */
+    @Optional() private readonly gate?: ContentGate,
   ) {}
 
   // -------------------------------------------------------------------
@@ -352,7 +358,15 @@ export class LessonAuthoringService {
     }
 
     if (target === ContentStatus.PUBLISHED) {
+      // A trava do módulo 5 (todo áudio no lugar) roda antes de qualquer
+      // escrita — publicar pela metade seria pior que não publicar.
+      await this.gate?.assertCanPublish(id);
+
       return this.publish(id);
+    }
+
+    if (target === ContentStatus.APPROVED) {
+      await this.gate?.assertCanApprove(id);
     }
 
     await this.prisma.lessonVersion.update({
@@ -367,6 +381,21 @@ export class LessonAuthoringService {
           : {}),
       },
     });
+
+    if (target === ContentStatus.APPROVED) {
+      // `emitAsync` de propósito: o content-studio promove as questões da
+      // lição neste handler, e publicar antes disso esbarraria na regra de
+      // "item da prática precisa estar publicado" com um erro sem sentido
+      // para quem acabou de aprovar.
+      await this.events.emitAsync('curriculum.lesson_approved', {
+        lessonId: version.lesson.id,
+        lessonSlug: version.lesson.slug,
+        lessonVersionId: id,
+        version: version.version,
+        cefrLevel: version.cefrLevel,
+        approvedAt: new Date().toISOString(),
+      });
+    }
 
     return this.findVersion(id);
   }

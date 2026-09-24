@@ -9,6 +9,7 @@ export * from './cefr';
 export * from './competency';
 export * from './user';
 export * from './curriculum';
+export * from './wordlists';
 export * from './lesson-content';
 export * from './item-content';
 export * from './pagination';

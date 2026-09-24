@@ -115,6 +115,13 @@ packages/
   Um provider injetado só aparece como anotação de tipo no construtor;
   trocá-lo por `import type` apaga o `design:paramtypes` e a DI do Nest
   quebra **em runtime**, sem erro de compilação.
+- **`@react-pdf/renderer` 4.x é ESM puro**, mesma armadilha do
+  `event-emitter`. Por isso duas coisas: ele é carregado por `import()`
+  dinâmico preservado com `new Function` (o TS rebaixaria um `import()`
+  normal para `require`), isolado em
+  [workbook-pdf.ts](apps/api/src/modules/content-studio/services/workbook-pdf.ts);
+  e os scripts de Jest rodam com `--experimental-vm-modules` via
+  `cross-env`. Sem a flag, o Jest recusa qualquer `import()` dinâmico.
 
 ---
 
@@ -130,7 +137,7 @@ dos que vêm antes dele.
 | 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod, cache, custo, isolamento de untrusted. ✅ pronto  |
 | 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh rotativo), Google, roles, perfil, onboarding, LGPD. ✅ pronto          |
 | 4   | `curriculum`                    | 3          | Taxonomia, personagens, unidades, lições versionadas, banco de questões, apostilas PDF. ✅ pronto     |
-| 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação    |
+| 5   | `content-studio`                | 2, 4       | Rascunho por IA, QA automática, revisão humana, TTS e apostila em PDF. ✅ pronto                      |
 | 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                     |
 | 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                     |
 | 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                       |
@@ -288,6 +295,43 @@ O catálogo é cacheado no Redis com a versão na chave, então publicar
 invalida sozinho. **O cache guarda `storageKey`, nunca URL assinada** — a
 assinatura vence e a URL nasce na resposta.
 
+### Autoria com IA (content-studio)
+
+**Nada gerado por IA chega ao aluno sem um humano aprovar.** O rascunho
+materializa direto em linha de verdade — `LessonVersion` em DRAFT, `Item`
+com `source = AI_DRAFT` — para o editor revisar com as mesmas rotas do
+módulo 4. O que trava é o fluxo editorial, que já existia.
+
+Caminho: pedir rascunho → fila `content-drafts` (tier smart) → fila
+`content-qa` (tier fast) → revisão humana → **aprovar** → TTS → **publicar**
+→ apostila em PDF.
+
+**O TTS roda na aprovação, não na publicação.** O editor precisa ouvir o
+áudio antes de mandar para o ar, e o publish é recusado enquanto alguma
+fala, item de escuta ou `RegisterNote` da versão estiver sem `MediaAsset`.
+Áudio é produção única, indexado por `hash(texto + voz + velocidade)`:
+republicar uma lição não sintetiza nada de novo.
+
+**Aprovar a lição publica as questões dela** e troca `AI_DRAFT` por
+`AI_DRAFT_REVIEWED`. Quem revisou a lição leu os itens; aprovação item a
+item seria clique sem ganho.
+
+**A QA nunca altera conteúdo** — só descreve. A gravidade de cada aviso mora
+num lugar só, em
+[qa-report.ts](apps/api/src/modules/content-studio/domain/qa-report.ts):
+`BLOCKER` impede a aprovação, `WARNING` e `INFO` só aparecem na tela.
+
+O módulo 4 não pode importar o 5 (ordem de dependência). As duas travas
+chegam lá pelo `ContentGate`: contrato declarado no módulo 4, implementado
+pelo 5 como provider global e injetado com `@Optional()`. Efeito colateral
+(gerar áudio, gerar PDF) **não** passa pelo gate — passa por evento.
+
+A checagem de nível usa a lista de frequência de
+`packages/shared/src/wordlists`, gerada a partir do CSV versionado em
+`packages/shared/data` por `pnpm wordlist:import`. Palavra fora da lista
+**não** conta como fora do nível, e o relatório traz `coverage` justamente
+para dizer o quanto aquele número vale.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -377,6 +421,8 @@ valida a mensagem.
 | **RegisterNote**      | Nota que contrasta a forma gramatical padrão com a forma falada no dia a dia (`I'm going to` × `I'm gonna`).                         |
 | **ErrorPattern**      | Erro típico de brasileiro, ligado a Skills: `l1.have-for-age` ("I have 20 years"), `article.country-the`, `third-person-s`.          |
 | **Span**              | Marcação `{start, end, kind}` sobre um trecho de texto de cena ou card. É o que permite destacar estrutura e chunk na interface.     |
+| **ContentDraft**      | Um pedido de rascunho à IA e sua proveniência: qual prompt, qual versão, quanto custou, quem pediu e o que foi criado.               |
+| **QaWarning**         | Achado da revisão automática: `{code, severity, message, path}`. `BLOCKER` trava a aprovação; `WARNING` e `INFO` só informam.        |
 | **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
 | **AiCredit**          | Unidade de consumo das ferramentas de IA do plano Plus. Debitada por geração e reposta no ciclo da assinatura.                       |
 
