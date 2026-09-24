@@ -63,6 +63,23 @@ export interface DomainEventPayloads {
   };
   /** Conta anonimizada em definitivo pelo job de carência. */
   'user.anonymized': { userId: string; anonymizedAt: string };
+
+  // --- módulo 4: curriculum ---
+
+  /**
+   * Uma versão de lição entrou no ar e passou a ser o que o aluno vê.
+   * O SRS (9) e o planejador (10) escutam para acrescentar o conteúdo novo
+   * às trilhas; o modelo do aluno (7) para conhecer as skills cobertas.
+   */
+  'curriculum.lesson_published': {
+    lessonId: string;
+    lessonSlug: string;
+    lessonVersionId: string;
+    version: number;
+    cefrLevel: string;
+    targetSkillIds: string[];
+    publishedAt: string;
+  };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

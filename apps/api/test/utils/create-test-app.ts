@@ -17,6 +17,15 @@ export type TestApp = {
   /** Apaga as chaves de cache de IA do Redis. */
   flushAiCache: () => Promise<void>;
   /**
+   * Apaga o cache do catálogo.
+   *
+   * A chave é `catalog:lesson:<slug>:v<versão>`, o que basta em produção —
+   * versão publicada não se edita, então o conteúdo daquela chave é
+   * imutável. No teste não basta: o banco é zerado e o mesmo slug volta com
+   * uuid novo, então sem isto uma suíte lê a lição da anterior.
+   */
+  flushCatalogCache: () => Promise<void>;
+  /**
    * Zera o contador do rate limit.
    *
    * Todas as requisições do e2e saem de 127.0.0.1 e o contador vive no
@@ -59,13 +68,16 @@ export async function createTestApp(
 
   const resetDatabase = () => prisma.truncateAllTables();
 
-  const flushAiCache = async (): Promise<void> => {
-    const keys = await redis.client.keys('ai:*');
+  const flushKeys = async (pattern: string): Promise<void> => {
+    const keys = await redis.client.keys(pattern);
 
     if (keys.length > 0) {
       await redis.client.del(...keys);
     }
   };
+
+  const flushAiCache = () => flushKeys('ai:*');
+  const flushCatalogCache = () => flushKeys('catalog:*');
 
   // O @nest-lab/throttler-storage-redis grava em `{<key>:<name>}:hits`.
   const resetRateLimit = async (): Promise<void> => {
@@ -78,6 +90,7 @@ export async function createTestApp(
 
   await resetDatabase();
   await flushAiCache();
+  await flushCatalogCache();
   await resetRateLimit();
 
   return {
@@ -85,10 +98,12 @@ export async function createTestApp(
     prisma,
     resetDatabase,
     flushAiCache,
+    flushCatalogCache,
     resetRateLimit,
     close: async () => {
       await resetDatabase();
       await flushAiCache();
+      await flushCatalogCache();
       await resetRateLimit();
       await app.close();
     },

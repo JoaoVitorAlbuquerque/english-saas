@@ -156,6 +156,14 @@ export const envSchema = z.object({
   /** Validade da URL assinada do export de dados. */
   DATA_EXPORT_TTL_HOURS: z.coerce.number().int().positive().default(48),
 
+  /**
+   * Validade da URL assinada de um asset de conteúdo (áudio, imagem, PDF).
+   * Mais longa que a padrão do S3: o aluno abre a lição e fica nela.
+   */
+  CONTENT_URL_TTL_SECONDS: z.coerce.number().int().positive().default(3_600),
+  /** TTL do catálogo no Redis. 0 desliga o cache. */
+  CATALOG_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(600),
+
   OPENAI_API_KEY: optional,
   /**
    * 'auto' escolhe sozinho: fake em NODE_ENV=test ou sem OPENAI_API_KEY,

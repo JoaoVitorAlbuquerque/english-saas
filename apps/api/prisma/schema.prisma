@@ -367,3 +367,567 @@ model DataExport {
   @@index([userId, createdAt])
   @@map("data_exports")
 }
+
+// ---------------------------------------------------------------------------
+// Módulo 4 — curriculum
+// ---------------------------------------------------------------------------
+
+enum CefrLevel {
+  A1 @map("a1")
+  A2 @map("a2")
+  B1 @map("b1")
+  B2 @map("b2")
+  C1 @map("c1")
+
+  @@map("cefr_level")
+}
+
+enum Competency {
+  GRAMMAR    @map("grammar")
+  VOCABULARY @map("vocabulary")
+  LISTENING  @map("listening")
+  READING    @map("reading")
+  WRITING    @map("writing")
+  SPEAKING   @map("speaking")
+
+  @@map("competency")
+}
+
+enum SkillType {
+  GRAMMAR       @map("grammar")
+  VOCAB_SET     @map("vocab_set")
+  CHUNK         @map("chunk")
+  FUNCTION      @map("function")
+  PRONUNCIATION @map("pronunciation")
+  REGISTER      @map("register")
+
+  @@map("skill_type")
+}
+
+enum RegisterLevel {
+  INFORMAL_SPOKEN @map("informal_spoken")
+  NEUTRAL         @map("neutral")
+  FORMAL          @map("formal")
+
+  @@map("register_level")
+}
+
+/// Ciclo de vida de tudo que é autorado: unidade, lição, item, apostila.
+/// DRAFT → IN_REVIEW → APPROVED → PUBLISHED, e ARCHIVED no fim da vida.
+/// Editar algo em IN_REVIEW ou APPROVED devolve para DRAFT.
+enum ContentStatus {
+  DRAFT     @map("draft")
+  IN_REVIEW @map("in_review")
+  APPROVED  @map("approved")
+  PUBLISHED @map("published")
+  ARCHIVED  @map("archived")
+
+  @@map("content_status")
+}
+
+enum LessonStepType {
+  SCENE             @map("scene")
+  EXPLANATION_CARDS @map("explanation_cards")
+  PRACTICE          @map("practice")
+  FREE_PRODUCTION   @map("free_production")
+  ROLEPLAY          @map("roleplay")
+  SUMMARY           @map("summary")
+
+  @@map("lesson_step_type")
+}
+
+enum ItemType {
+  MULTIPLE_CHOICE       @map("multiple_choice")
+  LISTEN_CHOOSE         @map("listen_choose")
+  ORDER_WORDS           @map("order_words")
+  FILL_BLANK            @map("fill_blank")
+  TYPE_ANSWER           @map("type_answer")
+  MATCH                 @map("match")
+  DICTATION             @map("dictation")
+  READING_COMPREHENSION @map("reading_comprehension")
+  REGISTER_SWAP         @map("register_swap")
+
+  @@map("item_type")
+}
+
+enum ItemSource {
+  HUMAN             @map("human")
+  AI_DRAFT_REVIEWED @map("ai_draft_reviewed")
+
+  @@map("item_source")
+}
+
+enum MediaKind {
+  AUDIO @map("audio")
+  IMAGE @map("image")
+  PDF   @map("pdf")
+
+  @@map("media_kind")
+}
+
+// --- Taxonomia -------------------------------------------------------------
+
+/// Unidade mínima que o sistema mede.
+///
+/// O id é um slug **imutável**: ele viaja dentro do JSON das etapas de lição,
+/// do errorPatternMap dos itens e do modelo do aluno. Para substituir uma
+/// skill, marque `deprecatedAt` e aponte `replacedById` — nunca renomeie.
+model Skill {
+  id String @id
+
+  type        SkillType
+  competency  Competency
+  cefrLevel   CefrLevel  @map("cefr_level")
+  /// pt-BR.
+  title       String
+  /// pt-BR.
+  description String?
+
+  deprecatedAt DateTime? @map("deprecated_at")
+  replacedById String?   @map("replaced_by_id")
+  replacedBy   Skill?    @relation("SkillReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     Skill[]   @relation("SkillReplacement")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  prerequisites SkillPrerequisite[] @relation("SkillPrerequisiteOwner")
+  requiredBy    SkillPrerequisite[] @relation("SkillPrerequisiteTarget")
+  commonErrors  SkillErrorPattern[]
+  items         ItemSkill[]
+  lessons       LessonTargetSkill[]
+  registerNote  RegisterNote?
+
+  @@index([cefrLevel, competency])
+  @@index([type])
+  @@index([deprecatedAt])
+  @@map("skills")
+}
+
+model SkillPrerequisite {
+  id String @id @default(uuid()) @db.Uuid
+
+  skillId        String @map("skill_id")
+  skill          Skill  @relation("SkillPrerequisiteOwner", fields: [skillId], references: [id], onDelete: Cascade)
+  prerequisiteId String @map("prerequisite_id")
+  prerequisite   Skill  @relation("SkillPrerequisiteTarget", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([skillId, prerequisiteId])
+  @@index([prerequisiteId])
+  @@map("skill_prerequisites")
+}
+
+/// Erro típico de brasileiro aprendendo inglês. Slug imutável, como Skill.
+model ErrorPattern {
+  id String @id
+
+  /// pt-BR: o que o aluno faz de errado.
+  description String
+  /// A forma errada, em inglês: "I have 20 years."
+  example     String
+  /// A forma certa: "I'm 20 years old."
+  correction  String
+  /// pt-BR: por que acontece e como lembrar.
+  explanation String
+
+  deprecatedAt DateTime?      @map("deprecated_at")
+  replacedById String?        @map("replaced_by_id")
+  replacedBy   ErrorPattern?  @relation("ErrorPatternReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     ErrorPattern[] @relation("ErrorPatternReplacement")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  skills SkillErrorPattern[]
+
+  @@index([deprecatedAt])
+  @@map("error_patterns")
+}
+
+model SkillErrorPattern {
+  id String @id @default(uuid()) @db.Uuid
+
+  skillId        String       @map("skill_id")
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  errorPatternId String       @map("error_pattern_id")
+  errorPattern   ErrorPattern @relation(fields: [errorPatternId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([skillId, errorPatternId])
+  @@index([errorPatternId])
+  @@map("skill_error_patterns")
+}
+
+/// Registro falado × estrutura gramatical. Slug imutável, como Skill.
+model RegisterNote {
+  id String @id
+
+  /// Como se fala: "gonna", "You coming?"
+  spokenForm   String        @map("spoken_form")
+  /// A estrutura completa: "going to", "Are you coming?"
+  standardForm String        @map("standard_form")
+  register     RegisterLevel
+  /// pt-BR: o que muda e quando usar.
+  explanation  String
+  /// pt-BR: onde não cabe. "Não use em e-mail formal."
+  whenToAvoid  String?       @map("when_to_avoid")
+  cefrLevel    CefrLevel     @map("cefr_level")
+
+  /// A skill (type REGISTER) que esta nota ensina, quando medimos.
+  skillId      String?     @unique @map("skill_id")
+  skill        Skill?      @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  audioAssetId String?     @map("audio_asset_id") @db.Uuid
+  audioAsset   MediaAsset? @relation(fields: [audioAssetId], references: [id], onDelete: SetNull)
+
+  deprecatedAt DateTime?      @map("deprecated_at")
+  replacedById String?        @map("replaced_by_id")
+  replacedBy   RegisterNote?  @relation("RegisterNoteReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     RegisterNote[] @relation("RegisterNoteReplacement")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([cefrLevel])
+  @@index([deprecatedAt])
+  @@map("register_notes")
+}
+
+// --- Estrutura do curso ----------------------------------------------------
+
+model Course {
+  id String @id @default(uuid()) @db.Uuid
+
+  slug        String  @unique
+  language    String  @default("en")
+  title       String
+  description String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  levels Level[]
+
+  @@map("courses")
+}
+
+model Level {
+  id String @id @default(uuid()) @db.Uuid
+
+  courseId  String    @map("course_id") @db.Uuid
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  cefrLevel CefrLevel @map("cefr_level")
+
+  title       String
+  description String?
+  /// Can-dos do nível, em pt-BR.
+  objectives  String[]
+  order       Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  units Unit[]
+
+  @@unique([courseId, cefrLevel])
+  @@unique([courseId, order])
+  @@map("levels")
+}
+
+/// Um episódio da série: o elenco e um punhado de lições.
+model Unit {
+  id String @id @default(uuid()) @db.Uuid
+
+  levelId String @map("level_id") @db.Uuid
+  level   Level  @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  slug     String        @unique
+  order    Int
+  title    String
+  /// Sinopse do episódio, em pt-BR.
+  synopsis String?
+  status   ContentStatus @default(DRAFT)
+
+  coverAssetId String?     @map("cover_asset_id") @db.Uuid
+  coverAsset   MediaAsset? @relation(fields: [coverAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lessons   Lesson[]
+  cast      UnitCharacter[]
+  workbooks Workbook[]
+
+  @@unique([levelId, order])
+  @@index([status])
+  @@map("units")
+}
+
+model Character {
+  id String @id @default(uuid()) @db.Uuid
+
+  slug    String  @unique
+  name    String
+  /// pt-BR.
+  bio     String?
+  /// Voz do TTS. O áudio em si é gerado no módulo 5.
+  voiceId String? @map("voice_id")
+
+  avatarAssetId String?     @map("avatar_asset_id") @db.Uuid
+  avatarAsset   MediaAsset? @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  units UnitCharacter[]
+
+  @@map("characters")
+}
+
+model UnitCharacter {
+  id String @id @default(uuid()) @db.Uuid
+
+  unitId      String    @map("unit_id") @db.Uuid
+  unit        Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  characterId String    @map("character_id") @db.Uuid
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([unitId, characterId])
+  @@index([characterId])
+  @@map("unit_characters")
+}
+
+// --- Lição e versionamento -------------------------------------------------
+
+/// Identidade estável da lição. O conteúdo mora nas versões.
+model Lesson {
+  id String @id @default(uuid()) @db.Uuid
+
+  unitId String @map("unit_id") @db.Uuid
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  slug   String @unique
+  order  Int
+
+  /// Ponteiro para o que o aluno vê. Nulo enquanto a lição nunca publicou.
+  publishedVersionId String?        @unique @map("published_version_id") @db.Uuid
+  publishedVersion   LessonVersion? @relation("LessonPublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LessonVersion[] @relation("LessonVersions")
+
+  @@unique([unitId, order])
+  @@map("lessons")
+}
+
+/// Uma versão editorial da lição. Editar a publicada cria a próxima em DRAFT.
+/// É o id daqui que a tentativa do aluno guarda (módulo 6).
+model LessonVersion {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonId String @map("lesson_id") @db.Uuid
+  lesson   Lesson @relation("LessonVersions", fields: [lessonId], references: [id], onDelete: Cascade)
+  version  Int
+
+  status           ContentStatus @default(DRAFT)
+  title            String
+  /// Can-do em pt-BR: "se apresentar e responder a apresentações".
+  objective        String
+  cefrLevel        CefrLevel     @map("cefr_level")
+  estimatedMinutes Int           @default(10) @map("estimated_minutes")
+
+  approvedAt   DateTime? @map("approved_at")
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  publishedAt  DateTime? @map("published_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  steps        LessonStep[]
+  targetSkills LessonTargetSkill[]
+  usedItems    LessonVersionItem[]
+  publishedFor Lesson?             @relation("LessonPublishedVersion")
+
+  @@unique([lessonId, version])
+  @@index([status])
+  @@map("lesson_versions")
+}
+
+model LessonStep {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonVersionId String         @map("lesson_version_id") @db.Uuid
+  lessonVersion   LessonVersion  @relation(fields: [lessonVersionId], references: [id], onDelete: Cascade)
+  order           Int
+  type            LessonStepType
+  /// Validado por zod conforme o `type` — ver packages/shared/lesson-content.
+  content         Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([lessonVersionId, order])
+  @@map("lesson_steps")
+}
+
+model LessonTargetSkill {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonVersionId String        @map("lesson_version_id") @db.Uuid
+  lessonVersion   LessonVersion @relation(fields: [lessonVersionId], references: [id], onDelete: Cascade)
+  skillId         String        @map("skill_id")
+  skill           Skill         @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  /// 0 = skill principal da lição.
+  position        Int           @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([lessonVersionId, skillId])
+  @@index([skillId])
+  @@map("lesson_target_skills")
+}
+
+/// Índice dos itens usados por uma versão de lição.
+///
+/// Os ids já estão dentro do JSON da etapa PRACTICE; esta tabela existe para
+/// a pergunta inversa — "quem usa este item?" — que é o que barra arquivar
+/// um item preso a uma lição publicada. Reescrita a cada publish.
+model LessonVersionItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonVersionId String        @map("lesson_version_id") @db.Uuid
+  lessonVersion   LessonVersion @relation(fields: [lessonVersionId], references: [id], onDelete: Cascade)
+  itemId          String        @map("item_id") @db.Uuid
+  item            Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([lessonVersionId, itemId])
+  @@index([itemId])
+  @@map("lesson_version_items")
+}
+
+// --- Banco de questões -----------------------------------------------------
+
+/// Uma questão. Depois de PUBLISHED, `type`, `prompt`, `content` e
+/// `acceptedAnswers` são imutáveis: mudar o enunciado de um item já
+/// respondido invalidaria a estatística dele. A edição cria um item novo em
+/// DRAFT e liga os dois por `replacedById`.
+model Item {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Chave de autoria, para seed e import idempotentes. Nula em item gerado.
+  slug String? @unique
+
+  type    ItemType
+  prompt  String
+  content Json
+
+  acceptedAnswers String[] @map("accepted_answers")
+  /// pt-BR.
+  explanation     String
+  /// Resposta errada normalizada → id de ErrorPattern.
+  errorPatternMap Json     @default("{}") @map("error_pattern_map")
+
+  cefrLevel      CefrLevel @map("cefr_level")
+  /// Escala logit. Inicial derivada do nível: A1 -2, A2 -1, B1 0, B2 1, C1 2.
+  difficulty     Float
+  discrimination Float     @default(1)
+  exposureCount  Int       @default(0) @map("exposure_count")
+  /// Nulo até ter exposição suficiente. Recalculado no módulo 8.
+  correctRate    Float?    @map("correct_rate")
+
+  status ContentStatus @default(DRAFT)
+  source ItemSource    @default(HUMAN)
+
+  replacedById String? @map("replaced_by_id") @db.Uuid
+  replacedBy   Item?   @relation("ItemReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     Item[]  @relation("ItemReplacement")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  skills  ItemSkill[]
+  lessons LessonVersionItem[]
+
+  @@index([cefrLevel, status])
+  @@index([status, difficulty])
+  @@map("items")
+}
+
+model ItemSkill {
+  id String @id @default(uuid()) @db.Uuid
+
+  itemId   String @map("item_id") @db.Uuid
+  item     Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  skillId  String @map("skill_id")
+  skill    Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  /// 0 = skill principal medida pelo item.
+  position Int    @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([itemId, skillId])
+  @@index([skillId, position])
+  @@map("item_skills")
+}
+
+// --- Mídia e apostilas -----------------------------------------------------
+
+model MediaAsset {
+  id String @id @default(uuid()) @db.Uuid
+
+  kind       MediaKind
+  /// Sempre sob o prefixo content/.
+  storageKey String    @unique @map("storage_key")
+  mimeType   String    @map("mime_type")
+  sizeBytes  Int?      @map("size_bytes")
+  durationMs Int?      @map("duration_ms")
+  meta       Json      @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  registerNotes RegisterNote[]
+  unitCovers    Unit[]
+  avatars       Character[]
+  workbooks     Workbook[]
+
+  @@index([kind])
+  @@map("media_assets")
+}
+
+/// Apostila em PDF da unidade. O módulo 5 é quem gera o arquivo.
+model Workbook {
+  id String @id @default(uuid()) @db.Uuid
+
+  unitId String @map("unit_id") @db.Uuid
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  slug        String        @unique
+  title       String
+  description String?
+  order       Int
+  status      ContentStatus @default(DRAFT)
+
+  assetId String     @map("asset_id") @db.Uuid
+  asset   MediaAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([unitId, order])
+  @@index([status])
+  @@map("workbooks")
+}

@@ -1,3 +1,4 @@
+import { curriculumSeed } from './curriculum.seed';
 import type { SeedModule } from './seed-module';
 import { usersSeed } from './users.seed';
 
@@ -10,8 +11,8 @@ import { usersSeed } from './users.seed';
  */
 export const seedModules: SeedModule[] = [
   usersSeed,
-  // 4 curriculum  — personagens, temporadas, trilhas
-  // 5 content-studio — lições e itens de exemplo
+  curriculumSeed,
+  // 5 content-studio — áudio das cenas gerado pelo TTS
   // 11 billing    — planos e preços
 ];
 

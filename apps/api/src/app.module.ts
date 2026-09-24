@@ -10,6 +10,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { InfraModule } from './infra/infra.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CurriculumModule } from './modules/curriculum/curriculum.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { HealthModule } from './modules/health/health.module';
@@ -29,7 +30,8 @@ import { UsersModule } from './modules/users/users.module';
     AiModule,
     UsersModule,
     AuthModule,
-    // 4 curriculum · 5 content-studio · ... (ver CLAUDE.md)
+    CurriculumModule,
+    // 5 content-studio · 6 learning · ... (ver CLAUDE.md)
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

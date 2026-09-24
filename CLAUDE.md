@@ -129,7 +129,7 @@ dos que vêm antes dele.
 | 1   | `infra`                         | 0          | Prisma, S3/MinIO, BullMQ + Bull Board, eventos, logger, filtro de erro, paginação, Swagger. ✅ pronto |
 | 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod, cache, custo, isolamento de untrusted. ✅ pronto  |
 | 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh rotativo), Google, roles, perfil, onboarding, LGPD. ✅ pronto          |
-| 4   | `curriculum`                    | 3          | Personagens, temporadas, trilhas, mapa A1→C1, objetivos por nível, catálogo de apostilas PDF          |
+| 4   | `curriculum`                    | 3          | Taxonomia, personagens, unidades, lições versionadas, banco de questões, apostilas PDF. ✅ pronto     |
 | 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação    |
 | 6   | `learning`                      | 5          | Player da lição: passos, tentativas, prática em camadas, produção livre, correção                     |
 | 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                     |
@@ -254,6 +254,40 @@ Rota nova nasce protegida — o `JwtAuthGuard` é global. Use `@IsPublic()` para
 abrir e `@Roles('ADMIN')` para restringir por papel. O papel viaja dentro do
 JWT, então promover alguém só vale no próximo login.
 
+### Conteúdo: slugs imutáveis e versionamento
+
+**`Skill`, `ErrorPattern` e `RegisterNote` têm slug como chave primária, e
+esse slug nunca muda.** Ele viaja dentro do JSON das etapas de lição, do
+`errorPatternMap` das questões, dos prompts de IA e do modelo do aluno —
+renomear quebraria conteúdo já publicado e apagaria histórico de mastery.
+Para tirar um de circulação: `deprecatedAt` + `replacedById`, nunca rename.
+Os outros models seguem uuid, como o resto do banco.
+
+**Lição é identidade (`Lesson`) + conteúdo (`LessonVersion`).** O aluno vê
+`lesson.publishedVersionId`. Editar a lição no ar abre a próxima versão em
+DRAFT; o ponteiro só se move no `publish`. Uma versão aberta por vez.
+
+Fluxo: `DRAFT → IN_REVIEW → APPROVED → PUBLISHED`, e `ARCHIVED` no fim.
+**Editar uma versão em IN_REVIEW ou APPROVED devolve ela para DRAFT** e
+apaga o carimbo de aprovação — o que foi revisado deixou de ser o que está
+ali. Publicar exige APPROVED.
+
+**Questão publicada é imutável em `type`, `prompt`, `content` e
+`acceptedAnswers`.** `exposureCount` e `correctRate` são estatística daquele
+enunciado; mudar a pergunta e manter o histórico produziria calibração de
+mentira. Edição vira item novo em DRAFT, ligado ao antigo por
+`replacedById`, e o antigo é arquivado quando o novo publica. Item dentro de
+lição publicada não se arquiva.
+
+Referência dentro de JSON (span → skill, prática → item, fala →
+personagem) **não tem chave estrangeira**. Quem confere é o `publish`:
+`collectStepReferences` junta tudo e o serviço recusa publicar se faltar
+alguma — ou se o item referenciado não estiver PUBLISHED.
+
+O catálogo é cacheado no Redis com a versão na chave, então publicar
+invalida sozinho. **O cache guarda `storageKey`, nunca URL assinada** — a
+assinatura vence e a URL nasce na resposta.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -331,7 +365,7 @@ valida a mensagem.
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **CEFR level**        | Nível do quadro europeu: A1, A2, B1, B2, C1. Usado para o aluno, para o conteúdo e para o item.                                      |
 | **Skill**             | Habilidade concreta e ensinável — "falar de rotina no presente simples", "pedir comida num restaurante".                             |
-| **Competency**        | Eixo de avaliação: `grammar`, `vocabulary`, `listening`, `reading`, `writing`, `speaking`. O aluno tem um nível **por eixo**.        |
+| **Competency**        | Eixo de avaliação: `GRAMMAR`, `VOCABULARY`, `LISTENING`, `READING`, `WRITING`, `SPEAKING`. O aluno tem um nível **por eixo**.        |
 | **Lesson**            | Unidade de estudo completa: cena → cards → prática → produção → roleplay.                                                            |
 | **LessonStep**        | Um passo dentro da lição, com tipo próprio (`scene`, `explanation`, `recognize`, `assemble`, `produce`, `free_writing`, `roleplay`). |
 | **Item**              | Questão individual, com dificuldade calibrada, competência alvo e Skill associada. É o tijolo dos questionários e provas.            |
@@ -341,6 +375,8 @@ valida a mensagem.
 | **StudyPlan**         | Cronograma personalizado do aluno — o caminho recomendado ao longo de semanas. Recomendação, **não** bloqueio.                       |
 | **Agenda**            | O recorte de hoje do StudyPlan: o que fazer agora (lições sugeridas + fila de revisão).                                              |
 | **RegisterNote**      | Nota que contrasta a forma gramatical padrão com a forma falada no dia a dia (`I'm going to` × `I'm gonna`).                         |
+| **ErrorPattern**      | Erro típico de brasileiro, ligado a Skills: `l1.have-for-age` ("I have 20 years"), `article.country-the`, `third-person-s`.          |
+| **Span**              | Marcação `{start, end, kind}` sobre um trecho de texto de cena ou card. É o que permite destacar estrutura e chunk na interface.     |
 | **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
 | **AiCredit**          | Unidade de consumo das ferramentas de IA do plano Plus. Debitada por geração e reposta no ciclo da assinatura.                       |
 
