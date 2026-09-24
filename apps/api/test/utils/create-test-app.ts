@@ -4,12 +4,15 @@ import type { INestApplication } from '@nestjs/common';
 import { AppModule } from 'src/app.module';
 import { setupSwagger } from 'src/common/swagger/setup-swagger';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
+import { RedisService } from 'src/infra/redis/redis.service';
 
 export type TestApp = {
   app: INestApplication;
   prisma: PrismaService;
   /** Esvazia todas as tabelas. Chame entre suítes, nunca fora de teste. */
   resetDatabase: () => Promise<void>;
+  /** Apaga as chaves de cache de IA do Redis. */
+  flushAiCache: () => Promise<void>;
   close: () => Promise<void>;
 };
 
@@ -39,16 +42,29 @@ export async function createTestApp(
   await app.init();
 
   const prisma = app.get(PrismaService);
+  const redis = app.get(RedisService);
+
   const resetDatabase = () => prisma.truncateAllTables();
 
+  const flushAiCache = async (): Promise<void> => {
+    const keys = await redis.client.keys('ai:*');
+
+    if (keys.length > 0) {
+      await redis.client.del(...keys);
+    }
+  };
+
   await resetDatabase();
+  await flushAiCache();
 
   return {
     app,
     prisma,
     resetDatabase,
+    flushAiCache,
     close: async () => {
       await resetDatabase();
+      await flushAiCache();
       await app.close();
     },
   };

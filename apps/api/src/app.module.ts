@@ -8,6 +8,7 @@ import { EnvModule } from './common/config/env.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { InfraModule } from './infra/infra.module';
+import { AiModule } from './modules/ai/ai.module';
 import { HealthModule } from './modules/health/health.module';
 
 /**
@@ -21,7 +22,8 @@ import { HealthModule } from './modules/health/health.module';
     ScheduleModule.forRoot(),
 
     HealthModule,
-    // 2 ai · 3 auth/users/onboarding · 4 curriculum · ... (ver CLAUDE.md)
+    AiModule,
+    // 3 auth/users/onboarding · 4 curriculum · ... (ver CLAUDE.md)
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

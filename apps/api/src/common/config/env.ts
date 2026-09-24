@@ -14,13 +14,63 @@ const optional = z.preprocess(
   z.string().min(1).optional(),
 );
 
+const modelPricingSchema = z.object({
+  inputPerMTokUsdMicros: z.number().int().min(0),
+  outputPerMTokUsdMicros: z.number().int().min(0),
+});
+
+/** Preços padrão (USD micros por 1M tokens), usados quando o env não traz. */
+const DEFAULT_PRICING = {
+  'gpt-4o': {
+    inputPerMTokUsdMicros: 2_500_000,
+    outputPerMTokUsdMicros: 10_000_000,
+  },
+  'gpt-4o-mini': {
+    inputPerMTokUsdMicros: 150_000,
+    outputPerMTokUsdMicros: 600_000,
+  },
+  'gpt-4.1': {
+    inputPerMTokUsdMicros: 2_000_000,
+    outputPerMTokUsdMicros: 8_000_000,
+  },
+  'gpt-4.1-mini': {
+    inputPerMTokUsdMicros: 400_000,
+    outputPerMTokUsdMicros: 1_600_000,
+  },
+};
+
+/** Aceita a tabela de preços como JSON no env; sem valor, usa o padrão. */
+const pricingTableFromJson = z.preprocess(
+  (value) => {
+    if (
+      value === undefined ||
+      (typeof value === 'string' && value.trim() === '')
+    ) {
+      return DEFAULT_PRICING;
+    }
+
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    try {
+      return JSON.parse(value);
+    } catch {
+      // Devolve como veio: o zod abaixo reclama com mensagem legível.
+      return value;
+    }
+  },
+  z.record(z.string(), modelPricingSchema),
+);
+
 /**
  * Contrato das variáveis de ambiente da API.
  *
  * Obrigatórias: banco, Redis, JWT, S3 e a credencial do Bull Board — sem
  * qualquer uma delas a API não sobe, e a mensagem diz exatamente qual falta.
- * Opcionais por enquanto: OpenAI e Asaas. Passam a ser exigidas quando os
- * módulos 2 (ai) e 11 (billing) forem implementados.
+ * Opcional por enquanto: Asaas. Passa a ser exigida no módulo 11 (billing).
+ * A chave da OpenAI também é opcional: sem ela o módulo `ai` cai no provider
+ * fake e avisa no log, para o ambiente local subir sem crédito.
  */
 export const envSchema = z.object({
   NODE_ENV: z
@@ -69,8 +119,22 @@ export const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().min(1).default('30d'),
 
   OPENAI_API_KEY: optional,
+  /**
+   * 'auto' escolhe sozinho: fake em NODE_ENV=test ou sem OPENAI_API_KEY,
+   * OpenAI no resto. 'fake' e 'openai' forçam a escolha.
+   */
+  AI_PROVIDER: z.enum(['auto', 'openai', 'fake']).default('auto'),
   AI_MODEL_FAST: z.string().min(1).default('gpt-4o-mini'),
   AI_MODEL_SMART: z.string().min(1).default('gpt-4o'),
+  /**
+   * Preço por modelo, em micros de dólar por 1 milhão de tokens.
+   * Fora do código de propósito: preço muda sem merecer deploy.
+   */
+  AI_PRICING_JSON: pricingTableFromJson,
+  /** TTL padrão do cache de IA. Cada prompt pode encurtar o seu. */
+  AI_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(86_400),
+  /** Teto de caracteres de conteúdo do aluno, quando o prompt não define. */
+  AI_MAX_INPUT_CHARS: z.coerce.number().int().positive().default(20_000),
   AI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).default(2),

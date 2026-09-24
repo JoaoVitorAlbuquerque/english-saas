@@ -127,7 +127,7 @@ dos que vêm antes dele.
 | --- | ------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
 | 0   | `setup`                         | —          | Monorepo, docker compose, lint/format/hooks, CI, `GET /health`. ✅ pronto                             |
 | 1   | `infra`                         | 0          | Prisma, S3/MinIO, BullMQ + Bull Board, eventos, logger, filtro de erro, paginação, Swagger. ✅ pronto |
-| 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod da saída, isolamento de conteúdo não confiável     |
+| 2   | `ai`                            | 1          | Cliente OpenAI, prompts versionados, validação zod, cache, custo, isolamento de untrusted. ✅ pronto  |
 | 3   | `auth` / `users` / `onboarding` | 1          | Cadastro, login (JWT + refresh), perfil, teste de nivelamento inicial, coleta de interesses           |
 | 4   | `curriculum`                    | 3          | Personagens, temporadas, trilhas, mapa A1→C1, objetivos por nível, catálogo de apostilas PDF          |
 | 5   | `content-studio`                | 2, 4       | Autoria de lição: cena, cards, itens, `RegisterNote`, áudio; calibração de dificuldade; publicação    |
@@ -209,6 +209,18 @@ bloqueia além de ~2s.
 O padrão é: o controller enfileira e devolve um id; o cliente acompanha por
 polling ou por evento. Filas declaradas em
 [queues.ts](apps/api/src/infra/queue/queues.ts).
+
+### Chamando IA
+
+**Só o módulo `ai` fala com o SDK da OpenAI.** Todo mundo passa pelo
+`AiService.run(prompt, context)`, que amarra num lugar só: prompt versionado,
+teto de entrada, cache, validação zod, custo e registro em `ai_usages`.
+
+Prompt novo mora em `src/modules/ai/prompts/<feature>.prompt.ts` e é
+registrado em `prompts/registry.ts`. Mudou o texto de um jeito que altera a
+saída? **Suba a `version`** — é o que invalida o cache e separa as métricas.
+Registre também a fixture em `prompts/fixtures.ts`, para o teste do módulo
+que usa o prompt rodar sem chave da OpenAI.
 
 ### Toda saída de IA é validada com zod
 

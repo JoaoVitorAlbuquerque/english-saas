@@ -7,6 +7,7 @@ import basicAuth from 'express-basic-auth';
 
 import { EnvModule } from 'src/common/config/env.module';
 import { EnvService } from 'src/common/config/env.service';
+import { adminBasicAuth } from 'src/common/middleware/admin-basic-auth.middleware';
 
 import { QUEUES, REGISTERED_QUEUES } from '../queues';
 import { registerQueue } from '../register-queue';
@@ -58,17 +59,7 @@ export class QueueAdminModule implements NestModule {
     // O painel já recebe a basic auth pela opção `middleware` do Bull Board;
     // aqui protegemos o endpoint de demonstração com a mesma credencial.
     consumer
-      .apply(
-        basicAuth({
-          challenge: true,
-          realm: 'english-saas queues',
-          users: {
-            [this.envService.get('BULL_BOARD_USER')]: this.envService.get(
-              'BULL_BOARD_PASSWORD',
-            ),
-          },
-        }),
-      )
+      .apply(adminBasicAuth(this.envService))
       .forRoutes({ path: 'admin/example-jobs', method: RequestMethod.ALL });
   }
 }

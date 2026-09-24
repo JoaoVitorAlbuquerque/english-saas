@@ -43,6 +43,7 @@
     "ioredis": "^5.4.2",
     "nestjs-pino": "^5.2.0",
     "nestjs-zod": "^5.5.0",
+    "openai": "^7.23.0",
     "pino": "^10.0.0",
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",

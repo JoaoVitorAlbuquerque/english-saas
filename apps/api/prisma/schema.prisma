@@ -1,7 +1,6 @@
 // Schema do banco.
 //
-// Ainda sem modelos: as entidades entram módulo a módulo, na ordem da
-// tabela do CLAUDE.md (3 auth/users → 4 curriculum → 6 learning → ...).
+// As entidades entram módulo a módulo, na ordem da tabela do CLAUDE.md.
 //
 // Convenções:
 //   - nomes de model em PascalCase singular (User, Lesson, ReviewCard);
@@ -16,4 +15,83 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Módulo 2 — ai
+// ---------------------------------------------------------------------------
+
+enum AiCallStatus {
+  OK               @map("ok")
+  CACHE_HIT        @map("cache_hit")
+  VALIDATION_ERROR @map("validation_error")
+  PROVIDER_ERROR   @map("provider_error")
+
+  @@map("ai_call_status")
+}
+
+enum AiTier {
+  FAST  @map("fast")
+  SMART @map("smart")
+
+  @@map("ai_tier")
+}
+
+/// Uma linha por chamada de IA. Append-only: é a base do controle de custo
+/// e do consumo de AiCredit do plano Plus (módulo 11).
+model AiUsage {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Ausente quando a chamada é do sistema, não de um aluno.
+  userId        String? @map("user_id") @db.Uuid
+  feature       String
+  promptId      String  @map("prompt_id")
+  promptVersion Int     @map("prompt_version")
+  model         String
+  tier          AiTier
+
+  inputTokens   Int @map("input_tokens")
+  outputTokens  Int @map("output_tokens")
+  /// Custo em milionésimos de dólar. Inteiro: dinheiro não usa float.
+  costUsdMicros Int @map("cost_usd_micros")
+  latencyMs     Int @map("latency_ms")
+
+  status   AiCallStatus
+  cacheHit Boolean      @default(false) @map("cache_hit")
+  /// Preenchido quando status != OK. Nunca guarda o conteúdo do aluno.
+  errorCode String?     @map("error_code")
+  /// Quantas tentativas de reparo do JSON foram necessárias (0, 1).
+  repairAttempts Int    @default(0) @map("repair_attempts")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
+  @@index([createdAt])
+  @@map("ai_usages")
+}
+
+/// Cache durável de resultados caros de IA, compartilhado entre alunos.
+/// O Redis é a camada quente; esta tabela sobrevive a um flush dele.
+model AiCacheEntry {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// hash(promptId, promptVersion, model, entrada normalizada).
+  cacheKey      String @unique @map("cache_key")
+  promptId      String @map("prompt_id")
+  promptVersion Int    @map("prompt_version")
+  model         String
+
+  /// A saída já validada pelo zod do prompt.
+  payload Json
+  hits    Int  @default(0)
+
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([promptId, promptVersion])
+  @@index([expiresAt])
+  @@map("ai_cache_entries")
 }
