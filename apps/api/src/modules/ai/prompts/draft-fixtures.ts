@@ -30,6 +30,18 @@ function extractSkillIds(content: string): string[] {
   );
 }
 
+/**
+ * `SKILL: grammar.be.present [GRAMMAR] Título`
+ *
+ * O prompt de questões avulsas passa uma skill só, e sem o hífen da lista —
+ * por isso não dá para reusar o extrator da lição.
+ */
+function extractSingleSkillId(content: string): string[] {
+  const match = /^SKILL: ([a-z0-9.-]+) \[/m.exec(content);
+
+  return match === null ? [] : [match[1] ?? ''];
+}
+
 /** `- l1.have-for-age: "..." → "..."` (erro típico traz a seta) */
 function extractErrorPatternIds(content: string): string[] {
   return [...content.matchAll(/^- ([a-z0-9.-]+): ".*" → /gm)].map(
@@ -348,7 +360,7 @@ export function draftLessonFixture(messages: LlmMessage[]): unknown {
 /** Questões avulsas, na quantidade pedida. */
 export function draftItemsFixture(messages: LlmMessage[]): unknown {
   const content = userContent(messages);
-  const skills = extractSkillIds(content);
+  const skills = extractSingleSkillId(content);
   const errorPatterns = extractErrorPatternIds(content);
   const requested = /Write (\d+) /.exec(content);
   const count = requested === null ? 3 : Number(requested[1]);

@@ -20,7 +20,12 @@ import {
   type ContentSegment,
 } from '../domain/content-text';
 import { checkConsistency, type ConsistencyItem } from '../domain/consistency';
-import { checkLevelOfMany, type LevelCheckResult } from '../domain/level-check';
+import {
+  checkLevelOfMany,
+  exceedsLevelBudget,
+  hasUsefulCoverage,
+  type LevelCheckResult,
+} from '../domain/level-check';
 import {
   sortWarnings,
   summarize,
@@ -38,9 +43,6 @@ export type QaJobData = {
   /** Avisos que o mapeamento do rascunho já produziu. */
   mappingWarnings?: QaWarning[];
 };
-
-/** Abaixo disto a lista de frequência cobriu pouco e a razão não vale muito. */
-const MIN_COVERAGE = 0.6;
 
 /**
  * Verificações automáticas antes da revisão humana.
@@ -281,7 +283,7 @@ export class QaService {
     const warnings: QaWarning[] = [];
     const max = this.envService.get('CONTENT_QA_MAX_OUT_OF_LEVEL');
 
-    if (stats.ratio > max) {
+    if (exceedsLevelBudget(stats, max)) {
       warnings.push(
         warn(
           'LEVEL_ABOVE_TARGET',
@@ -293,7 +295,7 @@ export class QaService {
       );
     }
 
-    if (stats.coverage < MIN_COVERAGE && stats.totalWords > 0) {
+    if (!hasUsefulCoverage(stats)) {
       warnings.push(
         warn(
           'LEVEL_LOW_COVERAGE',

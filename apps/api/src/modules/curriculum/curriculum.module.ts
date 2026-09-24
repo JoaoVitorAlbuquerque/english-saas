@@ -45,6 +45,14 @@ import { TaxonomyService } from './services/taxonomy.service';
     LessonAuthoringService,
     ItemService,
   ],
-  exports: [CatalogService, TaxonomyService, ItemService, StructureService],
+  exports: [
+    CatalogService,
+    TaxonomyService,
+    ItemService,
+    StructureService,
+    // O content-studio (5) escreve lição por aqui, em vez de mexer nas
+    // tabelas do módulo 4 por fora.
+    LessonAuthoringService,
+  ],
 })
 export class CurriculumModule {}

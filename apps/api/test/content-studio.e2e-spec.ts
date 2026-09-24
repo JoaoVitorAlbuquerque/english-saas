@@ -1,10 +1,12 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import { ContentDraftStatus, Role } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import request from 'supertest';
 
-import { DraftGeneratorService } from 'src/modules/content-studio/services/draft-generator.service';
+import { QUEUES } from 'src/infra/queue/queues';
+import { ContentGate } from 'src/modules/curriculum/gates/content-gate';
 import { QaService } from 'src/modules/content-studio/services/qa.service';
 import { TtsService } from 'src/modules/content-studio/services/tts.service';
-import { WorkbookService } from 'src/modules/content-studio/services/workbook.service';
 
 import { createTestApp, type TestApp } from './utils/create-test-app';
 
@@ -14,23 +16,27 @@ const PASSWORD = 'senhaforte2026';
  * Fluxo do módulo 5: pedir rascunho → QA → revisar → aprovar (com áudio) →
  * publicar (com apostila).
  *
- * Os jobs são chamados direto pelos serviços em vez de esperar o worker: o
- * teste quer provar a lógica, não a latência do BullMQ, que já tem prova
- * própria em `queue.e2e-spec.ts`.
+ * **Os workers estão de pé no e2e** (ver `setup-e2e.ts`), então o job roda
+ * sozinho assim que o endpoint enfileira. O teste espera o resultado em vez
+ * de chamar o serviço na mão — chamar geraria tudo duas vezes.
  */
 describe('Content studio (e2e)', () => {
   let context: TestApp;
-  let generator: DraftGeneratorService;
   let qa: QaService;
   let tts: TtsService;
-  let workbooks: WorkbookService;
+  let gate: ContentGate;
+  let draftsQueue: Queue;
+  let qaQueue: Queue;
+  let mediaQueue: Queue;
 
   beforeAll(async () => {
     context = await createTestApp();
-    generator = context.app.get(DraftGeneratorService);
     qa = context.app.get(QaService);
     tts = context.app.get(TtsService);
-    workbooks = context.app.get(WorkbookService);
+    gate = context.app.get(ContentGate);
+    draftsQueue = context.app.get<Queue>(getQueueToken(QUEUES.CONTENT_DRAFTS));
+    qaQueue = context.app.get<Queue>(getQueueToken(QUEUES.CONTENT_QA));
+    mediaQueue = context.app.get<Queue>(getQueueToken(QUEUES.MEDIA));
   });
 
   beforeEach(async () => {
@@ -41,8 +47,62 @@ describe('Content studio (e2e)', () => {
   });
 
   afterAll(async () => {
-    await context.close();
+    // Job pendente de uma suíte vaza para a seguinte e falha com dados que
+    // já foram truncados. O `?.` é para uma falha de boot no `beforeAll`
+    // não virar um erro aqui que esconde a causa de verdade.
+    for (const queue of [draftsQueue, qaQueue, mediaQueue]) {
+      await queue?.obliterate({ force: true });
+    }
+
+    await context?.close();
   });
+
+  /** Espera uma condição do banco, que é onde o worker deixa o resultado. */
+  async function waitFor<T>(
+    read: () => Promise<T | null>,
+    what: string,
+    timeoutMs = 60_000,
+  ): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+
+    for (;;) {
+      const value = await read();
+
+      if (value !== null) {
+        return value;
+      }
+
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Esperei ${what} por ${String(timeoutMs)}ms e não veio.`,
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  /** Espera o rascunho chegar a READY. Falha rápido se ele der FAILED. */
+  async function waitForDraft(draftId: string) {
+    return waitFor(async () => {
+      const draft = await context.prisma.contentDraft.findUniqueOrThrow({
+        where: { id: draftId },
+        select: {
+          status: true,
+          errorCode: true,
+          lessonVersionId: true,
+          createdItemIds: true,
+          createdRegisterNoteIds: true,
+        },
+      });
+
+      if (draft.status === ContentDraftStatus.FAILED) {
+        throw new Error(`O rascunho falhou: ${String(draft.errorCode)}`);
+      }
+
+      return draft.status === ContentDraftStatus.READY ? draft : null;
+    }, `o rascunho ${draftId} ficar pronto`);
+  }
 
   const http = () => request(context.app.getHttpServer());
 
@@ -200,8 +260,10 @@ describe('Content studio (e2e)', () => {
     };
   }
 
-  /** Pede o rascunho e roda o job na mão, sem esperar o worker. */
-  async function draftLesson(fixture: Fixture): Promise<string> {
+  /** Pede o rascunho e espera o worker gerar e passar pela QA. */
+  async function draftLesson(
+    fixture: Fixture,
+  ): Promise<{ draftId: string; versionId: string; itemIds: string[] }> {
     const response = await http()
       .post('/admin/content-studio/drafts/lesson')
       .set(fixture.auth)
@@ -219,23 +281,15 @@ describe('Content studio (e2e)', () => {
       .expect(202);
 
     const draftId = response.body.id as string;
+    const draft = await waitForDraft(draftId);
 
-    expect(response.body.status).toBe(ContentDraftStatus.QUEUED);
+    expect(draft.lessonVersionId).not.toBeNull();
 
-    await generator.generateLesson(draftId);
-
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true },
-    });
-
-    await qa.run({
+    return {
       draftId,
-      lessonVersionId: draft.lessonVersionId!,
-      level: 'A1',
-    });
-
-    return draftId;
+      versionId: draft.lessonVersionId as string,
+      itemIds: draft.createdItemIds,
+    };
   }
 
   // -------------------------------------------------------------------
@@ -259,7 +313,7 @@ describe('Content studio (e2e)', () => {
 
   it('gera a lição em DRAFT, com itens AI_DRAFT e avisos de QA', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
+    const { draftId } = await draftLesson(fixture);
 
     const draft = await http()
       .get(`/admin/content-studio/drafts/${draftId}`)
@@ -313,15 +367,10 @@ describe('Content studio (e2e)', () => {
 
   it('as marcações da IA viram índices que caem no texto certo', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
-
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true },
-    });
+    const { versionId } = await draftLesson(fixture);
 
     const scene = await context.prisma.lessonStep.findFirstOrThrow({
-      where: { lessonVersionId: draft.lessonVersionId!, type: 'SCENE' },
+      where: { lessonVersionId: versionId, type: 'SCENE' },
       select: { content: true },
     });
 
@@ -357,7 +406,7 @@ describe('Content studio (e2e)', () => {
       })
       .expect(202);
 
-    await generator.generateItems(response.body.id as string);
+    await waitForDraft(response.body.id as string);
 
     const draft = await http()
       .get(`/admin/content-studio/drafts/${response.body.id}`)
@@ -377,7 +426,7 @@ describe('Content studio (e2e)', () => {
       .send({ level: 'A2', count: 2 })
       .expect(202);
 
-    await generator.generateRegisterNotes(response.body.id as string);
+    await waitForDraft(response.body.id as string);
 
     const draft = await http()
       .get(`/admin/content-studio/drafts/${response.body.id}`)
@@ -392,7 +441,7 @@ describe('Content studio (e2e)', () => {
 
   it('descarta o rascunho e arquiva o que ele criou', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
+    const { draftId } = await draftLesson(fixture);
 
     const discarded = await http()
       .post(`/admin/content-studio/drafts/${draftId}/discard`)
@@ -413,15 +462,9 @@ describe('Content studio (e2e)', () => {
   // QA
   // -------------------------------------------------------------------
 
-  it('acusa palavra acima do nível sem alterar o conteúdo', async () => {
+  it('vê a palavra acima do nível e a revisa sem alterar o conteúdo', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true },
-    });
-
-    const versionId = draft.lessonVersionId!;
+    const { versionId } = await draftLesson(fixture);
     const scene = await context.prisma.lessonStep.findFirstOrThrow({
       where: { lessonVersionId: versionId, type: 'SCENE' },
       select: { id: true, content: true },
@@ -445,14 +488,25 @@ describe('Content studio (e2e)', () => {
       .set(fixture.auth)
       .expect(201);
 
+    // A checagem de nível enxergou a palavra C1 e a reportou.
+    const stats = report.body.levelStats as {
+      outOfLevel: { word: string; band: string }[];
+    };
+
+    expect(stats.outOfLevel).toContainEqual({ word: 'albeit', band: 'C1' });
+
+    // Mas **não** vira aviso: o teto de 5% é sobre a lição inteira, e uma
+    // palavra difícil em ~200 não chega lá. É o comportamento certo — um
+    // termo fora do nível, bem contextualizado, é permitido de propósito.
     const codes = (report.body.warnings as { code: string }[]).map(
       (w) => w.code,
     );
 
-    expect(codes).toContain('LEVEL_ABOVE_TARGET');
-    // A revisão linguística também acusou — e nenhuma das duas editou nada.
+    expect(codes).not.toContain('LEVEL_ABOVE_TARGET');
+    // Quem acusou foi a revisão linguística.
     expect(codes).toContain('LANGUAGE_ISSUE');
 
+    // E nenhuma das duas encostou no conteúdo.
     const after = await context.prisma.lessonStep.findUniqueOrThrow({
       where: { id: scene.id },
       select: { content: true },
@@ -467,17 +521,11 @@ describe('Content studio (e2e)', () => {
 
   it('bloqueador da QA impede aprovar, aviso não', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true, createdItemIds: true },
-    });
-
-    const versionId = draft.lessonVersionId!;
+    const { draftId, versionId, itemIds } = await draftLesson(fixture);
 
     // Quebra um ORDER_WORDS: as peças deixam de montar a resposta.
     const broken = await context.prisma.item.findFirstOrThrow({
-      where: { id: { in: draft.createdItemIds }, type: 'ORDER_WORDS' },
+      where: { id: { in: itemIds }, type: 'ORDER_WORDS' },
       select: { id: true },
     });
 
@@ -510,13 +558,7 @@ describe('Content studio (e2e)', () => {
 
   it('comenta numa etapa, pede alterações e resolve', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true },
-    });
-
-    const versionId = draft.lessonVersionId!;
+    const { versionId } = await draftLesson(fixture);
 
     const comment = await http()
       .post(`/admin/content-studio/lesson-versions/${versionId}/comments`)
@@ -565,15 +607,20 @@ describe('Content studio (e2e)', () => {
   // Aprovação, áudio e publicação
   // -------------------------------------------------------------------
 
+  it('recusa publicar enquanto falta áudio', async () => {
+    const fixture = await buildFixture();
+    const { versionId } = await draftLesson(fixture);
+
+    // Direto no gate: depois do approve o worker já estaria sintetizando, e
+    // o teste viraria uma corrida contra ele.
+    await expect(gate.assertCanPublish(versionId)).rejects.toMatchObject({
+      code: 'MISSING_AUDIO',
+    });
+  });
+
   it('aprovar publica as questões e gera o áudio; publicar gera a apostila', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true, createdItemIds: true },
-    });
-
-    const versionId = draft.lessonVersionId!;
+    const { versionId, itemIds } = await draftLesson(fixture);
 
     await http()
       .post(`/admin/curriculum/lesson-versions/${versionId}/submit-for-review`)
@@ -590,7 +637,7 @@ describe('Content studio (e2e)', () => {
 
     // Aprovar a lição publica as questões dela e marca como revisadas.
     const items = await context.prisma.item.findMany({
-      where: { id: { in: draft.createdItemIds } },
+      where: { id: { in: itemIds } },
       select: { status: true, source: true },
     });
 
@@ -599,19 +646,12 @@ describe('Content studio (e2e)', () => {
       true,
     );
 
-    // Sem áudio, o publish é recusado.
-    const refused = await http()
-      .post(`/admin/curriculum/lesson-versions/${versionId}/publish`)
-      .set(fixture.auth)
-      .expect(409);
-
-    expect(refused.body.error.code).toBe('MISSING_AUDIO');
-    expect(refused.body.error.details.missing.length).toBeGreaterThan(0);
-
-    const first = await tts.generateForVersion(versionId);
-
-    expect(first.generated).toBeGreaterThan(0);
-    expect(first.reused).toBe(0);
+    // O listener enfileirou a narração na aprovação; o worker a executa.
+    await waitFor(
+      async () =>
+        (await tts.pendingAudio(versionId)).length === 0 ? true : null,
+      'a narração terminar',
+    );
 
     // Áudio de verdade no bucket: WAV válido gerado pelo FakeTts.
     const asset = await context.prisma.mediaAsset.findFirstOrThrow({
@@ -629,20 +669,24 @@ describe('Content studio (e2e)', () => {
 
     expect(published.body.status).toBe('PUBLISHED');
 
-    await workbooks.generateForUnit(fixture.unitId);
-
-    const workbook = await context.prisma.workbook.findFirstOrThrow({
-      where: { unitId: fixture.unitId },
-      select: {
-        status: true,
-        generatedAt: true,
-        sourceHash: true,
-        asset: { select: { mimeType: true, sizeBytes: true } },
-      },
-    });
+    // Publicar enfileira a apostila; o worker gera o PDF.
+    const workbook = await waitFor(
+      () =>
+        context.prisma.workbook.findFirst({
+          where: { unitId: fixture.unitId },
+          select: {
+            status: true,
+            generatedAt: true,
+            sourceHash: true,
+            asset: { select: { mimeType: true, sizeBytes: true } },
+          },
+        }),
+      'a apostila em PDF',
+    );
 
     expect(workbook.status).toBe('PUBLISHED');
     expect(workbook.generatedAt).not.toBeNull();
+    expect(workbook.sourceHash).not.toBeNull();
     expect(workbook.asset.mimeType).toBe('application/pdf');
     expect(workbook.asset.sizeBytes).toBeGreaterThan(1_000);
 
@@ -664,17 +708,11 @@ describe('Content studio (e2e)', () => {
 
     expect(workbooksResponse.body).toHaveLength(1);
     expect(workbooksResponse.body[0].file.url).toContain('X-Amz-Signature');
-  }, 120_000);
+  }, 180_000);
 
   it('reaproveita o áudio pelo hash em vez de sintetizar de novo', async () => {
     const fixture = await buildFixture();
-    const draftId = await draftLesson(fixture);
-    const draft = await context.prisma.contentDraft.findUniqueOrThrow({
-      where: { id: draftId },
-      select: { lessonVersionId: true },
-    });
-
-    const versionId = draft.lessonVersionId!;
+    const { versionId } = await draftLesson(fixture);
 
     const first = await tts.generateForVersion(versionId);
 

@@ -537,7 +537,69 @@ describe('Curriculum (e2e)', () => {
     expect(response.body.error.details.skills).toContain('grammar.nao.existe');
   });
 
-  it('recusa publicar quando a prática usa questão não publicada', async () => {
+  /**
+   * Questão em DRAFT não chega mais aqui: desde o módulo 5, aprovar a lição
+   * publica as questões dela. Quem esta trava ainda pega é a questão
+   * **arquivada** — retirada de circulação depois da aprovação, e que
+   * deixaria a lição no ar apontando para o vazio.
+   */
+  it('recusa publicar quando a prática usa questão arquivada', async () => {
+    const fixture = await buildFixture();
+    const auth = { Authorization: `Bearer ${fixture.editor}` };
+
+    const retired = await http()
+      .post('/admin/curriculum/items')
+      .set(auth)
+      .send({
+        type: 'MULTIPLE_CHOICE',
+        prompt: 'Questão aposentada.',
+        content: {
+          options: [
+            { id: 'a', text: 'a' },
+            { id: 'b', text: 'b' },
+          ],
+          correctOptionIds: ['a'],
+        },
+        explanation: 'Saiu de circulação.',
+        cefrLevel: 'A1',
+        skillIds: ['grammar.be.present.affirmative'],
+      })
+      .expect(201);
+
+    await http()
+      .post(`/admin/curriculum/items/${retired.body.id}/archive`)
+      .set(auth)
+      .expect(201);
+
+    const withRetiredItem = steps(fixture);
+    (withRetiredItem[1] as { content: { itemIds: string[] } }).content.itemIds =
+      [retired.body.id as string];
+
+    await http()
+      .put(`/admin/curriculum/lesson-versions/${fixture.versionId}/steps`)
+      .set(auth)
+      .send({ steps: withRetiredItem })
+      .expect(200);
+    await http()
+      .post(
+        `/admin/curriculum/lesson-versions/${fixture.versionId}/submit-for-review`,
+      )
+      .set(auth)
+      .expect(201);
+    await http()
+      .post(`/admin/curriculum/lesson-versions/${fixture.versionId}/approve`)
+      .set(auth)
+      .expect(201);
+
+    const response = await http()
+      .post(`/admin/curriculum/lesson-versions/${fixture.versionId}/publish`)
+      .set(auth)
+      .expect(422);
+
+    expect(response.body.error.details.items).toContain(retired.body.id);
+  });
+
+  it('aprovar a lição publica as questões que ela usa', async () => {
     const fixture = await buildFixture();
     const auth = { Authorization: `Bearer ${fixture.editor}` };
 
@@ -581,12 +643,12 @@ describe('Curriculum (e2e)', () => {
       .set(auth)
       .expect(201);
 
-    const response = await http()
-      .post(`/admin/curriculum/lesson-versions/${fixture.versionId}/publish`)
+    const promoted = await http()
+      .get(`/admin/curriculum/items/${draftItem.body.id}`)
       .set(auth)
-      .expect(422);
+      .expect(200);
 
-    expect(response.body.error.details.items).toContain(draftItem.body.id);
+    expect(promoted.body.status).toBe('PUBLISHED');
   });
 
   it('recusa conteúdo com marcação fora do texto', async () => {

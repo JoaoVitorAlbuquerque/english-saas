@@ -18,7 +18,13 @@ import {
   resolveSpans,
   type MarkedSpan,
 } from './domain/draft-mapping';
-import { checkLevel, lookupWord, tokenizeEnglish } from './domain/level-check';
+import {
+  checkLevel,
+  exceedsLevelBudget,
+  hasUsefulCoverage,
+  lookupWord,
+  tokenizeEnglish,
+} from './domain/level-check';
 import {
   blockers,
   hasBlockers,
@@ -137,6 +143,54 @@ describe('checkLevel', () => {
     expect(result.totalWords).toBe(0);
     expect(result.ratio).toBe(0);
     expect(result.coverage).toBe(1);
+  });
+});
+
+describe('exceedsLevelBudget', () => {
+  /**
+   * O teto é sobre o conjunto, não sobre a frase. Uma palavra difícil bem
+   * contextualizada é permitida de propósito — é assim que o aluno cresce.
+   */
+  it('não acusa uma palavra difícil perdida num texto longo', () => {
+    const text = `${'I am from Brazil. She is my friend. '.repeat(10)} It is good, albeit cold.`;
+    const stats = checkLevel(text, 'A1');
+
+    expect(stats.outOfLevel.map((entry) => entry.word)).toContain('albeit');
+    expect(exceedsLevelBudget(stats, 0.05)).toBe(false);
+  });
+
+  it('acusa quando as difíceis passam do teto', () => {
+    const stats = checkLevel(
+      'Actually it is quite good, though apparently albeit cold.',
+      'A1',
+    );
+
+    expect(exceedsLevelBudget(stats, 0.05)).toBe(true);
+  });
+
+  it('teto zero acusa qualquer palavra fora do nível', () => {
+    const stats = checkLevel('It is good, albeit cold.', 'A1');
+
+    expect(exceedsLevelBudget(stats, 0)).toBe(true);
+  });
+});
+
+describe('hasUsefulCoverage', () => {
+  it('texto coberto pela lista é confiável', () => {
+    expect(hasUsefulCoverage(checkLevel('I am from Brazil.', 'A1'))).toBe(true);
+  });
+
+  it('texto cheio de palavra desconhecida não é', () => {
+    const stats = checkLevel(
+      'Xylophone marimba vibraphone glockenspiel.',
+      'A1',
+    );
+
+    expect(hasUsefulCoverage(stats)).toBe(false);
+  });
+
+  it('texto vazio não é reclamado', () => {
+    expect(hasUsefulCoverage(checkLevel('', 'A1'))).toBe(true);
   });
 });
 

@@ -264,3 +264,31 @@ export function checkLevelOfMany(
 ): LevelCheckResult {
   return checkLevel(texts.join('\n'), target);
 }
+
+/**
+ * Abaixo disto a lista conheceu pouco do texto e a razão não diz muito.
+ * Enquanto a lista definitiva não entra, isso dispara quase sempre.
+ */
+export const MIN_USEFUL_COVERAGE = 0.6;
+
+/**
+ * O texto passou do teto de palavras difíceis?
+ *
+ * O teto é **sobre o conjunto**, não sobre a frase: uma palavra acima do
+ * nível bem contextualizada é permitida de propósito. Uma lição de 200
+ * palavras com teto de 5% aguenta dez delas.
+ */
+export function exceedsLevelBudget(
+  stats: LevelCheckResult,
+  maxRatio: number,
+): boolean {
+  return stats.ratio > maxRatio;
+}
+
+/** A checagem de nível deste texto é confiável? */
+export function hasUsefulCoverage(
+  stats: LevelCheckResult,
+  minCoverage = MIN_USEFUL_COVERAGE,
+): boolean {
+  return stats.totalWords === 0 || stats.coverage >= minCoverage;
+}

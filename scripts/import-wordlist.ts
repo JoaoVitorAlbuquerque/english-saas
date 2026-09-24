@@ -236,7 +236,9 @@ function main(): void {
 }
 
 function hash(value: string): string {
-  return createHash('sha256').update(value.replace(/\r\n/g, '\n')).digest('hex');
+  return createHash('sha256')
+    .update(value.replace(/\r\n/g, '\n'))
+    .digest('hex');
 }
 
 main();
