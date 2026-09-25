@@ -747,6 +747,37 @@ describe('modelo montado e snapshot', () => {
     );
   });
 
+  it('erro visto uma vez aparece como observado, não como fraqueza', () => {
+    const once = repeatError(['I have 22 years']);
+    const model = buildLearnerModel({
+      ...input,
+      errorStates: new Map([['l1.have-for-age', once]]),
+    });
+    const profile = buildStudentProfile({ model, goals: ['CONVERSATION'] });
+
+    expect(model.recurringErrors).toEqual([]);
+    expect(profile.errors).toEqual([]);
+    expect(profile.observedErrors).toEqual([
+      expect.objectContaining({
+        id: 'l1.have-for-age',
+        occurrences: 1,
+        yourExamples: ['I have 22 years'],
+      }),
+    ]);
+    // A skill ligada não vira fraqueza por um erro só.
+    expect(
+      profile.weaknesses.map((weakness) => weakness.skillId),
+    ).not.toContain('grammar.be.present.affirmative');
+
+    // Recorrente sai do observado e entra nos erros.
+    const again = buildStudentProfile({
+      model: buildLearnerModel(input),
+      goals: ['CONVERSATION'],
+    });
+    expect(again.observedErrors).toEqual([]);
+    expect(again.errors.map((error) => error.id)).toEqual(['l1.have-for-age']);
+  });
+
   it('snapshot: formato compacto, exemplos reais, determinístico', () => {
     const model = buildLearnerModel(input);
     const snapshot = buildSnapshot({

@@ -6,6 +6,7 @@ import { LessonAdminController } from './controllers/lesson-admin.controller';
 import { StructureAdminController } from './controllers/structure-admin.controller';
 import { TaxonomyAdminController } from './controllers/taxonomy-admin.controller';
 import { AssetUrlService } from './services/asset-url.service';
+import { CatalogAccessService } from './services/catalog-access.service';
 import { CatalogCacheService } from './services/catalog-cache.service';
 import { CatalogService } from './services/catalog.service';
 import { ItemService } from './services/item.service';
@@ -25,6 +26,10 @@ import { TaxonomyService } from './services/taxonomy.service';
  * item pelo `ItemService`, `learner-model` (7) resolve skill pelo
  * `TaxonomyService`. Ninguém varre essas tabelas por fora.
  *
+ * A trava por plano (`ACCESS_POLICY`) e a editorial (`CONTENT_GATE`) são
+ * contratos de `src/common/access`, ligados no AppModule — este módulo só
+ * pergunta, nunca importa quem decide.
+ *
  * Não tem fila: publicar é uma transação curta. O que existe é cache de
  * leitura no Redis, com a versão da lição na chave.
  */
@@ -38,6 +43,7 @@ import { TaxonomyService } from './services/taxonomy.service';
   ],
   providers: [
     CatalogService,
+    CatalogAccessService,
     CatalogCacheService,
     AssetUrlService,
     TaxonomyService,
@@ -47,6 +53,8 @@ import { TaxonomyService } from './services/taxonomy.service';
   ],
   exports: [
     CatalogService,
+    // Quem abre lição em nome do aluno (player, tutor) confere o plano aqui.
+    CatalogAccessService,
     TaxonomyService,
     ItemService,
     StructureService,

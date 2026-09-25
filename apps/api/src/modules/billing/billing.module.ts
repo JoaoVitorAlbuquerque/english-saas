@@ -15,6 +15,7 @@ import { BillingProcessor } from './jobs/billing.processor';
 import { BillingScheduler } from './jobs/billing.scheduler';
 import { AiCreditService } from './services/ai-credit.service';
 import { AsaasGateway } from './services/asaas-gateway.service';
+import { BillingAccessPolicy } from './services/billing-access.policy';
 import { EntitlementsService } from './services/entitlements.service';
 import { FakePaymentGateway } from './services/fake-payment-gateway.service';
 import { PaymentGateway } from './services/payment-gateway';
@@ -86,10 +87,17 @@ function resolveGateway(
     EntitlementsService,
     SubscriptionService,
     RequiresFeatureGuard,
+    BillingAccessPolicy,
     BillingListener,
     BillingProcessor,
     BillingScheduler,
   ],
-  exports: [EntitlementsService, AiCreditService, RequiresFeatureGuard],
+  exports: [
+    EntitlementsService,
+    AiCreditService,
+    RequiresFeatureGuard,
+    // Ligada ao token ACCESS_POLICY no AppModule (curriculum e learning).
+    BillingAccessPolicy,
+  ],
 })
 export class BillingModule {}

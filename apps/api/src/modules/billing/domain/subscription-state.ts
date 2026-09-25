@@ -51,6 +51,31 @@ export function effectiveTier(
   );
 }
 
+/**
+ * Por quanto tempo o plano calculado agora pode ficar em cache. Assinatura
+ * cancelada deixa de dar acesso sozinha no fim do período pago, sem evento
+ * nenhum — o cache não pode passar desse instante.
+ */
+export function planCacheTtlSeconds(
+  subs: readonly SubscriptionView[],
+  now: Date,
+  maxSeconds: number,
+): number {
+  const expiries = subs
+    .filter(
+      (sub) =>
+        sub.status === 'CANCELED' &&
+        sub.currentPeriodEnd !== null &&
+        grantsAccess(sub, now),
+    )
+    .map((sub) => (sub.currentPeriodEnd?.getTime() ?? 0) - now.getTime());
+  const untilExpiry = Math.floor(
+    Math.min(...expiries, maxSeconds * 1000) / 1000,
+  );
+
+  return Math.max(1, Math.min(maxSeconds, untilExpiry));
+}
+
 export const TIER_LABELS: Record<PlanTier, string> = {
   FREE: 'Gratuito',
   BASE: 'Base',
@@ -109,8 +134,12 @@ export function subscriptionMessage(
  * Soma um período a uma data em UTC. Mês com menos dias prende no último
  * (31/jan + 1 mês = 28 ou 29/fev), nunca transborda pro mês seguinte.
  */
-export function addPeriod(date: Date, period: BillingPeriod): Date {
-  const months = period === 'MONTHLY' ? 1 : 12;
+export function addPeriod(
+  date: Date,
+  period: BillingPeriod,
+  direction: 1 | -1 = 1,
+): Date {
+  const months = (period === 'MONTHLY' ? 1 : 12) * direction;
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + months;
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();

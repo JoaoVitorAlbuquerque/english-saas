@@ -35,6 +35,8 @@ export const QUEUES = {
   NOTIFICATIONS: 'notifications',
   /** Webhooks e sincronização de assinatura com o Asaas. */
   BILLING: 'billing',
+  /** Correção de produção livre, turnos de roleplay e transcrição de voz. */
+  TUTOR: 'tutor',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -52,4 +54,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.SCHEDULING,
   QUEUES.PLANNER,
   QUEUES.BILLING,
+  QUEUES.TUTOR,
 ];

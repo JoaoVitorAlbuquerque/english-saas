@@ -20,7 +20,8 @@ export type ErrorExample = {
   text: string;
   /** A forma certa, quando o item tem uma. */
   correction: string | null;
-  itemId: string;
+  /** Item respondido; nulo quando o erro veio de produção livre (tutor). */
+  itemId: string | null;
   at: string;
 };
 

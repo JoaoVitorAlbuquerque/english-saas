@@ -416,6 +416,9 @@ describe('Billing (e2e)', () => {
         currentPeriodEnd: new Date(Date.now() + 86_400_000),
       },
     });
+    // Escrita direta no banco não emite evento de assinatura: derruba o
+    // plano em cache à mão (em produção quem faz isso é o listener).
+    await entitlements.invalidate(userId);
 
     await expect(guard.canActivate(contextFor(userId))).resolves.toBe(true);
   });
@@ -452,5 +455,112 @@ describe('Billing (e2e)', () => {
 
     const me = await http().get('/me/subscription').set(auth).expect(200);
     expect(me.body.subscription.priceCents).toBe(6_990);
+  });
+
+  it('o CPF vai direto para o gateway e nunca entra nos dados do job', async () => {
+    const { auth } = await student();
+    const pending = await checkoutPlus(auth);
+
+    const job = await billingQueue.getJob(`checkout-${pending.id}`);
+    expect(job?.data).toEqual({ subscriptionId: pending.id });
+    expect(JSON.stringify(job?.data)).not.toContain('12345678909');
+    expect(
+      [...gateway.customers.values()].some((c) => c.cpfCnpj === '12345678909'),
+    ).toBe(true);
+  });
+
+  it('upgrade BASE → PLUS com desconto do que sobrou, sem cancelar antes', async () => {
+    const { userId, auth } = await student();
+    await waitFor(
+      async () => ((await credits.balanceFor(userId)) === 10 ? true : null),
+      'crédito do FREE',
+    );
+
+    // Assina e paga o BASE.
+    const base = await http()
+      .post('/billing/checkout')
+      .set(auth)
+      .send({
+        tier: 'BASE',
+        billingPeriod: 'MONTHLY',
+        paymentMethod: 'PIX',
+        cpfCnpj: '12345678909',
+      })
+      .expect(202);
+    const baseRow = await waitFor(async () => {
+      const row = await context.prisma.subscription.findUnique({
+        where: { id: base.body.subscription.id as string },
+      });
+      return row?.asaasSubscriptionId != null ? row : null;
+    }, 'BASE no gateway');
+    await webhook(paidEvent(baseRow.asaasSubscriptionId ?? '')).expect(200);
+    await waitFor(async () => {
+      const row = await context.prisma.subscription.findUnique({
+        where: { id: baseRow.id },
+      });
+      return row?.status === 'ACTIVE' ? true : null;
+    }, 'BASE ativo');
+
+    // Upgrade: não é 409, e a 1ª cobrança do PLUS vem com o crédito do BASE.
+    const upgrade = await http()
+      .post('/billing/checkout')
+      .set(auth)
+      .send({ tier: 'PLUS', billingPeriod: 'MONTHLY', paymentMethod: 'PIX' })
+      .expect(202);
+    const plusRow = await waitFor(async () => {
+      const row = await context.prisma.subscription.findUnique({
+        where: { id: upgrade.body.subscription.id as string },
+      });
+      return row?.asaasSubscriptionId != null ? row : null;
+    }, 'PLUS no gateway');
+
+    expect(plusRow.upgradesFromId).toBe(baseRow.id);
+    // Acabou de pagar o mês do BASE (o período conta da meia-noite UTC do
+    // vencimento): no máximo um dia usado, o resto vira desconto.
+    expect(plusRow.firstPaymentDiscountCents).toBeGreaterThan(
+      Math.floor((3_990 * 29) / 30),
+    );
+    expect(plusRow.firstPaymentDiscountCents).toBeLessThanOrEqual(3_990);
+    expect(
+      gateway.subscriptions.get(plusRow.asaasSubscriptionId ?? '')
+        ?.firstPaymentDiscountCents,
+    ).toBe(plusRow.firstPaymentDiscountCents);
+
+    // Até pagar, continua BASE.
+    const meantime = await http().get('/me/subscription').set(auth).expect(200);
+    expect(meantime.body.tier).toBe('BASE');
+
+    await webhook(paidEvent(plusRow.asaasSubscriptionId ?? '')).expect(200);
+
+    await waitFor(async () => {
+      const row = await context.prisma.subscription.findUnique({
+        where: { id: plusRow.id },
+      });
+      return row?.status === 'ACTIVE' ? true : null;
+    }, 'PLUS ativo');
+    const done = await http().get('/me/subscription').set(auth).expect(200);
+    expect(done.body).toMatchObject({
+      tier: 'PLUS',
+      subscription: { status: 'ACTIVE' },
+    });
+
+    const oldBase = await context.prisma.subscription.findUniqueOrThrow({
+      where: { id: baseRow.id },
+    });
+    expect(oldBase.status).toBe('CANCELED');
+    await waitFor(
+      async () =>
+        gateway.canceled.has(baseRow.asaasSubscriptionId ?? '') ? true : null,
+      'BASE cancelado no gateway',
+    );
+    expect(await credits.balanceFor(userId)).toBe(500);
+
+    // Descer de plano ainda não existe.
+    const down = await http()
+      .post('/billing/checkout')
+      .set(auth)
+      .send({ tier: 'BASE', billingPeriod: 'MONTHLY', paymentMethod: 'PIX' })
+      .expect(409);
+    expect(down.body.error.code).toBe('ALREADY_SUBSCRIBED');
   });
 });

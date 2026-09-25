@@ -7,11 +7,19 @@ import { defaultWorkerOptions } from 'src/infra/queue/register-queue';
 import {
   LESSON_COMPLETED_JOB,
   SrsUpdateService,
+  TUTOR_FEEDBACK_JOB,
   WRONG_ANSWER_JOB,
   type SrsUpdateOutcome,
 } from '../services/srs-update.service';
 
 type LessonCompletedJobData = { userId: string; lessonVersionId: string };
+
+type TutorFeedbackJobData = {
+  userId: string;
+  errorPatternIds: string[];
+  missedSkillIds: string[];
+  expressionSkillIds: string[];
+};
 
 type WrongAnswerJobData = {
   userId: string;
@@ -29,7 +37,9 @@ export class SrsUpdatesProcessor extends WorkerHost {
   }
 
   async process(
-    job: Job<LessonCompletedJobData | WrongAnswerJobData>,
+    job: Job<
+      LessonCompletedJobData | WrongAnswerJobData | TutorFeedbackJobData
+    >,
     token?: string,
   ): Promise<unknown> {
     let outcome: SrsUpdateOutcome;
@@ -47,6 +57,9 @@ export class SrsUpdatesProcessor extends WorkerHost {
         data.primarySkillId,
         data.errorPatternIds,
       );
+    } else if (job.name === TUTOR_FEEDBACK_JOB) {
+      const { userId, ...feedback } = job.data as TutorFeedbackJobData;
+      outcome = await this.updates.onTutorFeedback(userId, feedback);
     } else {
       return { skipped: true };
     }

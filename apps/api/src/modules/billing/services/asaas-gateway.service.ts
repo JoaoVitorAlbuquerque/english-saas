@@ -43,15 +43,51 @@ export class AsaasGateway extends PaymentGateway {
   async createSubscription(
     input: CreateSubscriptionInput,
   ): Promise<{ id: string }> {
-    return this.request<{ id: string }>('POST', '/subscriptions', {
-      customer: input.customerId,
-      billingType: input.paymentMethod,
-      value: input.priceCents / 100,
-      nextDueDate: input.firstDueDate.toISOString().slice(0, 10),
-      cycle: input.cycle,
-      description: input.description,
-      externalReference: input.reference,
-    });
+    const created = await this.request<{ id: string }>(
+      'POST',
+      '/subscriptions',
+      {
+        customer: input.customerId,
+        billingType: input.paymentMethod,
+        value: input.priceCents / 100,
+        nextDueDate: input.firstDueDate.toISOString().slice(0, 10),
+        cycle: input.cycle,
+        description: input.description,
+        externalReference: input.reference,
+      },
+    );
+    const discount = input.firstPaymentDiscountCents ?? 0;
+
+    // O Asaas não tem desconto só na primeira cobrança da assinatura: a
+    // cobrança já nasce com a assinatura, então o valor dela é editado.
+    if (discount > 0) {
+      const first = await this.firstOpenPayment(created.id);
+      await this.request('POST', `/payments/${encodeURIComponent(first.id)}`, {
+        value: (input.priceCents - discount) / 100,
+      });
+    }
+
+    return created;
+  }
+
+  private async firstOpenPayment(
+    subscriptionId: string,
+  ): Promise<{ id: string }> {
+    const page = await this.request<{
+      data?: (AsaasPayment & { id: string })[];
+    }>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}/payments`);
+    const first = page.data?.find(
+      (p) => p.status === 'PENDING' || p.status === 'OVERDUE',
+    );
+
+    if (first === undefined) {
+      throw new PaymentGatewayError(
+        'no_invoice',
+        'O Asaas ainda não gerou a cobrança desta assinatura.',
+      );
+    }
+
+    return first;
   }
 
   async cancelSubscription(subscriptionId: string): Promise<void> {

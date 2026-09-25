@@ -250,6 +250,30 @@ export interface DomainEventPayloads {
     answeredAt: string;
   };
 
+  // --- módulo 12: tutor ---
+
+  /**
+   * Uma correção de produção livre ficou pronta, ou um roleplay terminou.
+   * O learner-model (7) atualiza o perfil de erros e as skills; o SRS (9)
+   * cria ou lapsa cards dos erros e das expressões do catálogo.
+   *
+   * `errorPatterns[].text` é a frase real do aluno: conteúdo do aluno, nunca
+   * vai para log.
+   */
+  'tutor.feedback': {
+    feedbackId: string;
+    source: 'CORRECTION' | 'ROLEPLAY';
+    /** Erros cometidos, já mapeados para ErrorPatterns do catálogo. */
+    errorPatterns: { id: string; text: string; correction: string }[];
+    /** Erros que a rubrica checava — os que não aparecem acima não ocorreram. */
+    checkedErrorPatternIds: string[];
+    /** Critérios da rubrica (ou metas do roleplay) e se foram cumpridos. */
+    skills: { skillId: string; met: boolean }[];
+    /** Skills CHUNK/VOCAB_SET do catálogo que apareceram (roleplay). */
+    expressionSkillIds: string[];
+    at: string;
+  };
+
   // --- módulo 11: billing ---
   //
   // Ninguém escuta ainda: ficam prontos para notificações (15) e progresso

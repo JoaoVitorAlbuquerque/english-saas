@@ -14,6 +14,7 @@ import { ReviewCardService } from './review-card.service';
 
 export const LESSON_COMPLETED_JOB = 'srs-lesson-completed';
 export const WRONG_ANSWER_JOB = 'srs-wrong-answer';
+export const TUTOR_FEEDBACK_JOB = 'srs-tutor-feedback';
 
 /** A trava expira sozinha se o worker morrer segurando. */
 const LOCK_TTL_MS = 60_000;
@@ -87,30 +88,83 @@ export class SrsUpdateService {
     now = new Date(),
   ): Promise<SrsUpdateOutcome> {
     return this.withLock(userId, async () => {
-      if (primarySkillId !== undefined) {
-        const [skill] = await this.taxonomy.skillsByIds([primarySkillId]);
-
-        if (skill !== undefined) {
-          await this.cards.ensureOrLapse(
-            userId,
-            kindForSkillType(skill.type),
-            primarySkillId,
-            'LESSON',
-            now,
-          );
-        }
-      }
-
-      for (const errorPatternId of errorPatternIds) {
-        await this.cards.ensureOrLapse(
-          userId,
-          'ERROR_PATTERN',
-          errorPatternId,
-          'LESSON',
-          now,
-        );
-      }
+      await this.lapseErrors(
+        userId,
+        primarySkillId === undefined ? [] : [primarySkillId],
+        errorPatternIds,
+        'LESSON',
+        now,
+      );
     });
+  }
+
+  /**
+   * Feedback do tutor (12): os erros cometidos e as skills que a rubrica
+   * marcou como não cumpridas criam ou lapsam card; as expressões do
+   * catálogo que apareceram no roleplay só criam o que falta — ver uma
+   * expressão não é errar nela.
+   */
+  async onTutorFeedback(
+    userId: string,
+    feedback: {
+      errorPatternIds: readonly string[];
+      missedSkillIds: readonly string[];
+      expressionSkillIds: readonly string[];
+    },
+    now = new Date(),
+  ): Promise<SrsUpdateOutcome> {
+    return this.withLock(userId, async () => {
+      await this.lapseErrors(
+        userId,
+        feedback.missedSkillIds,
+        feedback.errorPatternIds,
+        'TUTOR_FEEDBACK',
+        now,
+      );
+
+      const expressions = await this.taxonomy.skillsByIds(
+        feedback.expressionSkillIds,
+      );
+      await this.cards.createMany(
+        userId,
+        'TUTOR_FEEDBACK',
+        expressions.map((skill) => ({
+          kind: kindForSkillType(skill.type),
+          refId: skill.id,
+        })),
+        now,
+      );
+    });
+  }
+
+  private async lapseErrors(
+    userId: string,
+    skillIds: readonly string[],
+    errorPatternIds: readonly string[],
+    source: 'LESSON' | 'TUTOR_FEEDBACK',
+    now: Date,
+  ): Promise<void> {
+    const skills = await this.taxonomy.skillsByIds(skillIds);
+
+    for (const skill of skills) {
+      await this.cards.ensureOrLapse(
+        userId,
+        kindForSkillType(skill.type),
+        skill.id,
+        source,
+        now,
+      );
+    }
+
+    for (const errorPatternId of errorPatternIds) {
+      await this.cards.ensureOrLapse(
+        userId,
+        'ERROR_PATTERN',
+        errorPatternId,
+        source,
+        now,
+      );
+    }
   }
 
   private async withLock(

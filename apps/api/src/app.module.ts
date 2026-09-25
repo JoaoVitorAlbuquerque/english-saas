@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { ZodValidationPipe } from 'nestjs-zod';
 
+import { AccessModule } from './common/access/access.module';
 import { EnvModule } from './common/config/env.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -12,7 +13,9 @@ import { AiModule } from './modules/ai/ai.module';
 import { AssessmentModule } from './modules/assessment/assessment.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { BillingAccessPolicy } from './modules/billing/services/billing-access.policy';
 import { ContentStudioModule } from './modules/content-studio/content-studio.module';
+import { ContentStudioGate } from './modules/content-studio/services/content-gate.service';
 import { CurriculumModule } from './modules/curriculum/curriculum.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
@@ -21,6 +24,7 @@ import { LearnerModelModule } from './modules/learner-model/learner-model.module
 import { LearningModule } from './modules/learning/learning.module';
 import { PlannerModule } from './modules/planner/planner.module';
 import { SrsModule } from './modules/srs/srs.module';
+import { TutorModule } from './modules/tutor/tutor.module';
 import { UsersModule } from './modules/users/users.module';
 
 /**
@@ -32,6 +36,18 @@ import { UsersModule } from './modules/users/users.module';
     EnvModule,
     InfraModule,
     ScheduleModule.forRoot(),
+    // Quem trava (curriculum, learning) pergunta por token; quem decide
+    // (billing, content-studio) é ligado só aqui. O que faltar nega tudo.
+    AccessModule.forRoot({
+      accessPolicy: {
+        imports: [BillingModule],
+        useExisting: BillingAccessPolicy,
+      },
+      contentGate: {
+        imports: [ContentStudioModule],
+        useExisting: ContentStudioGate,
+      },
+    }),
 
     HealthModule,
     AiModule,
@@ -45,6 +61,7 @@ import { UsersModule } from './modules/users/users.module';
     SrsModule,
     PlannerModule,
     BillingModule,
+    TutorModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

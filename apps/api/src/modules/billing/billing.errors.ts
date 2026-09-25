@@ -67,6 +67,17 @@ export class InvalidWebhookError extends AppException {
   }
 }
 
+/** O gateway não respondeu no request do checkout. */
+export class PaymentUnavailableError extends AppException {
+  constructor() {
+    super(
+      'PAYMENT_UNAVAILABLE',
+      'Não conseguimos falar com o sistema de pagamento agora. Tenta de novo em alguns minutos.',
+      HttpStatus.BAD_GATEWAY,
+    );
+  }
+}
+
 /**
  * Falha falando com o gateway. Nunca chega ao aluno direto: acontece dentro
  * de job, que tenta de novo com backoff.

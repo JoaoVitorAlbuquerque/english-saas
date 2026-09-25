@@ -21,6 +21,8 @@ export type CreateSubscriptionInput = {
   cycle: GatewayCycle;
   paymentMethod: GatewayPaymentMethod;
   firstDueDate: Date;
+  /** Abatido só da primeira cobrança (crédito proporcional de upgrade). */
+  firstPaymentDiscountCents?: number | undefined;
 };
 
 export type WebhookHeaders = Record<string, string | string[] | undefined>;

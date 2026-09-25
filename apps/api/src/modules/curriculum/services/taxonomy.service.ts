@@ -540,6 +540,18 @@ export class TaxonomyService {
     });
   }
 
+  /**
+   * Catálogo de erros típicos em circulação, só id e descrição. É a lista
+   * de onde o tutor (12) deixa a IA escolher — ela não pode inventar id.
+   */
+  async activeErrorPatterns(): Promise<{ id: string; description: string }[]> {
+    return this.prisma.errorPattern.findMany({
+      where: { deprecatedAt: null },
+      orderBy: { id: 'asc' },
+      select: { id: true, description: true },
+    });
+  }
+
   /** Título e descrição de skills, para o flashcard de vocab/chunk do SRS (9). */
   async skillsByIds(ids: readonly string[]) {
     if (ids.length === 0) {

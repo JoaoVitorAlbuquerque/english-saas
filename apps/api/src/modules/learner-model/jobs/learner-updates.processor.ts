@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Competency } from '@prisma/client';
 import { DelayedError, type Job } from 'bullmq';
 
+import type { DomainEventPayloads } from 'src/common/events';
 import { QUEUES } from 'src/infra/queue/queues';
 import { defaultWorkerOptions } from 'src/infra/queue/register-queue';
 
@@ -10,10 +11,15 @@ import {
   LearnerUpdateService,
   PLACEMENT_PRIOR_JOB,
   REVIEW_OUTCOME_JOB,
+  TUTOR_FEEDBACK_JOB,
   type UpdateOutcome,
 } from '../services/learner-update.service';
 
 type LearnerUpdateJobData = { userId: string };
+
+type TutorFeedbackJobData = {
+  userId: string;
+} & DomainEventPayloads['tutor.feedback'];
 
 type PlacementPriorJobData = {
   userId: string;
@@ -72,6 +78,14 @@ export class LearnerUpdatesProcessor extends WorkerHost {
         kind: data.kind,
         refId: data.refId,
         rating: data.rating,
+        at: new Date(data.at),
+      });
+    } else if (job.name === TUTOR_FEEDBACK_JOB) {
+      const data = job.data as TutorFeedbackJobData;
+      outcome = await this.updates.applyTutorFeedback(data.userId, {
+        errorPatterns: data.errorPatterns,
+        checkedErrorPatternIds: data.checkedErrorPatternIds,
+        skills: data.skills,
         at: new Date(data.at),
       });
     } else {

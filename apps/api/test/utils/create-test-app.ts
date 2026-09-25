@@ -1,16 +1,27 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
+import type { Queue } from 'bullmq';
 import type { Response } from 'supertest';
 
 import { AppModule } from 'src/app.module';
+import {
+  ACCESS_POLICY,
+  DenyAllAccessPolicy,
+} from 'src/common/access/access-policy';
 import { setupSwagger } from 'src/common/swagger/setup-swagger';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
+import { REGISTERED_QUEUES } from 'src/infra/queue/queues';
 import { RedisService } from 'src/infra/redis/redis.service';
+
+import { FakeAccessPolicy } from './fake-access-policy';
 
 export type TestApp = {
   app: INestApplication;
+  /** A política fake, quando é ela que está ligada. */
+  accessPolicy: FakeAccessPolicy | null;
   prisma: PrismaService;
   /** Esvazia todas as tabelas. Chame entre suítes, nunca fora de teste. */
   resetDatabase: () => Promise<void>;
@@ -38,6 +49,12 @@ export type TestApp = {
 export type CreateTestAppOptions = {
   /** Monta o Swagger em /docs, como o bootstrap faz. */
   swagger?: boolean;
+  /**
+   * Política de acesso por plano. `fake` (padrão) libera tudo, com negação
+   * por aluno via `accessPolicy.deny`; `real` usa a do billing; `none` usa a
+   * que nega tudo — o que o app tem quando nada é ligado.
+   */
+  accessPolicy?: 'fake' | 'real' | 'none';
 };
 
 /**
@@ -48,9 +65,19 @@ export type CreateTestAppOptions = {
 export async function createTestApp(
   options: CreateTestAppOptions = {},
 ): Promise<TestApp> {
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+  const mode = options.accessPolicy ?? 'fake';
+  const fakePolicy = mode === 'fake' ? new FakeAccessPolicy() : null;
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+
+  if (fakePolicy !== null) {
+    builder = builder.overrideProvider(ACCESS_POLICY).useValue(fakePolicy);
+  } else if (mode === 'none') {
+    builder = builder
+      .overrideProvider(ACCESS_POLICY)
+      .useClass(DenyAllAccessPolicy);
+  }
+
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>();
 
@@ -66,7 +93,37 @@ export async function createTestApp(
   const prisma = app.get(PrismaService);
   const redis = app.get(RedisService);
 
-  const resetDatabase = () => prisma.truncateAllTables();
+  const queues = REGISTERED_QUEUES.flatMap((name) => {
+    try {
+      return [app.get<Queue>(getQueueToken(name), { strict: false })];
+    } catch {
+      return [];
+    }
+  });
+
+  /**
+   * Trunca com as filas paradas. Um worker no meio de uma transação (o
+   * crédito do mês que todo signup enfileira, por exemplo) e o TRUNCATE
+   * disputam as mesmas tabelas e o Postgres acusa deadlock. Pausar impede
+   * pegar job novo; esperar os ativos terminarem fecha a janela.
+   */
+  const resetDatabase = async (): Promise<void> => {
+    await Promise.all(queues.map((queue) => queue.pause()));
+
+    try {
+      const deadline = Date.now() + 10_000;
+
+      for (const queue of queues) {
+        while ((await queue.getActiveCount()) > 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+
+      await prisma.truncateAllTables();
+    } finally {
+      await Promise.all(queues.map((queue) => queue.resume()));
+    }
+  };
 
   const flushKeys = async (pattern: string): Promise<void> => {
     const keys = await redis.client.keys(pattern);
@@ -95,6 +152,7 @@ export async function createTestApp(
 
   return {
     app,
+    accessPolicy: fakePolicy,
     prisma,
     resetDatabase,
     flushAiCache,

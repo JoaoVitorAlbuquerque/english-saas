@@ -11,11 +11,8 @@ export const MONTHLY_GRANT_TICK_JOB = 'monthly-grant-tick';
 /** Diário: alerta interno de custo de IA por aluno. */
 export const COST_ALERT_TICK_JOB = 'cost-alert-tick';
 
-export type CreateCheckoutJobData = {
-  subscriptionId: string;
-  /** Só vai pro Asaas; nunca é gravado no nosso banco. */
-  cpfCnpj?: string | undefined;
-};
+/** Só o id: dado pessoal (CPF) nunca entra em job — ficaria no Bull Board. */
+export type CreateCheckoutJobData = { subscriptionId: string };
 export type CancelAtGatewayJobData = { asaasSubscriptionId: string };
 /** O evento já autenticado e normalizado pelo controller; data em ISO. */
 export type ProcessWebhookJobData = {

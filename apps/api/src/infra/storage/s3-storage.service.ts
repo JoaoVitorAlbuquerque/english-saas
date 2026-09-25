@@ -106,6 +106,20 @@ export class S3StorageService
     return `${base.replace(/\/+$/, '')}/${key}`;
   }
 
+  async getObject(key: string): Promise<Buffer> {
+    this.assertKey(key);
+
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+
+    if (response.Body === undefined) {
+      throw new Error(`Objeto vazio no storage: ${key}`);
+    }
+
+    return Buffer.from(await response.Body.transformToByteArray());
+  }
+
   async delete(key: string): Promise<void> {
     this.assertKey(key);
 

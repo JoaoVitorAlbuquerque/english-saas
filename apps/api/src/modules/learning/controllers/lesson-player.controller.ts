@@ -25,8 +25,9 @@ import { AttemptService } from '../services/attempt.service';
 /**
  * O player da lição.
  *
- * Só exige login: conteúdo base é todo liberado (CLAUDE.md), então
- * qualquer aluno faz qualquer lição publicada, em qualquer ordem.
+ * Nada trava por progresso: o aluno faz as lições em qualquer ordem. O que
+ * trava é o plano — lição fora dele dá 403 `PLAN_REQUIRED` ao iniciar e ao
+ * responder em contexto LESSON. Revisão (REVIEW) nunca trava.
  */
 @ApiTags('learning')
 @Controller()

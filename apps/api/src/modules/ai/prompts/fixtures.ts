@@ -5,6 +5,10 @@ import {
   draftRegisterNotesFixture,
   reviewLanguageFixture,
 } from './draft-fixtures';
+import {
+  tutorCorrectionFixture,
+  tutorRoleplayTurnFixture,
+} from './tutor-fixtures';
 
 /**
  * Respostas fixas do FakeLlmProvider, uma por feature.
@@ -60,5 +64,17 @@ export const AI_FIXTURES: Record<string, AiFixture> = {
     value: reviewLanguageFixture,
     inputTokens: 1_100,
     outputTokens: 120,
+  },
+
+  // --- módulo 12: tutor ---
+  'tutor-correction': {
+    value: tutorCorrectionFixture,
+    inputTokens: 1_800,
+    outputTokens: 700,
+  },
+  'tutor-roleplay-turn': {
+    value: tutorRoleplayTurnFixture,
+    inputTokens: 900,
+    outputTokens: 180,
   },
 };

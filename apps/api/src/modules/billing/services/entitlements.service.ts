@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SubscriptionStatus, type PlanTier } from '@prisma/client';
 
 import { PrismaService } from 'src/infra/prisma/prisma.service';
+import { RedisService } from 'src/infra/redis/redis.service';
 
 import {
   AI_CREDIT_COSTS,
@@ -16,7 +17,10 @@ import {
   TIER_RANK,
   type LessonAccessContext,
 } from '../domain/entitlements';
-import { grantsAccess } from '../domain/subscription-state';
+import {
+  grantsAccess,
+  planCacheTtlSeconds,
+} from '../domain/subscription-state';
 import { AiCreditService } from './ai-credit.service';
 import { PlansService } from './plans.service';
 
@@ -39,9 +43,16 @@ export type Quota = {
   remainingUses: number | null;
 };
 
+/** Teto do cache do plano. Evento de assinatura invalida antes disso. */
+const PLAN_CACHE_MAX_SECONDS = 300;
+
 /**
  * Direitos do aluno pelo plano. O tier nunca vem do JWT: é lido da
- * assinatura a cada checagem — cancelar ou assinar vale na hora.
+ * assinatura — cancelar ou assinar vale na hora.
+ *
+ * O plano fica no Redis (é lido a cada lição aberta e a cada item de
+ * listagem), invalidado nos eventos de assinatura e, no máximo, no instante
+ * em que uma assinatura cancelada deixa de dar acesso.
  */
 @Injectable()
 export class EntitlementsService {
@@ -49,9 +60,43 @@ export class EntitlementsService {
     private readonly prisma: PrismaService,
     private readonly plans: PlansService,
     private readonly credits: AiCreditService,
+    private readonly redis: RedisService,
   ) {}
 
-  async currentPlan(userId: string, now = new Date()): Promise<CurrentPlan> {
+  static cacheKey(userId: string): string {
+    return `billing:plan:v1:${userId}`;
+  }
+
+  /**
+   * O plano que vale. Com `now` explícito calcula na hora, sem cache — é o
+   * que o crédito do ciclo e os testes de "e depois do fim do período?" usam.
+   */
+  async currentPlan(userId: string, now?: Date): Promise<CurrentPlan> {
+    if (now !== undefined) {
+      return (await this.computePlan(userId, now)).plan;
+    }
+
+    const key = EntitlementsService.cacheKey(userId);
+    const cached = await this.redis.client.get(key);
+
+    if (cached !== null) {
+      return JSON.parse(cached) as CurrentPlan;
+    }
+
+    const { plan, ttlSeconds } = await this.computePlan(userId, new Date());
+    await this.redis.client.set(key, JSON.stringify(plan), 'EX', ttlSeconds);
+
+    return plan;
+  }
+
+  async invalidate(userId: string): Promise<void> {
+    await this.redis.client.del(EntitlementsService.cacheKey(userId));
+  }
+
+  private async computePlan(
+    userId: string,
+    now: Date,
+  ): Promise<{ plan: CurrentPlan; ttlSeconds: number }> {
     const subs = await this.prisma.subscription.findMany({
       where: {
         userId,
@@ -69,19 +114,26 @@ export class EntitlementsService {
     const best = subs
       .filter((sub) => grantsAccess(sub, now))
       .sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier])[0];
+    const ttlSeconds = planCacheTtlSeconds(subs, now, PLAN_CACHE_MAX_SECONDS);
 
     if (best === undefined) {
       return {
-        tier: 'FREE',
-        subscriptionId: null,
-        monthlyAiCredits: await this.plans.freeMonthlyCredits(),
+        plan: {
+          tier: 'FREE',
+          subscriptionId: null,
+          monthlyAiCredits: await this.plans.freeMonthlyCredits(),
+        },
+        ttlSeconds,
       };
     }
 
     return {
-      tier: best.tier,
-      subscriptionId: best.id,
-      monthlyAiCredits: best.plan.monthlyAiCredits,
+      plan: {
+        tier: best.tier,
+        subscriptionId: best.id,
+        monthlyAiCredits: best.plan.monthlyAiCredits,
+      },
+      ttlSeconds,
     };
   }
 

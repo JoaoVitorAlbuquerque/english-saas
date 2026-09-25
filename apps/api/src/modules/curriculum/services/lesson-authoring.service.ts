@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   ContentStatus,
   type CefrLevel,
@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import type { LessonStepInput } from '@english-saas/shared';
 
+import { CONTENT_GATE, type ContentGate } from 'src/common/access/content-gate';
 import { NotFoundError } from 'src/common/errors/app.exception';
 import { EventBusService } from 'src/infra/events/event-bus.service';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
@@ -19,7 +20,6 @@ import {
   SlugInUseError,
 } from '../curriculum.errors';
 import { collectStepReferences, missingReferences } from '../domain/references';
-import { ContentGate } from '../gates/content-gate';
 import { validateSteps, type StepInput } from '../domain/step-content';
 import {
   clearsApproval,
@@ -101,10 +101,10 @@ export class LessonAuthoringService {
     private readonly cache: CatalogCacheService,
     private readonly events: EventBusService,
     /**
-     * Fornecido pelo módulo 5. Sem ele, aprovar e publicar não têm trava
-     * extra nenhuma — é o comportamento de antes do content-studio.
+     * Implementado pelo módulo 5 e ligado no AppModule. Sem ligação, o
+     * padrão recusa aprovar e publicar — falha fechada.
      */
-    @Optional() private readonly gate?: ContentGate,
+    @Inject(CONTENT_GATE) private readonly gate: ContentGate,
   ) {}
 
   // -------------------------------------------------------------------
@@ -360,13 +360,13 @@ export class LessonAuthoringService {
     if (target === ContentStatus.PUBLISHED) {
       // A trava do módulo 5 (todo áudio no lugar) roda antes de qualquer
       // escrita — publicar pela metade seria pior que não publicar.
-      await this.gate?.assertCanPublish(id);
+      await this.gate.assertCanPublish(id);
 
       return this.publish(id);
     }
 
     if (target === ContentStatus.APPROVED) {
-      await this.gate?.assertCanApprove(id);
+      await this.gate.assertCanApprove(id);
     }
 
     await this.prisma.lessonVersion.update({

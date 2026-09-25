@@ -16,6 +16,7 @@ import {
   CatalogService,
   type PublishedOutline,
 } from 'src/modules/curriculum/services/catalog.service';
+import { CatalogAccessService } from 'src/modules/curriculum/services/catalog-access.service';
 
 import {
   decideStart,
@@ -76,17 +77,23 @@ export class AttemptService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalog: CatalogService,
+    private readonly access: CatalogAccessService,
     private readonly stats: LearningStatsService,
     private readonly events: EventBusService,
   ) {}
 
-  /** Inicia ou retoma. `resumed` diz qual dos dois aconteceu. */
+  /**
+   * Inicia ou retoma. `resumed` diz qual dos dois aconteceu. Lição fora do
+   * plano do aluno é 403 `PLAN_REQUIRED` — inclusive retomar, porque o
+   * plano pode ter vencido depois que a tentativa abriu.
+   */
   async start(
     userId: string,
     lessonId: string,
     source: LessonAttemptSource,
   ): Promise<{ attempt: AttemptView; resumed: boolean }> {
     const outline = await this.catalog.findPublishedOutline(lessonId);
+    await this.access.assertLesson(userId, lessonId);
     const open = await this.findOpen(userId, lessonId);
     const decision = decideStart(open, outline.versionId);
 

@@ -11,13 +11,14 @@ import {
   LEARNER_UPDATE_JOB,
   PLACEMENT_PRIOR_JOB,
   REVIEW_OUTCOME_JOB,
+  TUTOR_FEEDBACK_JOB,
 } from '../services/learner-update.service';
 
 /**
  * O que acorda o modelo do aluno.
  *
- * `answer.submitted` e `placement.completed`. O `tutor.feedback` (12) entra
- * aqui quando o tutor existir.
+ * `answer.submitted`, `placement.completed`, `review.answered` (9) e
+ * `tutor.feedback` (12).
  *
  * Um job por resposta, com o id da resposta: o mesmo evento entregue duas
  * vezes não enfileira duas vezes.
@@ -28,6 +29,21 @@ export class LearnerModelListener {
     @InjectQueue(QUEUES.LEARNER_UPDATES) private readonly queue: Queue,
     private readonly profiles: LearnerProfileService,
   ) {}
+
+  @OnEvent('tutor.feedback')
+  async onTutorFeedback(event: DomainEvent<'tutor.feedback'>): Promise<void> {
+    const { userId, payload } = event;
+
+    if (userId === undefined) {
+      return;
+    }
+
+    await this.queue.add(
+      TUTOR_FEEDBACK_JOB,
+      { userId, ...payload },
+      { jobId: `tutor-${payload.feedbackId}` },
+    );
+  }
 
   @OnEvent('answer.submitted')
   async onAnswerSubmitted(

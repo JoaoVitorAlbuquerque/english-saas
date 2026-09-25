@@ -222,6 +222,16 @@ export const envSchema = z.object({
     .default(2_000_000),
 
   /**
+   * Voz no tutor (12): o áudio vai para o storage, é transcrito em job e
+   * segue o caminho do texto. Desligado até existir um STT de verdade — só o
+   * fake está implementado.
+   */
+  TUTOR_VOICE_ENABLED: booleanFromString.default(false),
+  SPEECH_TO_TEXT_PROVIDER: z.enum(['fake']).default('fake'),
+  /** Teto do arquivo de áudio enviado ao tutor. 5 MB ≈ 5 min de MP3. */
+  TUTOR_AUDIO_MAX_BYTES: z.coerce.number().int().positive().default(5_000_000),
+
+  /**
    * 'auto' escolhe sozinho: fake em NODE_ENV=test ou sem ASAAS_API_KEY,
    * Asaas no resto. Em produção, defina 'asaas' — a falta da chave vira
    * erro visível em vez de um fake silencioso.

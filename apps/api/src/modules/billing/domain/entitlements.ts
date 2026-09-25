@@ -17,7 +17,22 @@ export type Feature =
 
 /** Features que dependem de contexto (qual unidade) e não servem pro guard. */
 export type ContextualFeature = 'LESSON_ACCESS';
-export type GuardableFeature = Exclude<Feature, ContextualFeature>;
+/**
+ * `ROLEPLAY_FREE_SCENARIO` é direito sem crédito próprio (o roleplay já
+ * cobra `TUTOR_ROLEPLAY`), por isso não está em `Feature` nem no banco.
+ */
+export type GuardableFeature =
+  Exclude<Feature, ContextualFeature> | 'ROLEPLAY_FREE_SCENARIO';
+
+/**
+ * Teto de falas do aluno numa sessão de roleplay, por plano. O que vale é o
+ * menor entre este e o `maxTurns` da etapa.
+ */
+export const ROLEPLAY_TURN_CAP: Record<PlanTier, number> = {
+  FREE: 6,
+  BASE: 20,
+  PLUS: 40,
+};
 
 export type LessonAccessContext = {
   /** Posição da unidade dentro do nível, a partir de 0. */
@@ -52,6 +67,7 @@ export function canUseFeature(
       return true;
     case 'GENERATOR_TOPIC':
     case 'GENERATOR_INGEST':
+    case 'ROLEPLAY_FREE_SCENARIO':
       return tier === 'PLUS';
     case 'PDF_DOWNLOAD':
       return tier !== 'FREE';

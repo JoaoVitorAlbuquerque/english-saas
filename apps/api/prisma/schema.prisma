@@ -228,6 +228,9 @@ model User {
   subscriptions   Subscription[]
   aiCreditEntries AiCreditLedgerEntry[]
 
+  tutorCorrections TutorCorrection[]
+  roleplaySessions RoleplaySession[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -1772,8 +1775,9 @@ model SubscriptionPlan {
 }
 
 /// Histórico de assinaturas do aluno — cancelar e assinar de novo cria outra
-/// linha. No máximo uma PENDING/ACTIVE/PAST_DUE por aluno (índice parcial
-/// escrito à mão na migration).
+/// linha. No máximo uma ACTIVE/PAST_DUE e uma PENDING por aluno (índices
+/// parciais escritos à mão na migration) — a PENDING ao lado de uma ACTIVE é
+/// um upgrade em andamento.
 model Subscription {
   id String @id @default(uuid()) @db.Uuid
 
@@ -1798,6 +1802,14 @@ model Subscription {
   /// Até quando o que já foi pago dá acesso. Cada pagamento confirmado empurra.
   currentPeriodEnd DateTime? @map("current_period_end")
   canceledAt       DateTime? @map("canceled_at")
+
+  /// Upgrade: a assinatura de tier menor que esta substitui quando ativar.
+  upgradesFromId            String?        @map("upgrades_from_id") @db.Uuid
+  upgradesFrom              Subscription?  @relation("SubscriptionUpgrade", fields: [upgradesFromId], references: [id])
+  upgradedBy                Subscription[] @relation("SubscriptionUpgrade")
+  /// Crédito proporcional dos dias não usados do plano anterior, abatido
+  /// da primeira cobrança desta.
+  firstPaymentDiscountCents Int            @default(0) @map("first_payment_discount_cents")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1850,4 +1862,154 @@ model AsaasWebhookEvent {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("asaas_webhook_events")
+}
+
+// ===========================================================================
+// Módulo 12 — tutor
+//
+// Correção de produção livre e roleplay com IA. O texto do aluno fica aqui
+// (é dele, e o resultado é mostrado de volta), mas nunca vai para log.
+// ===========================================================================
+
+enum TutorInputSource {
+  TEXT  @map("text")
+  AUDIO @map("audio")
+
+  @@map("tutor_input_source")
+}
+
+/// TRANSCRIBING só quando veio por áudio. REFUSED = conteúdo impróprio.
+enum TutorCorrectionStatus {
+  TRANSCRIBING @map("transcribing")
+  QUEUED       @map("queued")
+  DONE         @map("done")
+  REFUSED      @map("refused")
+  FAILED       @map("failed")
+
+  @@map("tutor_correction_status")
+}
+
+enum RoleplayStatus {
+  ACTIVE   @map("active")
+  FINISHED @map("finished")
+
+  @@map("roleplay_status")
+}
+
+enum RoleplayRole {
+  STUDENT   @map("student")
+  CHARACTER @map("character")
+
+  @@map("roleplay_role")
+}
+
+enum RoleplayTurnStatus {
+  PENDING @map("pending")
+  DONE    @map("done")
+  FAILED  @map("failed")
+
+  @@map("roleplay_turn_status")
+}
+
+/// Um pedido de correção de produção livre e o resultado dele.
+model TutorCorrection {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// De onde veio, quando veio de uma lição. Sem FK: lição é do módulo 4.
+  lessonId        String? @map("lesson_id") @db.Uuid
+  lessonVersionId String? @map("lesson_version_id") @db.Uuid
+  stepIndex       Int?    @map("step_index")
+
+  /// Texto do aluno. Conteúdo do aluno: nunca vai para log.
+  text     String
+  source   TutorInputSource @default(TEXT)
+  audioKey String?          @map("audio_key")
+
+  status    TutorCorrectionStatus @default(QUEUED)
+  /// Saída validada da IA, já sem id que ela tenha inventado.
+  result    Json?
+  errorCode String?               @map("error_code")
+
+  /// O CONSUME do crédito reservado no pedido; estornado se não houver correção.
+  creditReservationId String? @map("credit_reservation_id") @db.Uuid
+  /// Idempotência em rede ruim: o mesmo pedido reenviado não cobra de novo.
+  clientRequestId     String? @map("client_request_id")
+
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([userId, clientRequestId])
+  @@index([userId, createdAt])
+  @@map("tutor_corrections")
+}
+
+/// Uma conversa com um personagem, com metas a cumprir.
+model RoleplaySession {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lessonId        String? @map("lesson_id") @db.Uuid
+  lessonVersionId String? @map("lesson_version_id") @db.Uuid
+  stepIndex       Int?    @map("step_index")
+  /// Personagem do elenco. Nulo no cenário livre (persona genérica).
+  characterId     String? @map("character_id") @db.Uuid
+
+  scenario        String
+  /// Cenário escrito pelo aluno (Plus): conteúdo não confiável.
+  freeScenario    Boolean   @default(false) @map("free_scenario")
+  /// `{id, description, skillIds}[]`.
+  goals           Json
+  goalsMet        String[]  @map("goals_met")
+  maxTurns        Int       @map("max_turns")
+  vocabularyLevel CefrLevel @map("vocabulary_level")
+
+  status       RoleplayStatus @default(ACTIVE)
+  studentTurns Int            @default(0) @map("student_turns")
+  /// Falas impróprias. Duas encerram a sessão.
+  strikes      Int            @default(0)
+  /// Resumo do fim: metas, 3 correções principais, expressões.
+  summary      Json?
+
+  creditReservationId String? @map("credit_reservation_id") @db.Uuid
+
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  turns RoleplayTurn[]
+
+  @@index([userId, createdAt])
+  @@map("roleplay_sessions")
+}
+
+model RoleplayTurn {
+  id String @id @default(uuid()) @db.Uuid
+
+  sessionId String          @map("session_id") @db.Uuid
+  session   RoleplaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  index  Int
+  role   RoleplayRole
+  /// Fala. A do aluno é conteúdo do aluno; a do personagem nasce vazia
+  /// (PENDING) e o job preenche.
+  text   String
+  status RoleplayTurnStatus @default(DONE)
+  /// Só na fala do personagem: correção inline, falado × padrão, ajuda,
+  /// metas cumpridas e expressões do catálogo.
+  feedback Json?
+
+  clientTurnId String? @map("client_turn_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sessionId, index])
+  @@unique([sessionId, clientTurnId])
+  @@map("roleplay_turns")
 }

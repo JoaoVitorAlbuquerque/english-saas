@@ -28,6 +28,9 @@ export type SignedUrlOptions = {
 export abstract class StorageService {
   abstract putObject(input: PutObjectInput): Promise<PutObjectResult>;
 
+  /** O conteúdo de um objeto, inteiro na memória. Para arquivo pequeno. */
+  abstract getObject(key: string): Promise<Buffer>;
+
   /** URL temporária para um objeto privado. */
   abstract getSignedUrl(
     key: string,

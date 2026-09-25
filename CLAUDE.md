@@ -22,9 +22,11 @@ sempre a mesma espinha:
 
 ### Regras de produto que valem para tudo
 
-- **Conteúdo base é igual para todos e todo liberado.** Lições, apostilas em
-  PDF e trilhas podem ser acessadas em qualquer ordem, a qualquer momento.
-  Nada de bloquear conteúdo por progresso.
+- **Conteúdo base é igual para todos, em qualquer ordem.** Lições, apostilas
+  em PDF e trilhas podem ser acessadas a qualquer momento — nada de bloquear
+  conteúdo por progresso. O que muda com o **plano** é quanto do catálogo
+  abre (FREE: a primeira unidade de cada nível; apostila em PDF só nos
+  pagos), e mesmo assim nada some da listagem: vem com `locked`.
 - **O cronograma personalizado é o caminho recomendado**, não uma trava. Ele
   sugere o que estudar hoje; o aluno segue ou não.
 - **Questionários e provas são nivelados pelo aluno.** Os itens têm
@@ -162,7 +164,7 @@ dos que vêm antes dele.
 | 9   | `srs`                           | 7          | Revisão espaçada com FSRS: `ReviewCard`, sessão diária, criação por evento. ✅ pronto                 |
 | 10  | `planner`                       | 8, 9       | Trilha até o nível-alvo e agenda diária — recomendação, nunca bloqueio. ✅ pronto                     |
 | 11  | `billing`                       | 2, 3       | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, créditos de IA. ✅ pronto              |
-| 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                    |
+| 12  | `tutor`                         | 2, 7, 11   | Correção de produção livre e roleplay com IA, alimentando o modelo do aluno e o SRS. ✅ pronto        |
 | 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios                  |
 | 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                          |
 | 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                     |
@@ -340,9 +342,9 @@ num lugar só, em
 `BLOCKER` impede a aprovação, `WARNING` e `INFO` só aparecem na tela.
 
 O módulo 4 não pode importar o 5 (ordem de dependência). As duas travas
-chegam lá pelo `ContentGate`: contrato declarado no módulo 4, implementado
-pelo 5 como provider global e injetado com `@Optional()`. Efeito colateral
-(gerar áudio, gerar PDF) **não** passa pelo gate — passa por evento.
+chegam lá pelo token `CONTENT_GATE` (ver "Travas por inversão de
+dependência"). Efeito colateral (gerar áudio, gerar PDF) **não** passa pelo
+gate — passa por evento.
 
 A checagem de nível usa a lista de frequência de
 `packages/shared/src/wordlists`, gerada a partir do CSV versionado em
@@ -578,13 +580,99 @@ admin), **direitos** (`EntitlementsService`) e **créditos de IA**
   sem o aluno ter cancelado. Excluir a conta cancela a assinatura.
 - A assinatura **copia tier, período e preço** do plano: o admin mudar o
   catálogo não mexe em quem já assinou.
-- `LESSON_ACCESS` e `PDF_DOWNLOAD` estão prontos no `EntitlementsService`,
-  mas **ainda não plugados** nas rotas do curriculum (4) e do learning (6) —
-  eles vêm antes na ordem e não podem importar o billing (mesmo impasse do
-  `ContentGate`).
+- O plano fica em cache no Redis (`billing:plan:v1:{userId}`, 5 min no
+  máximo, e nunca além do fim de uma assinatura cancelada), derrubado pelos
+  eventos `subscription.*`. Escreveu assinatura direto no banco (teste,
+  script)? Chame `EntitlementsService.invalidate`.
+- **Upgrade não exige cancelar.** Checkout de tier maior com uma ACTIVE vira
+  uma PENDING ao lado (índices parciais: uma ACTIVE/PAST_DUE e uma PENDING
+  por aluno), com desconto proporcional do que sobrou na 1ª cobrança
+  (`domain/proration.ts`, piso de R$ 5 do Asaas). Quando ela paga, a antiga
+  vira CANCELED no mesmo instante — cancelada **antes** de a nova virar
+  ACTIVE, na mesma transação. Downgrade ainda não existe (409).
+- **Dado pessoal nunca entra em job** (fica no Redis e no Bull Board): o
+  cliente do Asaas, que leva o CPF, é criado no request do checkout; o job
+  recebe só o id da assinatura.
 - `PAYMENT_PROVIDER=auto` cai no `FakePaymentGateway` em teste ou sem
   `ASAAS_API_KEY`, igual ao `AI_PROVIDER`. O fake entende o mesmo webhook do
   Asaas — o e2e paga mandando o corpo que o Asaas mandaria.
+
+### Travas por inversão de dependência (`src/common/access`)
+
+Dois contratos, um mecanismo. Quem trava pergunta por um token; quem decide
+é ligado **só no AppModule**, por `AccessModule.forRoot`. O que não for
+ligado cai numa implementação que **nega tudo** (falha fechada).
+
+- **`ACCESS_POLICY`** — plano do aluno. `canAccessLesson(userId, {lessonId,
+unitId, cefrLevel, unitPosition})` e `canDownloadWorkbook(userId,
+unitId)`, devolvendo `{allowed}` ou `{allowed: false, reason:
+'PLAN_REQUIRED', requiredPlan}`. Implementada pelo billing
+  (`BillingAccessPolicy`); o curriculum (4) e o learning (6) nunca importam
+  o billing. `unitPosition` é o rank da unidade entre as publicadas do nível
+  — o `order` não é denso, e quem sabe a ordem é o curriculum.
+- **`CONTENT_GATE`** — trava editorial (QA com bloqueador, áudio faltando),
+  implementada pelo content-studio. Não é por aluno; por isso contrato
+  separado.
+
+Onde a política de acesso trava (403 `PLAN_REQUIRED` com `requiredPlan`):
+`GET /catalog/lessons/:slug` (antes de assinar URL de mídia),
+`POST /lessons/:id/attempts`, `POST /answers` em contexto LESSON e
+`GET /catalog/workbooks/:id/file`. As listagens (`/catalog/units`,
+`/units/:slug`, `/workbooks`) não escondem nada: dizem `locked` e
+`requiredPlan` (a apostila travada vem com `file: null`). A decisão por
+aluno é aplicada **depois** do cache do catálogo, pelo
+`CatalogAccessService` — o cache compartilhado nunca guarda trava.
+
+**Revisão nunca trava.** Contexto REVIEW (e PLACEMENT/CHECKPOINT) não passa
+pela política: o conteúdo já estudado continua revisável depois de
+downgrade ou vencimento; só lição nova fecha.
+
+Nos e2e, `createTestApp()` liga uma `FakeAccessPolicy` explícita (libera
+tudo, `accessPolicy.deny(userId)` para negar); `{accessPolicy: 'real'}` usa
+a do billing e `{accessPolicy: 'none'}`, a que nega tudo.
+
+### Tutor (tutor)
+
+Correção de produção livre (`tutor-correction`, tier smart) e roleplay
+(`tutor-roleplay-turn`, tier fast). Tudo que chama IA roda na fila `tutor`;
+as rotas de escrita respondem 202 e o cliente acompanha por polling.
+
+- **Crédito reservado no request, estornado no job.** Saldo insuficiente é
+  402 na hora, sem job à toa. Correção custa 1; roleplay custa 3 **por
+  sessão** (não por turno). Sem entrega — falha na última tentativa ou
+  conteúdo impróprio — o crédito volta; no roleplay, só se o personagem
+  nunca chegou a responder.
+- **A IA só cita id que recebeu.** O prompt leva o catálogo de ErrorPatterns
+  (e, no roleplay, as skills CHUNK/VOCAB_SET do nível); o que ela inventar
+  vira `null` ou sai da lista (`domain/correction.ts`, `sanitizeCorrection`).
+  Melhor perder um mapeamento que gravar um erro que não existe.
+- O resultado vira **`tutor.feedback`**: erros cometidos (com o trecho real
+  do aluno), erros que a rubrica vigiava e não apareceram, skills da rubrica
+  (met/não met) e expressões do catálogo. O learner-model (7) registra a
+  oportunidade de erro e aplica evidência com peso 0,5; o SRS (9) cria ou
+  lapsa card (source `TUTOR_FEEDBACK`). O tutor não escreve nas tabelas
+  deles.
+- **Um erro visto uma vez é "observado", não fraqueza.**
+  `GET /me/learner-profile` traz `observedErrors` (≥1 ocorrência); fraqueza
+  continua exigindo 3 nas últimas 30 oportunidades.
+- **Roleplay**: persona do elenco (nome + bio), metas da etapa, teto de
+  turnos = o menor entre a etapa e o plano (FREE 6, BASE 20, PLUS 40).
+  Cenário livre só no Plus, com metas genéricas e texto tratado como não
+  confiável. O fim (metas cumpridas, turnos esgotados, personagem encerrou,
+  2 falas impróprias ou o aluno pediu) gera o resumo **sem nova chamada de
+  IA**: metas, 3 correções principais, expressões. Só meta cumprida vira
+  evidência — não chegar numa meta não prova que o aluno não sabe.
+- Expressão nova só vira card se for uma skill do catálogo; `ReviewCard`
+  não guarda texto livre.
+- **Moderação** vem na saída validada (`safety`): impróprio é recusado (na
+  correção) ou trocado pela nossa mensagem (no roleplay); fora do cenário, o
+  personagem puxa de volta e não conta meta.
+- **Voz** está pronta atrás de `TUTOR_VOICE_ENABLED=false`: `SpeechToText`
+  (só o fake existe), áudio MP3/M4A/AAC em `uploads/`, transcrição em job e
+  depois o mesmo caminho do texto. Com a flag desligada, 403
+  `VOICE_DISABLED`.
+- Idempotência em rede ruim: `clientRequestId` na correção e `clientTurnId`
+  no turno.
 
 ### Erros e logs
 
@@ -678,6 +766,8 @@ valida a mensagem.
 | **ContentDraft**      | Um pedido de rascunho à IA e sua proveniência: qual prompt, qual versão, quanto custou, quem pediu e o que foi criado.               |
 | **QaWarning**         | Achado da revisão automática: `{code, severity, message, path}`. `BLOCKER` trava a aprovação; `WARNING` e `INFO` só informam.        |
 | **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
+| **TutorCorrection**   | Um pedido de correção de produção livre e o resultado validado (erros mapeados para ErrorPatterns, rubrica, dicas de registro).      |
+| **RoleplaySession**   | Conversa com um personagem, com metas, teto de turnos e o resumo do fim.                                                             |
 | **AiCredit**          | Unidade de consumo das ferramentas de IA (todo plano tem cota; o Plus, a maior). Debitada por uso e reposta no ciclo.                |
 
 ---

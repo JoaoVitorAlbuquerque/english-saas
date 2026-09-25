@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import { ContentGate } from 'src/modules/curriculum/gates/content-gate';
+import type { ContentGate } from 'src/common/access/content-gate';
 
 import { MissingAudioError, QaBlockersError } from '../content-studio.errors';
 import { blockers, type QaWarning } from '../domain/qa-report';
@@ -19,13 +19,11 @@ import { TtsService } from './tts.service';
  * inventar burocracia onde não há risco.
  */
 @Injectable()
-export class ContentStudioGate extends ContentGate {
+export class ContentStudioGate implements ContentGate {
   constructor(
     private readonly qa: QaService,
     private readonly tts: TtsService,
-  ) {
-    super();
-  }
+  ) {}
 
   async assertCanApprove(lessonVersionId: string): Promise<void> {
     const report = await this.qa.latestOrNull(lessonVersionId);

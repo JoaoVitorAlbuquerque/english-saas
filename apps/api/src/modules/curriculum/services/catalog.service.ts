@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ContentStatus, type CefrLevel } from '@prisma/client';
-import type { LessonStepInput, Paginated } from '@english-saas/shared';
+import {
+  lessonStepSchema,
+  type LessonStepInput,
+  type Paginated,
+} from '@english-saas/shared';
 
 import { NotFoundError } from 'src/common/errors/app.exception';
 import { buildPage, toPrismaCursorArgs } from 'src/common/pagination/cursor';
@@ -8,7 +12,11 @@ import { PrismaService } from 'src/infra/prisma/prisma.service';
 
 import { collectStepReferences } from '../domain/references';
 import { toStudentItem } from '../domain/student-view';
-import { AssetUrlService, type ResolvedAsset } from './asset-url.service';
+import {
+  AssetUrlService,
+  type AssetRow,
+  type ResolvedAsset,
+} from './asset-url.service';
 import { CatalogCacheService } from './catalog-cache.service';
 
 /**
@@ -20,7 +28,7 @@ import { CatalogCacheService } from './catalog-cache.service';
  */
 
 /** A lição como ela vai para o cache: chaves de storage, sem URL. */
-type CachedLesson = {
+export type CachedLesson = {
   id: string;
   slug: string;
   order: number;
@@ -147,7 +155,7 @@ export class CatalogService {
     cursor?: string | undefined;
     limit: number;
     level?: CefrLevel | undefined;
-  }): Promise<Paginated<unknown>> {
+  }) {
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
 
     const units = await this.prisma.unit.findMany({
@@ -192,6 +200,14 @@ export class CatalogService {
   // -------------------------------------------------------------------
 
   async findLessonBySlug(slug: string): Promise<CatalogLesson> {
+    return this.signLesson(await this.loadLesson(slug));
+  }
+
+  /**
+   * A lição publicada, do cache, **sem** URL assinada. Quem precisa decidir
+   * acesso antes de assinar (o `CatalogAccessService`) começa por aqui.
+   */
+  async loadLesson(slug: string): Promise<CachedLesson> {
     const lesson = await this.prisma.lesson.findUnique({
       where: { slug },
       select: { publishedVersionId: true },
@@ -211,11 +227,142 @@ export class CatalogService {
     }
 
     const key = this.cache.lessonKey(slug, version.version);
-    const cached =
-      (await this.cache.get<CachedLesson>(key)) ??
-      (await this.buildLesson(lesson.publishedVersionId, key));
 
-    return this.signLesson(cached);
+    return (
+      (await this.cache.get<CachedLesson>(key)) ??
+      (await this.buildLesson(lesson.publishedVersionId, key))
+    );
+  }
+
+  /**
+   * Posição de cada unidade entre as publicadas do nível, a partir de 0.
+   * `order` não é denso (o editor pode pular número), então a posição é o
+   * rank, não o `order` cru.
+   */
+  async unitPositions(
+    unitIds: readonly string[],
+  ): Promise<Map<string, { cefrLevel: CefrLevel; position: number }>> {
+    const units = await this.prisma.unit.findMany({
+      where: { id: { in: [...new Set(unitIds)] } },
+      select: {
+        id: true,
+        levelId: true,
+        level: { select: { cefrLevel: true } },
+      },
+    });
+    const siblings = await this.prisma.unit.findMany({
+      where: {
+        levelId: { in: [...new Set(units.map((unit) => unit.levelId))] },
+        status: ContentStatus.PUBLISHED,
+      },
+      orderBy: [{ levelId: 'asc' }, { order: 'asc' }],
+      select: { id: true, levelId: true },
+    });
+
+    const rank = new Map<string, number>();
+    const seenPerLevel = new Map<string, number>();
+
+    for (const sibling of siblings) {
+      const next = seenPerLevel.get(sibling.levelId) ?? 0;
+      rank.set(sibling.id, next);
+      seenPerLevel.set(sibling.levelId, next + 1);
+    }
+
+    return new Map(
+      units.map((unit) => [
+        unit.id,
+        {
+          cefrLevel: unit.level.cefrLevel,
+          // Unidade fora do ar não tem posição entre as publicadas: fica
+          // atrás de todas, que é o lado seguro para a trava.
+          position: rank.get(unit.id) ?? seenPerLevel.get(unit.levelId) ?? 0,
+        },
+      ]),
+    );
+  }
+
+  /** Onde uma lição está no curso — a entrada da política de acesso. */
+  async lessonPlacement(lessonId: string): Promise<{
+    lessonId: string;
+    unitId: string;
+    cefrLevel: CefrLevel;
+    unitPosition: number;
+  }> {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: { id: true, unitId: true },
+    });
+
+    if (lesson === null) {
+      throw new NotFoundError('Esta lição ainda não está disponível.');
+    }
+
+    const placement = (await this.unitPositions([lesson.unitId])).get(
+      lesson.unitId,
+    );
+
+    if (placement === undefined) {
+      throw new NotFoundError('Esta lição ainda não está disponível.');
+    }
+
+    return {
+      lessonId: lesson.id,
+      unitId: lesson.unitId,
+      cefrLevel: placement.cefrLevel,
+      unitPosition: placement.position,
+    };
+  }
+
+  /**
+   * Conteúdo de uma etapa da versão publicada, já validado pelo schema do
+   * tipo dela. É o que o tutor (12) lê para a rubrica e o roleplay.
+   */
+  async publishedStep(
+    lessonId: string,
+    stepIndex: number,
+  ): Promise<{
+    lessonId: string;
+    lessonVersionId: string;
+    cefrLevel: CefrLevel;
+    targetSkillIds: string[];
+    step: LessonStepInput;
+  }> {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: {
+        id: true,
+        publishedVersion: {
+          select: {
+            id: true,
+            cefrLevel: true,
+            targetSkills: { select: { skillId: true } },
+            steps: {
+              orderBy: { order: 'asc' },
+              select: { type: true, content: true },
+            },
+          },
+        },
+      },
+    });
+    const version = lesson?.publishedVersion;
+
+    if (lesson === null || version === null || version === undefined) {
+      throw new NotFoundError('Esta lição ainda não está disponível.');
+    }
+
+    const row = version.steps[stepIndex];
+
+    if (row === undefined) {
+      throw new NotFoundError('Esta etapa não existe na lição.');
+    }
+
+    return {
+      lessonId: lesson.id,
+      lessonVersionId: version.id,
+      cefrLevel: version.cefrLevel,
+      targetSkillIds: version.targetSkills.map((target) => target.skillId),
+      step: lessonStepSchema.parse({ type: row.type, content: row.content }),
+    };
   }
 
   /**
@@ -688,7 +835,7 @@ export class CatalogService {
   }
 
   /** Troca os ids de asset por URLs assinadas agora. */
-  private async signLesson(lesson: CachedLesson): Promise<CatalogLesson> {
+  async signLesson(lesson: CachedLesson): Promise<CatalogLesson> {
     const { assetIds, ...rest } = lesson;
 
     const rows = await this.prisma.mediaAsset.findMany({
@@ -805,6 +952,16 @@ export class CatalogService {
     };
   }
 
+  /** Nome e bio de um personagem, sem mídia — a persona do roleplay (12). */
+  async characterPersona(
+    characterId: string,
+  ): Promise<{ name: string; bio: string | null } | null> {
+    return this.prisma.character.findUnique({
+      where: { id: characterId },
+      select: { name: true, bio: true },
+    });
+  }
+
   async listCharacters() {
     const characters = await this.prisma.character.findMany({
       orderBy: { slug: 'asc' },
@@ -883,6 +1040,37 @@ export class CatalogService {
       ...workbook,
       file: resolved[asset.id] ?? null,
     }));
+  }
+
+  /** Uma apostila publicada: a unidade dela e o arquivo, sem assinar. */
+  async findWorkbook(workbookId: string) {
+    const workbook = await this.prisma.workbook.findFirst({
+      where: { id: workbookId, status: ContentStatus.PUBLISHED },
+      select: {
+        id: true,
+        unitId: true,
+        asset: {
+          select: {
+            id: true,
+            kind: true,
+            storageKey: true,
+            mimeType: true,
+            durationMs: true,
+          },
+        },
+      },
+    });
+
+    if (workbook === null) {
+      throw new NotFoundError('Não encontramos esta apostila.');
+    }
+
+    return workbook;
+  }
+
+  async signAsset(asset: AssetRow): Promise<ResolvedAsset | null> {
+    const resolved = await this.assets.resolveMap([asset]);
+    return resolved[asset.id] ?? null;
   }
 
   // -------------------------------------------------------------------

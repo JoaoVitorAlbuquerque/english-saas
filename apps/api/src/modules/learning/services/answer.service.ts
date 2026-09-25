@@ -10,6 +10,7 @@ import type { AnswerResponse, AnswerVerdict } from '@english-saas/shared';
 import { NotFoundError } from 'src/common/errors/app.exception';
 import { EventBusService } from 'src/infra/events/event-bus.service';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
+import { CatalogAccessService } from 'src/modules/curriculum/services/catalog-access.service';
 import { CatalogService } from 'src/modules/curriculum/services/catalog.service';
 import { ItemService } from 'src/modules/curriculum/services/item.service';
 import { TaxonomyService } from 'src/modules/curriculum/services/taxonomy.service';
@@ -76,6 +77,7 @@ export class AnswerService {
     private readonly items: ItemService,
     private readonly taxonomy: TaxonomyService,
     private readonly catalog: CatalogService,
+    private readonly access: CatalogAccessService,
     private readonly attempts: AttemptService,
     private readonly stats: LearningStatsService,
     private readonly events: EventBusService,
@@ -291,6 +293,9 @@ export class AnswerService {
       input.userId,
       input.attemptId,
     );
+    // Só LESSON passa por aqui: a revisão (REVIEW) de conteúdo já estudado
+    // continua aberta depois de downgrade ou vencimento do plano.
+    await this.access.assertLesson(input.userId, attempt.lessonId);
     const outline = await this.catalog.findVersionOutline(
       attempt.lessonVersionId,
     );

@@ -18,7 +18,10 @@ import { UsersService } from 'src/modules/users/services/users.service';
 import {
   AlreadySubscribedError,
   NoActiveSubscriptionError,
+  PaymentGatewayError,
+  PaymentUnavailableError,
 } from '../billing.errors';
+import { isUpgrade, upgradeCreditCents } from '../domain/proration';
 import { creditCycleKey } from '../domain/credits';
 import { priceLabel } from '../domain/pricing';
 import {
@@ -148,26 +151,46 @@ export class SubscriptionService {
     userId: string,
     input: CheckoutInput,
   ): Promise<SubscriptionOverview> {
+    const now = new Date();
     const plan = await this.plans.findPurchasable(
       input.tier,
       input.billingPeriod,
     );
-    const open = await this.prisma.subscription.findFirst({
+    const open = await this.prisma.subscription.findMany({
       where: { userId, status: { in: OPEN_STATUSES } },
     });
+    const active = open.find(
+      (sub) => sub.status !== SubscriptionStatus.PENDING,
+    );
+    const upgrade =
+      active !== undefined &&
+      isUpgrade({
+        currentTier: active.tier,
+        currentStatus: active.status,
+        targetTier: plan.tier,
+      });
 
-    if (open !== null && open.status !== SubscriptionStatus.PENDING) {
-      throw new AlreadySubscribedError(open.tier);
+    // Mesmo tier, tier menor ou assinatura atrasada: não é upgrade. Troca
+    // para baixo ainda não existe — cancela e assina de novo.
+    if (active !== undefined && !upgrade) {
+      throw new AlreadySubscribedError(active.tier);
     }
 
     // Checkout largado no meio: o novo substitui, e o antigo para de cobrar.
-    if (open !== null) {
+    for (const pending of open.filter(
+      (sub) => sub.status === SubscriptionStatus.PENDING,
+    )) {
       await this.prisma.subscription.update({
-        where: { id: open.id },
+        where: { id: pending.id },
         data: { status: SubscriptionStatus.EXPIRED },
       });
-      await this.enqueueGatewayCancel(open);
+      await this.enqueueGatewayCancel(pending);
     }
+
+    // O cliente do Asaas nasce aqui, no request: o CPF vai direto para o
+    // gateway e nunca entra nos dados de um job (que ficam no Redis e no
+    // Bull Board).
+    const customerId = await this.ensureCustomer(userId, input.cpfCnpj);
 
     let created: Subscription;
 
@@ -181,6 +204,19 @@ export class SubscriptionService {
           billingPeriod: input.billingPeriod,
           priceCents: plan.priceCents,
           paymentMethod: input.paymentMethod,
+          asaasCustomerId: customerId,
+          ...(active !== undefined && upgrade
+            ? {
+                upgradesFromId: active.id,
+                firstPaymentDiscountCents: upgradeCreditCents({
+                  currentPriceCents: active.priceCents,
+                  currentPeriod: active.billingPeriod,
+                  currentPeriodEnd: active.currentPeriodEnd,
+                  newPriceCents: plan.priceCents,
+                  now,
+                }),
+              }
+            : {}),
         },
       });
     } catch (error) {
@@ -191,10 +227,7 @@ export class SubscriptionService {
       throw error;
     }
 
-    const data: CreateCheckoutJobData = {
-      subscriptionId: created.id,
-      cpfCnpj: input.cpfCnpj,
-    };
+    const data: CreateCheckoutJobData = { subscriptionId: created.id };
     await this.queue.add(CREATE_CHECKOUT_JOB, data, {
       jobId: `checkout-${created.id}`,
     });
@@ -218,26 +251,15 @@ export class SubscriptionService {
       return { status: 'SKIPPED' };
     }
 
-    let customerId =
-      sub.asaasCustomerId ?? (await this.previousCustomerId(sub.userId));
+    const customerId = sub.asaasCustomerId;
 
     if (customerId === null) {
-      const user = await this.users.findById(sub.userId);
-      customerId = (
-        await this.gateway.createCustomer({
-          userId: sub.userId,
-          name: user.name,
-          email: user.email,
-          cpfCnpj: data.cpfCnpj,
-        })
-      ).id;
-    }
-
-    if (sub.asaasCustomerId !== customerId) {
-      await this.prisma.subscription.update({
-        where: { id: sub.id },
-        data: { asaasCustomerId: customerId },
-      });
+      // O checkout cria o cliente antes de enfileirar; sem ele, não há o que
+      // cobrar — falha para o retry e, no fim, para o `markCheckoutFailed`.
+      throw new PaymentGatewayError(
+        'missing_customer',
+        'Assinatura sem cliente no gateway.',
+      );
     }
 
     let gatewayId = sub.asaasSubscriptionId;
@@ -251,7 +273,12 @@ export class SubscriptionService {
           priceCents: sub.priceCents,
           cycle: sub.billingPeriod,
           paymentMethod: sub.paymentMethod,
-          firstDueDate: await this.firstDueDate(sub.userId, now),
+          // Upgrade cobra já, com o desconto: o plano novo vale ao pagar.
+          firstDueDate:
+            sub.upgradesFromId === null
+              ? await this.firstDueDate(sub.userId, now)
+              : now,
+          firstPaymentDiscountCents: sub.firstPaymentDiscountCents,
         })
       ).id;
       await this.prisma.subscription.update({
@@ -296,29 +323,34 @@ export class SubscriptionService {
     userId: string,
     now = new Date(),
   ): Promise<SubscriptionOverview> {
-    const open = await this.prisma.subscription.findFirst({
+    // Tudo o que está em aberto: a assinatura em uso e um upgrade pendente.
+    const open = await this.prisma.subscription.findMany({
       where: { userId, status: { in: OPEN_STATUSES } },
     });
 
-    if (open === null) {
+    if (open.length === 0) {
       throw new NoActiveSubscriptionError();
     }
 
-    const canceled = await this.prisma.subscription.update({
-      where: { id: open.id },
-      data: { status: SubscriptionStatus.CANCELED, canceledAt: now },
-    });
-    await this.enqueueGatewayCancel(open);
+    for (const sub of open) {
+      const canceled = await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: { status: SubscriptionStatus.CANCELED, canceledAt: now },
+      });
+      await this.enqueueGatewayCancel(sub);
 
-    this.events.emit(
-      'subscription.canceled',
-      {
-        subscriptionId: canceled.id,
-        tier: canceled.tier,
-        accessUntil: accessUntil(canceled, now)?.toISOString() ?? null,
-      },
-      { userId },
-    );
+      this.events.emit(
+        'subscription.canceled',
+        {
+          subscriptionId: canceled.id,
+          tier: canceled.tier,
+          accessUntil: accessUntil(canceled, now)?.toISOString() ?? null,
+        },
+        { userId },
+      );
+    }
+
+    await this.entitlements.invalidate(userId);
 
     return this.overview(userId, now);
   }
@@ -342,6 +374,7 @@ export class SubscriptionService {
           status: 'APPLIED_INTERNAL';
           before: Subscription;
           after: Subscription;
+          replaced: Subscription | null;
           granted: number | null;
           activated: boolean;
           paymentFailed: boolean;
@@ -387,6 +420,21 @@ export class SubscriptionService {
               ? null
               : new Date(event.paymentDueDate),
         });
+        // Upgrade pago: o plano anterior sai antes — os dias que sobravam
+        // já viraram desconto na primeira cobrança deste. A ordem importa:
+        // só pode haver uma assinatura ACTIVE por aluno (índice parcial).
+        const replaced =
+          transition.activated && sub.upgradesFromId !== null
+            ? await tx.subscription.update({
+                where: { id: sub.upgradesFromId },
+                data: {
+                  status: SubscriptionStatus.CANCELED,
+                  canceledAt: now,
+                  currentPeriodEnd: now,
+                },
+              })
+            : null;
+
         const after = await tx.subscription.update({
           where: { id: sub.id },
           data: {
@@ -414,6 +462,7 @@ export class SubscriptionService {
           status: 'APPLIED_INTERNAL' as const,
           before: sub,
           after,
+          replaced,
           granted,
           activated: transition.activated,
           paymentFailed: transition.paymentFailed,
@@ -421,7 +470,9 @@ export class SubscriptionService {
         };
       });
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      // Só a duplicidade do próprio evento é "já processado". Outra violação
+      // de unique (ex.: duas assinaturas ativas) é bug e tem de aparecer.
+      if (isUniqueViolation(error, 'external_event_id')) {
         return { status: 'DUPLICATE' };
       }
 
@@ -430,6 +481,21 @@ export class SubscriptionService {
 
     if (result.status !== 'APPLIED_INTERNAL') {
       return result;
+    }
+
+    await this.entitlements.invalidate(result.after.userId);
+
+    if (result.replaced !== null) {
+      await this.enqueueGatewayCancel(result.replaced);
+      this.events.emit(
+        'subscription.canceled',
+        {
+          subscriptionId: result.replaced.id,
+          tier: result.replaced.tier,
+          accessUntil: null,
+        },
+        { userId: result.replaced.userId },
+      );
     }
 
     this.emitTransition(result);
@@ -520,14 +586,39 @@ export class SubscriptionService {
     });
   }
 
-  private async previousCustomerId(userId: string): Promise<string | null> {
+  /** Reaproveita o cliente de uma assinatura anterior; senão cria agora. */
+  private async ensureCustomer(
+    userId: string,
+    cpfCnpj: string | undefined,
+  ): Promise<string> {
     const previous = await this.prisma.subscription.findFirst({
       where: { userId, asaasCustomerId: { not: null } },
       orderBy: { createdAt: 'desc' },
       select: { asaasCustomerId: true },
     });
 
-    return previous?.asaasCustomerId ?? null;
+    if (previous?.asaasCustomerId != null) {
+      return previous.asaasCustomerId;
+    }
+
+    const user = await this.users.findById(userId);
+
+    try {
+      return (
+        await this.gateway.createCustomer({
+          userId,
+          name: user.name,
+          email: user.email,
+          cpfCnpj,
+        })
+      ).id;
+    } catch (error) {
+      if (error instanceof PaymentGatewayError) {
+        throw new PaymentUnavailableError();
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -555,9 +646,21 @@ export class SubscriptionService {
   }
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
-  );
+/** P2002; com `column`, só quando o unique violado envolve essa coluna. */
+function isUniqueViolation(error: unknown, column?: string): boolean {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2002'
+  ) {
+    return false;
+  }
+
+  if (column === undefined) {
+    return true;
+  }
+
+  const target = JSON.stringify(error.meta?.['target'] ?? '');
+  const camel = column.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+
+  return target.includes(column) || target.includes(camel);
 }

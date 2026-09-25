@@ -4,7 +4,7 @@ import type { Queue } from 'bullmq';
 import request from 'supertest';
 
 import { QUEUES } from 'src/infra/queue/queues';
-import { ContentGate } from 'src/modules/curriculum/gates/content-gate';
+import { CONTENT_GATE, type ContentGate } from 'src/common/access/content-gate';
 import { QaService } from 'src/modules/content-studio/services/qa.service';
 import { TtsService } from 'src/modules/content-studio/services/tts.service';
 
@@ -33,7 +33,7 @@ describe('Content studio (e2e)', () => {
     context = await createTestApp();
     qa = context.app.get(QaService);
     tts = context.app.get(TtsService);
-    gate = context.app.get(ContentGate);
+    gate = context.app.get<ContentGate>(CONTENT_GATE);
     draftsQueue = context.app.get<Queue>(getQueueToken(QUEUES.CONTENT_DRAFTS));
     qaQueue = context.app.get<Queue>(getQueueToken(QUEUES.CONTENT_QA));
     mediaQueue = context.app.get<Queue>(getQueueToken(QUEUES.MEDIA));

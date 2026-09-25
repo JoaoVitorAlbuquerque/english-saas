@@ -8,16 +8,23 @@ import {
 import {
   canAccessLesson,
   canUseFeature,
+  ROLEPLAY_TURN_CAP,
   highestTier,
   type GuardableFeature,
   type PlanTier,
 } from './domain/entitlements';
 import { formatBrl, priceLabel } from './domain/pricing';
 import {
+  isUpgrade,
+  MIN_CHARGE_CENTS,
+  upgradeCreditCents,
+} from './domain/proration';
+import {
   addPeriod,
   applyPaymentEvent,
   effectiveTier,
   grantsAccess,
+  planCacheTtlSeconds,
   subscriptionMessage,
   type SubscriptionView,
 } from './domain/subscription-state';
@@ -282,5 +289,113 @@ describe('billing — webhook do Asaas', () => {
     expect(parseAsaasWebhook(body)?.externalEventId).toBe(
       parseAsaasWebhook({ ...body })?.externalEventId,
     );
+  });
+});
+
+describe('billing — upgrade com proporcional', () => {
+  const end = new Date('2026-10-25T00:00:00.000Z');
+
+  it('só é upgrade para tier maior, a partir de assinatura em dia', () => {
+    expect(
+      isUpgrade({
+        currentTier: 'BASE',
+        currentStatus: 'ACTIVE',
+        targetTier: 'PLUS',
+      }),
+    ).toBe(true);
+    expect(
+      isUpgrade({
+        currentTier: 'PLUS',
+        currentStatus: 'ACTIVE',
+        targetTier: 'BASE',
+      }),
+    ).toBe(false);
+    expect(
+      isUpgrade({
+        currentTier: 'BASE',
+        currentStatus: 'ACTIVE',
+        targetTier: 'BASE',
+      }),
+    ).toBe(false);
+    expect(
+      isUpgrade({
+        currentTier: 'BASE',
+        currentStatus: 'PAST_DUE',
+        targetTier: 'PLUS',
+      }),
+    ).toBe(false);
+  });
+
+  it('crédito proporcional ao que falta do ciclo', () => {
+    // Ciclo de 25/09 a 25/10 (30 dias); faltam 15 dias do BASE de R$ 39,90.
+    const credit = upgradeCreditCents({
+      currentPriceCents: 3_990,
+      currentPeriod: 'MONTHLY',
+      currentPeriodEnd: end,
+      newPriceCents: 6_990,
+      now: new Date('2026-10-10T00:00:00.000Z'),
+    });
+
+    expect(credit).toBe(1_995);
+  });
+
+  it('sem período pago sobrando, não há crédito', () => {
+    expect(
+      upgradeCreditCents({
+        currentPriceCents: 3_990,
+        currentPeriod: 'MONTHLY',
+        currentPeriodEnd: end,
+        newPriceCents: 6_990,
+        now: end,
+      }),
+    ).toBe(0);
+    expect(
+      upgradeCreditCents({
+        currentPriceCents: 3_990,
+        currentPeriod: 'MONTHLY',
+        currentPeriodEnd: null,
+        newPriceCents: 6_990,
+        now: end,
+      }),
+    ).toBe(0);
+  });
+
+  it('o desconto nunca leva a cobrança abaixo do mínimo do gateway', () => {
+    // Anual do BASE recém-pago (R$ 399) virando PLUS mensal (R$ 69,90).
+    const credit = upgradeCreditCents({
+      currentPriceCents: 39_900,
+      currentPeriod: 'YEARLY',
+      currentPeriodEnd: new Date('2027-09-25T00:00:00.000Z'),
+      newPriceCents: 6_990,
+      now: new Date('2026-09-26T00:00:00.000Z'),
+    });
+
+    expect(credit).toBe(6_990 - MIN_CHARGE_CENTS);
+  });
+});
+
+describe('billing — cache do plano e limites', () => {
+  const now = new Date('2026-09-25T12:00:00.000Z');
+
+  it('cache não passa do fim de uma assinatura cancelada', () => {
+    const canceled = {
+      tier: 'PLUS' as const,
+      billingPeriod: 'MONTHLY' as const,
+      status: 'CANCELED' as const,
+      currentPeriodEnd: new Date(now.getTime() + 90_000),
+    };
+
+    expect(planCacheTtlSeconds([canceled], now, 300)).toBe(90);
+    expect(planCacheTtlSeconds([], now, 300)).toBe(300);
+    expect(
+      planCacheTtlSeconds([{ ...canceled, status: 'ACTIVE' }], now, 300),
+    ).toBe(300);
+  });
+
+  it('roleplay: cenário livre só no Plus; teto de turnos cresce com o plano', () => {
+    expect(canUseFeature('BASE', 'ROLEPLAY_FREE_SCENARIO')).toBe(false);
+    expect(canUseFeature('PLUS', 'ROLEPLAY_FREE_SCENARIO')).toBe(true);
+    expect(ROLEPLAY_TURN_CAP.FREE).toBeLessThan(ROLEPLAY_TURN_CAP.BASE);
+    expect(ROLEPLAY_TURN_CAP.BASE).toBeLessThan(ROLEPLAY_TURN_CAP.PLUS);
   });
 });

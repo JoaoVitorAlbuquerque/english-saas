@@ -37,6 +37,20 @@ import {
 export const LEARNER_UPDATE_JOB = 'learner-update';
 export const PLACEMENT_PRIOR_JOB = 'placement-prior';
 export const REVIEW_OUTCOME_JOB = 'review-outcome';
+export const TUTOR_FEEDBACK_JOB = 'tutor-feedback';
+
+/**
+ * Peso da rubrica do tutor (12) no Elo: mais que o flashcard auto-avaliado,
+ * menos que uma questão calibrada — quem julgou foi a IA, sem item por trás.
+ */
+const TUTOR_EVIDENCE_WEIGHT = 0.5;
+
+export type TutorFeedbackInput = {
+  errorPatterns: { id: string; text: string; correction: string }[];
+  checkedErrorPatternIds: string[];
+  skills: { skillId: string; met: boolean }[];
+  at: Date;
+};
 
 /**
  * Score de um rating auto-avaliado do SRS (9), para o Elo do mastery. Peso
@@ -199,20 +213,82 @@ export class LearnerUpdateService {
     });
   }
 
+  /**
+   * Feedback do tutor (12): cada erro que a correção achou é uma
+   * oportunidade com erro (com a frase real do aluno); cada erro que a
+   * rubrica checava e não apareceu, uma oportunidade sem erro; cada critério
+   * da rubrica, evidência de mastery com peso de rubrica de IA.
+   */
+  async applyTutorFeedback(
+    userId: string,
+    feedback: TutorFeedbackInput,
+  ): Promise<UpdateOutcome> {
+    return this.withLock(userId, async () => {
+      const touchedErrors = new Set<string>();
+      const touchedSkills = new Set<string>();
+      const hit = new Set(feedback.errorPatterns.map((error) => error.id));
+
+      for (const error of feedback.errorPatterns) {
+        await this.recordErrorOpportunity(userId, error.id, {
+          hit: true,
+          at: feedback.at,
+          example: {
+            text: error.text,
+            correction: error.correction,
+            itemId: null,
+            at: feedback.at.toISOString(),
+          },
+        });
+        touchedErrors.add(error.id);
+      }
+
+      for (const errorPatternId of feedback.checkedErrorPatternIds) {
+        if (hit.has(errorPatternId)) continue;
+        await this.recordErrorOpportunity(userId, errorPatternId, {
+          hit: false,
+          at: feedback.at,
+        });
+        touchedErrors.add(errorPatternId);
+      }
+
+      for (const skill of feedback.skills) {
+        const touched = await this.applySkillEvidence(userId, skill.skillId, {
+          score: skill.met ? 1 : 0,
+          isCorrect: skill.met,
+          weight: TUTOR_EVIDENCE_WEIGHT,
+          at: feedback.at,
+        });
+        touched.forEach((id) => touchedSkills.add(id));
+      }
+
+      await this.afterUpdate(userId, 0, touchedSkills, touchedErrors);
+
+      return { status: 'DONE', processed: 0 };
+    });
+  }
+
   private async applyErrorReview(
     userId: string,
     errorPatternId: string,
     rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY',
     at: Date,
   ): Promise<void> {
+    await this.recordErrorOpportunity(userId, errorPatternId, {
+      hit: rating === 'AGAIN' || rating === 'HARD',
+      at,
+    });
+  }
+
+  private async recordErrorOpportunity(
+    userId: string,
+    errorPatternId: string,
+    outcome: Parameters<typeof recordOpportunity>[1],
+  ): Promise<void> {
     const row = await this.prisma.learnerErrorPattern.findUnique({
       where: { userId_errorPatternId: { userId, errorPatternId } },
     });
     const state = row === null ? emptyErrorState() : toErrorState(row);
-    const next = recordOpportunity(state, {
-      hit: rating === 'AGAIN' || rating === 'HARD',
-      at,
-    });
+    const next = recordOpportunity(state, outcome);
     const data = {
       recentOutcomes: next.recentOutcomes,
       totalOccurrences: next.totalOccurrences,
@@ -232,6 +308,20 @@ export class LearnerUpdateService {
     skillId: string,
     rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY',
     at: Date,
+  ): Promise<Set<string>> {
+    return this.applySkillEvidence(userId, skillId, {
+      score: REVIEW_SCORE[rating],
+      isCorrect: rating !== 'AGAIN',
+      weight: REVIEW_EVIDENCE_WEIGHT,
+      at,
+    });
+  }
+
+  /** Evidência de mastery sem item calibrado: dificuldade típica do nível. */
+  private async applySkillEvidence(
+    userId: string,
+    skillId: string,
+    evidence: { score: number; isCorrect: boolean; weight: number; at: Date },
   ): Promise<Set<string>> {
     const [graph, row, prior] = await Promise.all([
       this.taxonomy.skillGraph(),
@@ -255,11 +345,11 @@ export class LearnerUpdateService {
 
     const next = applyAnswer(state, {
       difficulty: typicalDifficulty(node.cefrLevel),
-      score: REVIEW_SCORE[rating],
-      isCorrect: rating !== 'AGAIN',
+      score: evidence.score,
+      isCorrect: evidence.isCorrect,
       hintsUsed: 0,
-      weight: REVIEW_EVIDENCE_WEIGHT,
-      at,
+      weight: evidence.weight,
+      at: evidence.at,
     });
 
     await this.prisma.learnerSkillState.upsert({

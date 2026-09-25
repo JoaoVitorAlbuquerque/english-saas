@@ -89,6 +89,11 @@ export type LearnerModel = {
   strengths: SkillView[];
   weaknesses: (Weakness & { skill: SkillView | null })[];
   recurringErrors: RecurringError[];
+  /**
+   * Erros que já apareceram mas ainda não são recorrentes (menos de 3 nas
+   * últimas 30 oportunidades). Não viram fraqueza — mas o aluno vê.
+   */
+  observedErrors: RecurringError[];
   needs: (Need & { skill: GraphSkill })[];
 };
 
@@ -138,28 +143,35 @@ export function buildLearnerModel(input: ModelInput): LearnerModel {
   const info = new Map(
     input.errorPatterns.map((pattern) => [pattern.id, pattern]),
   );
-  const recurringErrors: RecurringError[] = [...input.errorStates.entries()]
-    .filter(([, state]) => isRecurring(state))
-    .flatMap(([id, state]) => {
-      const pattern = info.get(id);
-      if (pattern === undefined) return [];
+  const errorsWhere = (
+    keep: (state: ErrorState) => boolean,
+  ): RecurringError[] =>
+    [...input.errorStates.entries()]
+      .filter(([, state]) => keep(state))
+      .flatMap(([id, state]) => {
+        const pattern = info.get(id);
+        if (pattern === undefined) return [];
 
-      return [
-        {
-          ...pattern,
-          recentOccurrences: recentOccurrences(state),
-          totalOccurrences: state.totalOccurrences,
-          examples: [...state.examples].reverse().map((example) => ({
-            text: example.text,
-            correction: example.correction,
-          })),
-        },
-      ];
-    })
-    .sort(
-      (a, b) =>
-        b.recentOccurrences - a.recentOccurrences || a.id.localeCompare(b.id),
-    );
+        return [
+          {
+            ...pattern,
+            recentOccurrences: recentOccurrences(state),
+            totalOccurrences: state.totalOccurrences,
+            examples: [...state.examples].reverse().map((example) => ({
+              text: example.text,
+              correction: example.correction,
+            })),
+          },
+        ];
+      })
+      .sort(
+        (a, b) =>
+          b.recentOccurrences - a.recentOccurrences || a.id.localeCompare(b.id),
+      );
+  const recurringErrors = errorsWhere(isRecurring);
+  const observedErrors = errorsWhere(
+    (state) => state.totalOccurrences > 0 && !isRecurring(state),
+  );
 
   const weaknesses = findWeaknesses({
     readings: skills,
@@ -197,6 +209,7 @@ export function buildLearnerModel(input: ModelInput): LearnerModel {
     }),
     weaknesses,
     recurringErrors,
+    observedErrors,
     needs,
   };
 }

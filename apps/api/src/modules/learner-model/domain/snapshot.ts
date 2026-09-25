@@ -165,9 +165,29 @@ export type StudentProfile = {
     occurrences: number;
     yourExamples: string[];
   }[];
+  /** Erros que já apareceram, mas ainda não se repetem o bastante para serem fraqueza. */
+  observedErrors: {
+    id: string;
+    description: string;
+    correction: string;
+    explanation: string;
+    occurrences: number;
+    yourExamples: string[];
+  }[];
   needs: { skillId: string; title: string; level: CefrLevel; why: string }[];
   goals: { goal: LearningGoal; label: string }[];
 };
+
+function errorView(error: LearnerModel['recurringErrors'][number]) {
+  return {
+    id: error.id,
+    description: error.description,
+    correction: error.correction,
+    explanation: error.explanation,
+    occurrences: error.recentOccurrences,
+    yourExamples: error.examples.map((example) => example.text),
+  };
+}
 
 export function buildStudentProfile(input: {
   model: LearnerModel;
@@ -210,14 +230,8 @@ export function buildStudentProfile(input: {
 
       return [{ skillId: weakness.skillId, title: weakness.skill.title, why }];
     }),
-    errors: model.recurringErrors.map((error) => ({
-      id: error.id,
-      description: error.description,
-      correction: error.correction,
-      explanation: error.explanation,
-      occurrences: error.recentOccurrences,
-      yourExamples: error.examples.map((example) => example.text),
-    })),
+    errors: model.recurringErrors.map(errorView),
+    observedErrors: model.observedErrors.map(errorView),
     needs: nextTargets(model).map((need) => ({
       skillId: need.skillId,
       title: need.skill.title,

@@ -4,6 +4,8 @@ import { draftRegisterNotesPrompt } from './draft-register-notes.prompt';
 import { echoLevelPrompt } from './echo-level.prompt';
 import type { AiPrompt } from './prompt';
 import { reviewLanguagePrompt } from './review-language.prompt';
+import { tutorCorrectionPrompt } from './tutor-correction.prompt';
+import { tutorRoleplayTurnPrompt } from './tutor-roleplay-turn.prompt';
 
 /**
  * Todos os prompts do sistema, por id.
@@ -17,6 +19,8 @@ export const AI_PROMPTS = {
   [draftItemsPrompt.id]: draftItemsPrompt,
   [draftRegisterNotesPrompt.id]: draftRegisterNotesPrompt,
   [reviewLanguagePrompt.id]: reviewLanguagePrompt,
+  [tutorCorrectionPrompt.id]: tutorCorrectionPrompt,
+  [tutorRoleplayTurnPrompt.id]: tutorRoleplayTurnPrompt,
 } as const satisfies Record<string, AiPrompt<never, unknown>>;
 
 export type RegisteredPromptId = keyof typeof AI_PROMPTS;

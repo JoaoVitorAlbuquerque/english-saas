@@ -1,10 +1,9 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 
 import { QUEUES } from 'src/infra/queue/queues';
 import { registerQueue } from 'src/infra/queue/register-queue';
 import { AiModule } from 'src/modules/ai/ai.module';
 import { CurriculumModule } from 'src/modules/curriculum/curriculum.module';
-import { ContentGate } from 'src/modules/curriculum/gates/content-gate';
 
 import { ContentStudioController } from './controllers/content-studio.controller';
 import { ContentDraftsProcessor } from './jobs/content-drafts.processor';
@@ -25,15 +24,13 @@ import { WorkbookService } from './services/workbook.service';
  * O editor pede, a IA rascunha, a QA confere e **um humano aprova**. Nada
  * gerado aqui chega ao aluno sem esse aprovar.
  *
- * `@Global` por um motivo só: o `ContentGate` é o ponto de extensão que o
- * módulo 4 injeta de forma opcional. O módulo 4 não pode importar o 5 (ordem
- * de dependência do CLAUDE.md), então o provider precisa estar visível sem
- * que ninguém o importe.
+ * O `ContentStudioGate` implementa a trava editorial (`CONTENT_GATE`) que
+ * o módulo 4 injeta; a ligação é feita no AppModule, pelo `AccessModule` —
+ * o módulo 4 não pode importar o 5.
  *
  * Duas tentativas por job de rascunho, não três: cada uma é uma chamada no
  * tier `smart`, e insistir numa falha determinística só queima crédito.
  */
-@Global()
 @Module({
   imports: [
     CurriculumModule,
@@ -54,8 +51,8 @@ import { WorkbookService } from './services/workbook.service';
     ContentQaProcessor,
     MediaProcessor,
     ContentListener,
-    { provide: ContentGate, useClass: ContentStudioGate },
+    ContentStudioGate,
   ],
-  exports: [ContentGate, QaService, TtsService, WorkbookService],
+  exports: [ContentStudioGate, QaService, TtsService, WorkbookService],
 })
 export class ContentStudioModule {}
