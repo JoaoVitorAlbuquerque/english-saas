@@ -130,6 +130,38 @@ export class AiUsageService {
     return this.totals({ userId, ...period });
   }
 
+  /** Custo por aluno no período, do maior para o menor. Chamada de sistema fica de fora. */
+  async totalsByUser(
+    period: UsagePeriod = {},
+  ): Promise<(UsageTotals & { userId: string })[]> {
+    const rows = await this.prisma.aiUsage.groupBy({
+      by: ['userId'],
+      where: { ...this.buildWhere(period), userId: { not: null } },
+      _count: { _all: true },
+      _sum: {
+        inputTokens: true,
+        outputTokens: true,
+        costUsdMicros: true,
+      },
+    });
+
+    return rows
+      .flatMap((row) =>
+        row.userId === null
+          ? []
+          : [
+              {
+                userId: row.userId,
+                calls: row._count._all,
+                inputTokens: row._sum.inputTokens ?? 0,
+                outputTokens: row._sum.outputTokens ?? 0,
+                costUsdMicros: row._sum.costUsdMicros ?? 0,
+              },
+            ],
+      )
+      .sort((a, b) => b.costUsdMicros - a.costUsdMicros);
+  }
+
   private buildWhere(
     filter: { userId?: string; feature?: string } & UsagePeriod,
   ): Prisma.AiUsageWhereInput {

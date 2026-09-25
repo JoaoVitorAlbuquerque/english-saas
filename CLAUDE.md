@@ -161,7 +161,7 @@ dos que vêm antes dele.
 | 8   | `assessment`                    | 7          | Nivelamento adaptativo, checkpoints de unidade, `selectItems` nivelado, calibração. ✅ pronto         |
 | 9   | `srs`                           | 7          | Revisão espaçada com FSRS: `ReviewCard`, sessão diária, criação por evento. ✅ pronto                 |
 | 10  | `planner`                       | 8, 9       | Trilha até o nível-alvo e agenda diária — recomendação, nunca bloqueio. ✅ pronto                     |
-| 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                     |
+| 11  | `billing`                       | 2, 3       | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, créditos de IA. ✅ pronto              |
 | 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                    |
 | 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios                  |
 | 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                          |
@@ -534,6 +534,58 @@ existe "marcar como feito" separado disso.
   então vale mais tentar de novo que devolver "plano não existe" pra quem
   acabou de se cadastrar.
 
+### Assinatura e créditos (billing)
+
+Três peças: **planos** (`SubscriptionPlan`, config em banco, editável pelo
+admin), **direitos** (`EntitlementsService`) e **créditos de IA**
+(`AiCreditLedgerEntry`), sobre uma assinatura no Asaas atrás de
+`PaymentGateway`.
+
+- **O tier nunca viaja no JWT.** `EntitlementsService.currentPlan` lê a
+  assinatura a cada checagem — assinar ou cancelar vale na hora, sem novo
+  login. `User.role` continua só para área restrita.
+- **Quem gera ou usa IA pede direito e crédito ao billing**, nunca lê as
+  tabelas dele: `@RequiresFeature('GENERATOR_TOPIC')` +
+  `@UseGuards(RequiresFeatureGuard)` na rota (só o plano), e
+  `AiCreditService.spend(userId, feature, work)` em volta do
+  `AiService.run` dentro do job (o saldo). `spend` reserva no início
+  (`CONSUME`, já debita) e estorna se o trabalho lançar (`REFUND`, único por
+  consumo). Não existe passo de "confirmar": sucesso não escreve nada.
+- **"Cota do tutor" e "créditos do Plus" são o mesmo mecanismo.** Um saldo
+  só, custo por feature em
+  [credits.ts](apps/api/src/modules/billing/domain/credits.ts). O FREE
+  também tem cota (pequena). O crédito do ciclo **repõe até a cota** — sobra
+  não acumula acima dela, mas também não se perde.
+- Todo lançamento roda com **trava consultiva do Postgres por aluno**
+  (`pg_advisory_xact_lock`), não a trava do Redis dos módulos 7/9: o que
+  precisa ser atômico é saldo + lançamento, dentro da mesma transação.
+- **Crédito do plano pago sai do webhook** de pagamento confirmado; o do
+  FREE (e o mês seguinte do anual) sai do cron do dia 1º, e conta nova
+  recebe na hora pelo `user.registered`. Dedup por `cycleKey`
+  (`PLUS:2026-09`) — assinar no meio do mês ainda credita.
+- **Webhook é idempotente em duas camadas**: `jobId` na fila e a linha em
+  `asaas_webhook_events`, gravada na mesma transação do efeito. O token do
+  header é conferido em tempo constante; sem `ASAAS_WEBHOOK_TOKEN`, o
+  gateway Asaas recusa tudo.
+- **Checkout é assíncrono**, como todo I/O externo: `POST /billing/checkout`
+  cria a assinatura em PENDING e enfileira; o link aparece em
+  `GET /me/subscription`. Cada passo do job grava antes do próximo — o retry
+  não cria cliente nem assinatura em dobro no Asaas.
+- **Cancelar é um clique e vale na hora** (`CANCELED`); o job para a
+  cobrança no Asaas com retry. Acesso até o fim do pago não precisa de job
+  de expiração: `grantsAccess` compara `currentPeriodEnd` com agora.
+  PAST_DUE ainda dá acesso (carência); EXPIRED é quando o gateway encerra
+  sem o aluno ter cancelado. Excluir a conta cancela a assinatura.
+- A assinatura **copia tier, período e preço** do plano: o admin mudar o
+  catálogo não mexe em quem já assinou.
+- `LESSON_ACCESS` e `PDF_DOWNLOAD` estão prontos no `EntitlementsService`,
+  mas **ainda não plugados** nas rotas do curriculum (4) e do learning (6) —
+  eles vêm antes na ordem e não podem importar o billing (mesmo impasse do
+  `ContentGate`).
+- `PAYMENT_PROVIDER=auto` cai no `FakePaymentGateway` em teste ou sem
+  `ASAAS_API_KEY`, igual ao `AI_PROVIDER`. O fake entende o mesmo webhook do
+  Asaas — o e2e paga mandando o corpo que o Asaas mandaria.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -626,7 +678,7 @@ valida a mensagem.
 | **ContentDraft**      | Um pedido de rascunho à IA e sua proveniência: qual prompt, qual versão, quanto custou, quem pediu e o que foi criado.               |
 | **QaWarning**         | Achado da revisão automática: `{code, severity, message, path}`. `BLOCKER` trava a aprovação; `WARNING` e `INFO` só informam.        |
 | **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
-| **AiCredit**          | Unidade de consumo das ferramentas de IA do plano Plus. Debitada por geração e reposta no ciclo da assinatura.                       |
+| **AiCredit**          | Unidade de consumo das ferramentas de IA (todo plano tem cota; o Plus, a maior). Debitada por uso e reposta no ciclo.                |
 
 ---
 

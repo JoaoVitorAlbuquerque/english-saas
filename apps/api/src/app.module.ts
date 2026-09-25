@@ -11,6 +11,7 @@ import { InfraModule } from './infra/infra.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AssessmentModule } from './modules/assessment/assessment.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { ContentStudioModule } from './modules/content-studio/content-studio.module';
 import { CurriculumModule } from './modules/curriculum/curriculum.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -43,7 +44,7 @@ import { UsersModule } from './modules/users/users.module';
     AssessmentModule,
     SrsModule,
     PlannerModule,
-    // 11 billing · ... (ver CLAUDE.md)
+    BillingModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

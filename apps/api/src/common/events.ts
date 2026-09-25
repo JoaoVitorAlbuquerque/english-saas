@@ -249,6 +249,29 @@ export interface DomainEventPayloads {
     state: string;
     answeredAt: string;
   };
+
+  // --- módulo 11: billing ---
+  //
+  // Ninguém escuta ainda: ficam prontos para notificações (15) e progresso
+  // (14). Quem precisa saber o plano do aluno chama o `EntitlementsService`.
+
+  /** Primeiro pagamento confirmado: o plano pago passou a valer. */
+  'subscription.activated': {
+    subscriptionId: string;
+    tier: string;
+    billingPeriod: string;
+    currentPeriodEnd: string | null;
+  };
+  /** Aluno cancelou. O acesso continua até `accessUntil` (nulo = nada pago). */
+  'subscription.canceled': {
+    subscriptionId: string;
+    tier: string;
+    accessUntil: string | null;
+  };
+  /** Cobrança venceu sem pagamento. Acesso segue em carência (PAST_DUE). */
+  'subscription.payment_failed': { subscriptionId: string; tier: string };
+  /** O gateway encerrou a assinatura sem o aluno ter cancelado. */
+  'subscription.expired': { subscriptionId: string; tier: string };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

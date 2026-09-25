@@ -225,6 +225,9 @@ model User {
   studyPlan    StudyPlan?
   dailyAgendas DailyAgenda[]
 
+  subscriptions   Subscription[]
+  aiCreditEntries AiCreditLedgerEntry[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -1683,4 +1686,168 @@ model DailyAgenda {
 
   @@unique([userId, localDate])
   @@map("daily_agendas")
+}
+
+// ===========================================================================
+// Módulo 11 — billing
+//
+// Planos, assinatura no Asaas e créditos de IA. O tier do aluno nunca viaja
+// no JWT: é lido daqui a cada checagem, para cancelar ou assinar valer na
+// hora, sem novo login.
+// ===========================================================================
+
+enum PlanTier {
+  FREE @map("free")
+  BASE @map("base")
+  PLUS @map("plus")
+
+  @@map("plan_tier")
+}
+
+enum BillingPeriod {
+  MONTHLY @map("monthly")
+  YEARLY  @map("yearly")
+
+  @@map("billing_period")
+}
+
+/// PENDING = checkout aberto, primeiro pagamento ainda não confirmado.
+enum SubscriptionStatus {
+  PENDING  @map("pending")
+  ACTIVE   @map("active")
+  PAST_DUE @map("past_due")
+  CANCELED @map("canceled")
+  EXPIRED  @map("expired")
+
+  @@map("subscription_status")
+}
+
+enum PaymentMethod {
+  PIX         @map("pix")
+  BOLETO      @map("boleto")
+  CREDIT_CARD @map("credit_card")
+
+  @@map("payment_method")
+}
+
+enum AiCreditEntryKind {
+  GRANT   @map("grant")
+  CONSUME @map("consume")
+  REFUND  @map("refund")
+  BONUS   @map("bonus")
+
+  @@map("ai_credit_entry_kind")
+}
+
+enum Feature {
+  LESSON_ACCESS    @map("lesson_access")
+  TUTOR_CORRECTION @map("tutor_correction")
+  TUTOR_ROLEPLAY   @map("tutor_roleplay")
+  GENERATOR_TOPIC  @map("generator_topic")
+  GENERATOR_INGEST @map("generator_ingest")
+  PDF_DOWNLOAD     @map("pdf_download")
+
+  @@map("feature")
+}
+
+/// Catálogo de planos, editável pelo admin. FREE não tem período nem preço:
+/// existe só para guardar a cota de créditos dele.
+model SubscriptionPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  tier             PlanTier
+  billingPeriod    BillingPeriod? @map("billing_period")
+  priceCents       Int            @map("price_cents")
+  monthlyAiCredits Int            @map("monthly_ai_credits")
+  /// Desativar tira o plano da vitrine sem apagar quem já assinou.
+  active           Boolean        @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@unique([tier, billingPeriod])
+  @@map("subscription_plans")
+}
+
+/// Histórico de assinaturas do aluno — cancelar e assinar de novo cria outra
+/// linha. No máximo uma PENDING/ACTIVE/PAST_DUE por aluno (índice parcial
+/// escrito à mão na migration).
+model Subscription {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String           @map("user_id") @db.Uuid
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId String           @map("plan_id") @db.Uuid
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  /// Copiados do plano na criação: mudar o catálogo não mexe em quem já assinou.
+  tier          PlanTier
+  billingPeriod BillingPeriod @map("billing_period")
+  priceCents    Int           @map("price_cents")
+  paymentMethod PaymentMethod @map("payment_method")
+
+  status SubscriptionStatus @default(PENDING)
+
+  asaasCustomerId     String? @map("asaas_customer_id")
+  asaasSubscriptionId String? @unique @map("asaas_subscription_id")
+  /// Link de pagamento do Asaas. Nasce nulo: o job de checkout preenche.
+  checkoutUrl         String? @map("checkout_url")
+
+  /// Até quando o que já foi pago dá acesso. Cada pagamento confirmado empurra.
+  currentPeriodEnd DateTime? @map("current_period_end")
+  canceledAt       DateTime? @map("canceled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@map("subscriptions")
+}
+
+/// Lançamento de crédito de IA. Append-only: o saldo é a soma de `amount`.
+model AiCreditLedgerEntry {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind    AiCreditEntryKind
+  /// Positivo em GRANT/REFUND/BONUS, negativo em CONSUME.
+  amount  Int
+  feature Feature?
+  reason  String?
+
+  /// Só em REFUND: o CONSUME que ele devolve. Único — estornar duas vezes
+  /// o mesmo consumo não duplica.
+  reversalOfId String?              @unique @map("reversal_of_id") @db.Uuid
+  reversalOf   AiCreditLedgerEntry? @relation("CreditReversal", fields: [reversalOfId], references: [id])
+  reversedBy   AiCreditLedgerEntry? @relation("CreditReversal")
+
+  /// Só em GRANT: `PLUS:2026-09`. Deduplica o crédito do mês.
+  cycleKey String? @map("cycle_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, kind, cycleKey])
+  @@index([userId, createdAt])
+  @@map("ai_credit_ledger_entries")
+}
+
+/// Webhook do Asaas já processado. A linha entra na mesma transação que o
+/// efeito — entregar o mesmo evento de novo não faz nada.
+model AsaasWebhookEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  externalEventId String   @unique @map("external_event_id")
+  eventType       String   @map("event_type")
+  payload         Json
+  processedAt     DateTime @default(now()) @map("processed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("asaas_webhook_events")
 }

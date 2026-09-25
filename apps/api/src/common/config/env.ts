@@ -68,7 +68,8 @@ const pricingTableFromJson = z.preprocess(
  *
  * Obrigatórias: banco, Redis, JWT, S3 e a credencial do Bull Board — sem
  * qualquer uma delas a API não sobe, e a mensagem diz exatamente qual falta.
- * Opcional por enquanto: Asaas. Passa a ser exigida no módulo 11 (billing).
+ * Opcional: Asaas. Sem a chave o billing cai no gateway fake e avisa no
+ * log (`PAYMENT_PROVIDER=auto`); em produção use `PAYMENT_PROVIDER=asaas`.
  * A chave da OpenAI também é opcional: sem ela o módulo `ai` cai no provider
  * fake e avisa no log, para o ambiente local subir sem crédito.
  */
@@ -208,8 +209,24 @@ export const envSchema = z.object({
   AI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).default(2),
+  /** Cota mensal do PLUS usada pelo seed de planos; depois vale a do banco. */
   AI_MONTHLY_CREDITS_PLUS: z.coerce.number().int().min(0).default(500),
+  /**
+   * Custo real de IA de um aluno no mês acima do qual o billing loga um
+   * alerta interno. Em micros de dólar: 2_000_000 = US$ 2.
+   */
+  AI_USER_MONTHLY_COST_ALERT_USD_MICROS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(2_000_000),
 
+  /**
+   * 'auto' escolhe sozinho: fake em NODE_ENV=test ou sem ASAAS_API_KEY,
+   * Asaas no resto. Em produção, defina 'asaas' — a falta da chave vira
+   * erro visível em vez de um fake silencioso.
+   */
+  PAYMENT_PROVIDER: z.enum(['auto', 'asaas', 'fake']).default('auto'),
   ASAAS_API_KEY: optional,
   ASAAS_BASE_URL: z.url().default('https://sandbox.asaas.com/api/v3'),
   ASAAS_WEBHOOK_TOKEN: optional,

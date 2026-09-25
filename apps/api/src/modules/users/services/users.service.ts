@@ -86,6 +86,27 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * Ids das contas ativas, em lotes por cursor (id crescente). Para job que
+   * precisa passar por todo mundo — o crédito mensal do billing.
+   */
+  async listActiveIds(input: {
+    afterId?: string | undefined;
+    take: number;
+  }): Promise<string[]> {
+    const rows = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        ...(input.afterId === undefined ? {} : { id: { gt: input.afterId } }),
+      },
+      orderBy: { id: 'asc' },
+      take: input.take,
+      select: { id: true },
+    });
+
+    return rows.map((row) => row.id);
+  }
+
   async updateAccount(
     userId: string,
     input: { name?: string },
