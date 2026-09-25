@@ -19,6 +19,10 @@ import {
 } from './error-profile';
 import { decayedTheta, masteryOf, type SkillState } from './mastery';
 import {
+  placementPseudoEvidence,
+  type PlacementPrior,
+} from './placement-prior';
+import {
   findStrengths,
   findWeaknesses,
   PROFILE_RULES,
@@ -61,6 +65,8 @@ export type ModelInput = {
   errorPatterns: readonly ErrorPatternInfo[];
   goals: readonly LearningGoal[];
   selfReportedLevel: SelfReportedLevel | null;
+  /** Resultado do nivelamento (8), quando o aluno já fez. */
+  placementPrior?: PlacementPrior | null;
 };
 
 export type SkillView = SkillReading & {
@@ -110,7 +116,12 @@ export function buildLearnerModel(input: ModelInput): LearnerModel {
     })
     .sort((a, b) => a.skillId.localeCompare(b.skillId));
 
-  const levels = levelsByCompetency(skills);
+  // O nivelamento entra como pseudo-skill de peso fixo em cada competência
+  // que mediu: dá confiança média de saída e dilui com a prática real.
+  const levels = levelsByCompetency([
+    ...skills,
+    ...placementPseudoEvidence(input.placementPrior ?? null),
+  ]);
   const overall = overallLevel(levels, input.selfReportedLevel);
   const bySkill = new Map(skills.map((skill) => [skill.skillId, skill]));
 

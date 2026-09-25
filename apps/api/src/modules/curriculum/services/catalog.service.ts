@@ -320,6 +320,125 @@ export class CatalogService {
     }));
   }
 
+  /**
+   * Questões avulsas como o aluno as vê — **sem gabarito** — com o áudio
+   * das de escuta assinado agora. O assessment (8) entrega questão por
+   * questão fora de uma lição; o SRS (9) vai fazer o mesmo.
+   */
+  async studentItems(ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.prisma.item.findMany({
+      where: { id: { in: [...ids] } },
+      select: {
+        id: true,
+        type: true,
+        prompt: true,
+        content: true,
+        cefrLevel: true,
+        skills: { orderBy: { position: 'asc' }, select: { skillId: true } },
+      },
+    });
+
+    const audioIds = rows.flatMap((row) => {
+      const assetId = (row.content as { audioAssetId?: unknown } | null)
+        ?.audioAssetId;
+      return typeof assetId === 'string' ? [assetId] : [];
+    });
+
+    const assets = await this.assets.resolveMap(
+      audioIds.length === 0
+        ? []
+        : await this.prisma.mediaAsset.findMany({
+            where: { id: { in: audioIds } },
+            select: {
+              id: true,
+              kind: true,
+              storageKey: true,
+              mimeType: true,
+              durationMs: true,
+            },
+          }),
+    );
+
+    const byId = new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          ...toStudentItem({
+            id: row.id,
+            type: row.type,
+            prompt: row.prompt,
+            content: row.content,
+            cefrLevel: row.cefrLevel,
+            skillIds: row.skills.map((skill) => skill.skillId),
+          }),
+          assets,
+        },
+      ]),
+    );
+
+    // Na ordem pedida, não na do banco.
+    return ids.flatMap((id) => {
+      const item = byId.get(id);
+      return item === undefined ? [] : [item];
+    });
+  }
+
+  /**
+   * As skills que as lições publicadas de uma unidade ensinam, e o nível
+   * da unidade. É o que o checkpoint de unidade (8) cobra.
+   */
+  async unitTargetSkills(unitId: string): Promise<{
+    unitId: string;
+    cefrLevel: CefrLevel;
+    skillIds: string[];
+  }> {
+    const unit = await this.prisma.unit.findUnique({
+      where: { id: unitId },
+      select: {
+        id: true,
+        status: true,
+        level: { select: { cefrLevel: true } },
+        lessons: {
+          where: { publishedVersionId: { not: null } },
+          orderBy: { order: 'asc' },
+          select: {
+            publishedVersion: {
+              select: {
+                targetSkills: {
+                  orderBy: { position: 'asc' },
+                  select: { skillId: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (unit === null || unit.status !== ContentStatus.PUBLISHED) {
+      throw new NotFoundError('Esta unidade ainda não está disponível.');
+    }
+
+    return {
+      unitId: unit.id,
+      cefrLevel: unit.level.cefrLevel,
+      skillIds: [
+        ...new Set(
+          unit.lessons.flatMap(
+            (lesson) =>
+              lesson.publishedVersion?.targetSkills.map(
+                (target) => target.skillId,
+              ) ?? [],
+          ),
+        ),
+      ],
+    };
+  }
+
   /** Monta a lição a partir do banco e guarda no cache. */
   private async buildLesson(
     versionId: string,

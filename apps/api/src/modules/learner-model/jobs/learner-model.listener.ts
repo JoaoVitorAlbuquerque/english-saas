@@ -7,13 +7,16 @@ import type { DomainEvent } from 'src/common/events';
 import { QUEUES } from 'src/infra/queue/queues';
 
 import { LearnerProfileService } from '../services/learner-profile.service';
-import { LEARNER_UPDATE_JOB } from '../services/learner-update.service';
+import {
+  LEARNER_UPDATE_JOB,
+  PLACEMENT_PRIOR_JOB,
+} from '../services/learner-update.service';
 
 /**
  * O que acorda o modelo do aluno.
  *
- * Hoje só `answer.submitted`. O `tutor.feedback` (12) e o
- * `placement.completed` (8) entram aqui quando esses módulos existirem.
+ * `answer.submitted` e `placement.completed`. O `tutor.feedback` (12) entra
+ * aqui quando o tutor existir.
  *
  * Um job por resposta, com o id da resposta: o mesmo evento entregue duas
  * vezes não enfileira duas vezes.
@@ -43,6 +46,38 @@ export class LearnerModelListener {
       LEARNER_UPDATE_JOB,
       { userId },
       { jobId: `answer-${event.payload.answerId}` },
+    );
+  }
+
+  /**
+   * Nivelamento concluído vira ponto de partida. Vai para a mesma fila das
+   * respostas, sob a mesma trava por aluno: as respostas do próprio
+   * nivelamento estão sendo processadas ao mesmo tempo.
+   */
+  @OnEvent('placement.completed')
+  async onPlacementCompleted(
+    event: DomainEvent<'placement.completed'>,
+  ): Promise<void> {
+    const { userId, payload } = event;
+
+    if (userId === undefined) {
+      return;
+    }
+
+    await this.queue.add(
+      PLACEMENT_PRIOR_JOB,
+      {
+        userId,
+        placementId: payload.placementId,
+        theta: payload.theta,
+        competencyThetas: Object.fromEntries(
+          Object.entries(payload.levelsByCompetency).map(
+            ([competency, entry]) => [competency, entry.theta],
+          ),
+        ),
+        completedAt: payload.completedAt,
+      },
+      { jobId: `placement-${payload.placementId}` },
     );
   }
 }

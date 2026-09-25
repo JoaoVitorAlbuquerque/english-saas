@@ -158,7 +158,7 @@ dos que vêm antes dele.
 | 5   | `content-studio`                | 2, 4       | Rascunho por IA, QA automática, revisão humana, TTS e apostila em PDF. ✅ pronto                      |
 | 6   | `learning`                      | 5          | Player da lição: tentativas, etapas, correção de resposta objetiva, XP e sequência. ✅ pronto         |
 | 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses. ✅ pronto          |
-| 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                       |
+| 8   | `assessment`                    | 7          | Nivelamento adaptativo, checkpoints de unidade, `selectItems` nivelado, calibração. ✅ pronto         |
 | 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                   |
 | 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                               |
 | 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                     |
@@ -411,6 +411,34 @@ modelo de um aluno do zero, apague o cursor e os estados.
 
 `Skill.goals` diz a que objetivos do aluno a skill serve. Vazio = serve a
 todos. É o que liga "o aluno quer viajar" à prioridade das necessidades.
+
+### Provas e nivelamento (assessment)
+
+**Quem precisa de questão para o aluno chama
+`AdaptiveItemService.selectItems`** — nunca escolhe item por conta própria.
+Ele mira ~70% de chance de acerto pelo theta da skill no learner-model.
+
+Nivelamento: Rasch (1PL) com estimativa **EAP** (a máxima verossimilhança
+diverge com tudo certo), priori N(nível declarado, 1.5²), próximo item
+perto do theta em rodízio de competências, sorteado entre os 2 melhores.
+Os parâmetros saíram de simulação — mudar exige rodar
+`PRINT_SIMULATION=1 pnpm test -- src/modules/assessment` e comparar.
+
+- **Sem correção item a item** no nivelamento e no checkpoint: gabarito no
+  meio da prova ensina e distorce a medida.
+- A resposta de prova é gravada pelo `AnswerService.record` do learning
+  (contexto PLACEMENT/CHECKPOINT) e ligada ao teste em
+  `assessment_responses`, com dificuldade e competência **congeladas**.
+- O ponto de partida do checkpoint também é congelado no início: as
+  respostas dele atualizam o learner-model, e ler de novo contaria duas
+  vezes.
+- O nivelamento vira ponto de partida do learner-model
+  (`LearnerPlacementPrior`) pela fila `learner-updates`, sob a mesma trava.
+- Checkpoint é diagnóstico: nunca trava nada, pode ser refeito à vontade.
+- A calibração semanal anda no máximo 0.5 logit por rodada e usa o theta
+  **atual** de quem respondeu (aproximação consciente).
+- A escrita do nivelamento é um gancho (`WritingAssessor`, `@Optional()`)
+  que o tutor (12) implementa.
 
 ### Erros e logs
 

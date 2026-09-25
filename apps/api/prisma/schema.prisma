@@ -214,6 +214,10 @@ model User {
   learnerErrorPatterns LearnerErrorPattern[]
   learnerSnapshots     LearnerLevelSnapshot[]
   learnerModelCursor   LearnerModelCursor?
+  learnerPlacement     LearnerPlacementPrior?
+
+  placementTests  PlacementTest[]
+  unitCheckpoints UnitCheckpoint[]
 
   @@index([deletedAt])
   @@map("users")
@@ -678,6 +682,8 @@ model Unit {
   lessons   Lesson[]
   cast      UnitCharacter[]
   workbooks Workbook[]
+
+  checkpoints UnitCheckpoint[]
 
   @@unique([levelId, order])
   @@index([status])
@@ -1363,4 +1369,182 @@ model LearnerModelCursor {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("learner_model_cursors")
+}
+
+/// Ponto de partida vindo do nivelamento (8). Skill nova começa no theta da
+/// competência daqui, e o nivelamento entra na agregação como pseudo-evidência.
+model LearnerPlacementPrior {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId           String   @unique @map("user_id") @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  placementId      String   @map("placement_id") @db.Uuid
+  overallTheta     Float    @map("overall_theta")
+  /// Competency → theta.
+  competencyThetas Json     @map("competency_thetas")
+  placedAt         DateTime @map("placed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("learner_placement_priors")
+}
+
+// ===========================================================================
+// Módulo 8 — assessment
+//
+// Nivelamento, checkpoints de unidade e calibração dos itens. As respostas
+// em si continuam na tabela `answers` do learning (6); aqui fica o que liga
+// cada uma a um teste e o resultado do teste.
+// ===========================================================================
+
+enum AssessmentStatus {
+  IN_PROGRESS @map("in_progress")
+  COMPLETED   @map("completed")
+  ABANDONED   @map("abandoned")
+
+  @@map("assessment_status")
+}
+
+enum AssessmentKind {
+  PLACEMENT  @map("placement")
+  CHECKPOINT @map("checkpoint")
+
+  @@map("assessment_kind")
+}
+
+/// A parte de escrita do nivelamento, corrigida pelo tutor (12) quando existir.
+enum WritingStatus {
+  NOT_OFFERED @map("not_offered")
+  PENDING     @map("pending")
+  SCORED      @map("scored")
+
+  @@map("writing_status")
+}
+
+enum CheckpointResult {
+  PASSED                    @map("passed")
+  PASSED_WITH_REINFORCEMENT @map("passed_with_reinforcement")
+  NEEDS_REINFORCEMENT       @map("needs_reinforcement")
+
+  @@map("checkpoint_result")
+}
+
+/// Teste de nivelamento adaptativo. Um aberto por aluno (índice parcial na
+/// migration); pode ser refeito 60 dias depois do último concluído.
+model PlacementTest {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String           @map("user_id") @db.Uuid
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status AssessmentStatus @default(IN_PROGRESS)
+
+  startLevel    CefrLevel @map("start_level")
+  currentItemId String?   @map("current_item_id") @db.Uuid
+  servedItemIds String[]  @map("served_item_ids")
+
+  theta              Float?
+  standardError      Float?        @map("standard_error")
+  overallLevel       CefrLevel?    @map("overall_level")
+  /// Competency → { theta, standardError, level, items }.
+  levelsByCompetency Json?         @map("levels_by_competency")
+  /// Skills de nível abaixo que o planejador (10) pode pular.
+  masteredSkillIds   String[]      @map("mastered_skill_ids")
+  /// O banco acabou antes do critério de parada. O nível vale menos.
+  bankExhausted      Boolean       @default(false) @map("bank_exhausted")
+  writingStatus      WritingStatus @default(NOT_OFFERED) @map("writing_status")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, completedAt])
+  @@map("placement_tests")
+}
+
+/// Mini-prova adaptativa de uma unidade. Nunca trava nada: é diagnóstico.
+model UnitCheckpoint {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String           @map("user_id") @db.Uuid
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unitId String           @map("unit_id") @db.Uuid
+  unit   Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  status AssessmentStatus @default(IN_PROGRESS)
+
+  targetSkillIds String[] @map("target_skill_ids")
+  /// Pontos fracos do aluno que entraram na prova, além das skills da unidade.
+  weakSkillIds   String[] @map("weak_skill_ids")
+  currentItemId  String?  @map("current_item_id") @db.Uuid
+  servedItemIds  String[] @map("served_item_ids")
+
+  result            CheckpointResult?
+  reinforceSkillIds String[]          @map("reinforce_skill_ids")
+  /// Skill → { priorTheta, theta?, p?, answered?, correct? }. O ponto de
+  /// partida é congelado no início: as respostas do próprio checkpoint
+  /// também atualizam o learner-model, e usá-lo de novo contaria duas vezes.
+  skillResults      Json?             @map("skill_results")
+  score             Float?
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, unitId])
+  @@map("unit_checkpoints")
+}
+
+/// Liga uma resposta (`answers`, do learning) a um teste, com o que a
+/// estimativa precisa congelado no momento: dificuldade e competência.
+model AssessmentResponse {
+  id String @id @default(uuid()) @db.Uuid
+
+  kind     AssessmentKind
+  /// Id do PlacementTest ou do UnitCheckpoint. Sem FK: são duas tabelas.
+  testId   String         @map("test_id") @db.Uuid
+  answerId String         @unique @map("answer_id") @db.Uuid
+  itemId   String         @map("item_id") @db.Uuid
+
+  skillIds   String[]
+  competency Competency
+  difficulty Float
+  isCorrect  Boolean    @map("is_correct")
+  position   Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([testId, position])
+  @@index([testId])
+  @@map("assessment_responses")
+}
+
+/// Uma rodada de calibração de um item: o que se estimou, o que se aplicou e
+/// o que merece o olho do editor.
+model ItemCalibration {
+  id String @id @default(uuid()) @db.Uuid
+
+  itemId              String    @map("item_id") @db.Uuid
+  responses           Int
+  pValue              Float     @map("p_value")
+  estimatedDifficulty Float     @map("estimated_difficulty")
+  previousDifficulty  Float     @map("previous_difficulty")
+  appliedDifficulty   Float     @map("applied_difficulty")
+  pointBiserial       Float?    @map("point_biserial")
+  /// TOO_EASY, TOO_HARD, LOW_DISCRIMINATION.
+  flags               String[]
+  calibratedAt        DateTime  @map("calibrated_at")
+  resolvedAt          DateTime? @map("resolved_at")
+  resolvedById        String?   @map("resolved_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([itemId, calibratedAt])
+  @@index([resolvedAt])
+  @@map("item_calibrations")
 }

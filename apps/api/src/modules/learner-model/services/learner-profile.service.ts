@@ -11,7 +11,17 @@ import { UsersService } from 'src/modules/users/services/users.service';
 
 import type { ErrorExample, ErrorState } from '../domain/error-profile';
 import { buildLearnerModel, type LearnerModel } from '../domain/learner-model';
-import { masteryOf, type SkillState } from '../domain/mastery';
+import {
+  decayedTheta,
+  initialSkillState,
+  masteryOf,
+  type SkillState,
+} from '../domain/mastery';
+import {
+  priorThetaFor,
+  priorThetasBySkill,
+  type PlacementPrior,
+} from '../domain/placement-prior';
 import { classifySkill } from '../domain/profile';
 import {
   buildSnapshot,
@@ -154,12 +164,14 @@ export class LearnerProfileService {
 
   /** Monta o modelo inteiro do aluno a partir do banco. */
   async computeModel(userId: string, now = new Date()) {
-    const [graph, skillRows, errorRows, context] = await Promise.all([
-      this.taxonomy.skillGraph(),
-      this.prisma.learnerSkillState.findMany({ where: { userId } }),
-      this.prisma.learnerErrorPattern.findMany({ where: { userId } }),
-      this.users.learnerContext(userId),
-    ]);
+    const [graph, skillRows, errorRows, context, placementPrior] =
+      await Promise.all([
+        this.taxonomy.skillGraph(),
+        this.prisma.learnerSkillState.findMany({ where: { userId } }),
+        this.prisma.learnerErrorPattern.findMany({ where: { userId } }),
+        this.users.learnerContext(userId),
+        this.placementPrior(userId),
+      ]);
 
     const errorStates = new Map(
       errorRows.map((row) => [row.errorPatternId, toErrorState(row)]),
@@ -178,10 +190,136 @@ export class LearnerProfileService {
       errorPatterns,
       goals: context.goals,
       selfReportedLevel: context.selfReportedLevel,
+      placementPrior,
     });
 
     return { model, context };
   }
+
+  async placementPrior(userId: string): Promise<PlacementPrior | null> {
+    const row = await this.prisma.learnerPlacementPrior.findUnique({
+      where: { userId },
+    });
+
+    return row === null ? null : toPlacementPrior(row);
+  }
+
+  /**
+   * Theta atual do aluno em cada skill pedida, com o decaimento de leitura.
+   * Skill sem estado usa o ponto de partida — o do nivelamento, se houver,
+   * senão a dificuldade típica do nível dela.
+   *
+   * É o que o assessment (8) usa para nivelar questões: `selectItems` e o
+   * checkpoint miram a dificuldade a partir daqui.
+   */
+  async skillThetas(
+    userId: string,
+    skillIds: readonly string[],
+    now = new Date(),
+  ): Promise<Map<string, number>> {
+    if (skillIds.length === 0) {
+      return new Map();
+    }
+
+    const [graph, rows, prior] = await Promise.all([
+      this.taxonomy.skillGraph(),
+      this.prisma.learnerSkillState.findMany({
+        where: { userId, skillId: { in: [...skillIds] } },
+      }),
+      this.placementPrior(userId),
+    ]);
+
+    const nodes = new Map(graph.map((node) => [node.id, node]));
+    const states = new Map(rows.map((row) => [row.skillId, toSkillState(row)]));
+    const priors = priorThetasBySkill(prior, graph);
+
+    return new Map(
+      skillIds.flatMap((skillId) => {
+        const node = nodes.get(skillId);
+        if (node === undefined) return [];
+
+        const state =
+          states.get(skillId) ??
+          initialSkillState(node.cefrLevel, priors.get(skillId));
+
+        return [[skillId, decayedTheta(state, now)] as const];
+      }),
+    );
+  }
+
+  /**
+   * Habilidade de vários alunos numa skill, para a calibração (8). Mesma
+   * regra de `skillThetas`, em lote.
+   */
+  async abilities(
+    userIds: readonly string[],
+    skillId: string,
+    now = new Date(),
+  ): Promise<Map<string, number>> {
+    const unique = [...new Set(userIds)];
+
+    if (unique.length === 0) {
+      return new Map();
+    }
+
+    const [graph, rows, priors] = await Promise.all([
+      this.taxonomy.skillGraph(),
+      this.prisma.learnerSkillState.findMany({
+        where: { skillId, userId: { in: unique } },
+      }),
+      this.prisma.learnerPlacementPrior.findMany({
+        where: { userId: { in: unique } },
+      }),
+    ]);
+
+    const node = graph.find((candidate) => candidate.id === skillId);
+
+    if (node === undefined) {
+      return new Map();
+    }
+
+    const states = new Map(rows.map((row) => [row.userId, toSkillState(row)]));
+    const priorByUser = new Map(
+      priors.map((row) => [row.userId, toPlacementPrior(row)]),
+    );
+
+    return new Map(
+      unique.map((userId) => {
+        const prior = priorByUser.get(userId);
+        const state =
+          states.get(userId) ??
+          initialSkillState(
+            node.cefrLevel,
+            prior === undefined
+              ? undefined
+              : priorThetaFor(prior, node.competency),
+          );
+
+        return [userId, decayedTheta(state, now)] as const;
+      }),
+    );
+  }
+}
+
+export function toPlacementPrior(row: {
+  overallTheta: number;
+  competencyThetas: Prisma.JsonValue;
+}): PlacementPrior {
+  const raw =
+    row.competencyThetas !== null &&
+    typeof row.competencyThetas === 'object' &&
+    !Array.isArray(row.competencyThetas)
+      ? (row.competencyThetas as Record<string, unknown>)
+      : {};
+
+  return {
+    overallTheta: row.overallTheta,
+    competencyThetas: Object.fromEntries(
+      Object.entries(raw).filter(
+        (entry): entry is [string, number] => typeof entry[1] === 'number',
+      ),
+    ) as PlacementPrior['competencyThetas'],
+  };
 }
 
 export function toSkillState(row: {

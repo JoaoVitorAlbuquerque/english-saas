@@ -44,6 +44,13 @@ import {
   type SkillState,
 } from './domain/mastery';
 import {
+  adjustToPlacement,
+  PLACEMENT_PRIOR_WEIGHT,
+  placementPseudoEvidence,
+  priorThetasBySkill,
+  type PlacementPrior,
+} from './domain/placement-prior';
+import {
   classifySkill,
   findStrengths,
   findWeaknesses,
@@ -855,5 +862,91 @@ describe('interests', () => {
       LEARNED_INTEREST_START + 5,
     );
     expect(applyInterestSignal(null, 'MATERIAL_ABANDONED')).toBeNull();
+  });
+});
+
+describe('ponto de partida do nivelamento', () => {
+  const prior: PlacementPrior = {
+    overallTheta: 0.2,
+    competencyThetas: { GRAMMAR: 0.4, VOCABULARY: -0.1 },
+  };
+
+  it('skill nova começa no theta da competência medida, ou no geral', () => {
+    const bySkill = priorThetasBySkill(prior, [
+      { id: 'g', competency: 'GRAMMAR' },
+      { id: 's', competency: 'SPEAKING' },
+    ]);
+
+    expect(bySkill.get('g')).toBe(0.4);
+    expect(bySkill.get('s')).toBe(0.2);
+    expect(initialSkillState('A1', bySkill.get('g')).theta).toBe(0.4);
+    expect(initialSkillState('A1').theta).toBe(-2);
+  });
+
+  it('só traz para o ponto de partida o que foi pouco praticado', () => {
+    const changed = adjustToPlacement(
+      new Map<string, SkillState>([
+        [
+          'few',
+          {
+            theta: -2.2,
+            evidenceCount: 2,
+            correctStreak: 0,
+            lastPracticedAt: T0,
+          },
+        ],
+        [
+          'many',
+          {
+            theta: -1,
+            evidenceCount: 9,
+            correctStreak: 3,
+            lastPracticedAt: T0,
+          },
+        ],
+      ]),
+      new Map([
+        ['few', 0.4],
+        ['many', 0.4],
+      ]),
+    );
+
+    expect([...changed.keys()]).toEqual(['few']);
+    expect(changed.get('few')).toMatchObject({ theta: 0.4, evidenceCount: 2 });
+  });
+
+  it('pseudo-evidência só nas competências medidas', () => {
+    expect(placementPseudoEvidence(prior)).toEqual([
+      { competency: 'GRAMMAR', theta: 0.4, evidence: PLACEMENT_PRIOR_WEIGHT },
+      {
+        competency: 'VOCABULARY',
+        theta: -0.1,
+        evidence: PLACEMENT_PRIOR_WEIGHT,
+      },
+    ]);
+    expect(placementPseudoEvidence(null)).toEqual([]);
+  });
+
+  it('logo depois do nivelamento, o nível geral sai do modelo', () => {
+    const model = buildLearnerModel({
+      now: T0,
+      graph: [],
+      skillStates: new Map(),
+      errorStates: new Map(),
+      errorPatterns: [],
+      goals: [],
+      selfReportedLevel: 'NONE',
+      placementPrior: prior,
+    });
+
+    expect(model.overall).toEqual({ level: 'B1', source: 'MODEL' });
+    expect(model.levels.GRAMMAR).toMatchObject({
+      level: 'B1',
+      confidence: 'MEDIUM',
+    });
+    expect(model.levels.SPEAKING).toMatchObject({
+      level: null,
+      confidence: 'LOW',
+    });
   });
 });

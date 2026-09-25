@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Injectable, Logger } from '@nestjs/common';
-import type { CefrLevel, Prisma } from '@prisma/client';
+import type { CefrLevel, Competency, Prisma } from '@prisma/client';
 
 import { EventBusService } from 'src/infra/events/event-bus.service';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
@@ -15,12 +15,18 @@ import { weekStartOf } from '../domain/competency-level';
 import type { ErrorState } from '../domain/error-profile';
 import type { SkillState } from '../domain/mastery';
 import {
+  adjustToPlacement,
+  priorThetasBySkill,
+  type PlacementPrior,
+} from '../domain/placement-prior';
+import {
   LearnerProfileService,
   toErrorState,
   toSkillState,
 } from './learner-profile.service';
 
 export const LEARNER_UPDATE_JOB = 'learner-update';
+export const PLACEMENT_PRIOR_JOB = 'placement-prior';
 
 /** Respostas lidas por volta. Um aluno ativo gera dezenas por dia, não milhares. */
 const BATCH_SIZE = 200;
@@ -71,6 +77,73 @@ export class LearnerUpdateService {
   }
 
   async process(userId: string): Promise<UpdateOutcome> {
+    return this.withLock(userId, async () => ({
+      status: 'DONE',
+      processed: await this.drain(userId),
+    }));
+  }
+
+  /**
+   * Aplica o resultado do nivelamento (8) como ponto de partida, sob a
+   * mesma trava das respostas — as respostas do próprio nivelamento chegam
+   * pela fila ao mesmo tempo, e as duas escritas não podem se cruzar.
+   */
+  async applyPlacement(
+    userId: string,
+    placement: {
+      placementId: string;
+      theta: number;
+      competencyThetas: Partial<Record<Competency, number>>;
+      completedAt: Date;
+    },
+  ): Promise<UpdateOutcome> {
+    return this.withLock(userId, async () => {
+      const prior: PlacementPrior = {
+        overallTheta: placement.theta,
+        competencyThetas: placement.competencyThetas,
+      };
+      const data = {
+        placementId: placement.placementId,
+        overallTheta: prior.overallTheta,
+        competencyThetas:
+          prior.competencyThetas as unknown as Prisma.InputJsonValue,
+        placedAt: placement.completedAt,
+      };
+
+      const [graph, rows] = await Promise.all([
+        this.taxonomy.skillGraph(),
+        this.prisma.learnerSkillState.findMany({ where: { userId } }),
+      ]);
+      const changed = adjustToPlacement(
+        new Map(rows.map((row) => [row.skillId, toSkillState(row)])),
+        priorThetasBySkill(prior, graph),
+      );
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.learnerPlacementPrior.upsert({
+          where: { userId },
+          create: { userId, ...data },
+          update: data,
+        });
+
+        for (const [skillId, state] of changed) {
+          await tx.learnerSkillState.update({
+            where: { userId_skillId: { userId, skillId } },
+            data: { theta: state.theta },
+          });
+        }
+      });
+
+      await this.afterUpdate(userId, 0, new Set(changed.keys()), new Set());
+
+      return { status: 'DONE', processed: 0 };
+    });
+  }
+
+  private async withLock(
+    userId: string,
+    work: () => Promise<UpdateOutcome>,
+  ): Promise<UpdateOutcome> {
     const key = LearnerUpdateService.lockKey(userId);
     const token = randomUUID();
     const acquired = await this.redis.client.set(
@@ -86,14 +159,18 @@ export class LearnerUpdateService {
     }
 
     try {
-      return { status: 'DONE', processed: await this.drain(userId) };
+      return await work();
     } finally {
       await this.redis.client.eval(RELEASE_LOCK, 1, key, token);
     }
   }
 
   private async drain(userId: string): Promise<number> {
-    const graph = await this.taxonomy.skillGraph();
+    const [graph, prior] = await Promise.all([
+      this.taxonomy.skillGraph(),
+      this.profiles.placementPrior(userId),
+    ]);
+    const priorThetas = priorThetasBySkill(prior, graph);
     const skillLevels = new Map<string, CefrLevel>(
       graph.map((node) => [node.id, node.cefrLevel]),
     );
@@ -152,6 +229,7 @@ export class LearnerUpdateService {
         errorStates: new Map<string, ErrorState>(
           errorRows.map((row) => [row.errorPatternId, toErrorState(row)]),
         ),
+        priorThetas,
       });
 
       await this.prisma.$transaction(async (tx) => {

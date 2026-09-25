@@ -366,6 +366,85 @@ export class ItemService {
   }
 
   /**
+   * Questões publicadas que podem entrar numa prova ou lista nivelada (8),
+   * com a competência da skill principal — é por ela que o nivelamento
+   * alterna. Filtra por skill quando pedido.
+   */
+  async findCandidates(filter: { skillIds?: readonly string[] } = {}) {
+    const rows = await this.prisma.item.findMany({
+      where: {
+        status: ContentStatus.PUBLISHED,
+        ...(filter.skillIds === undefined
+          ? {}
+          : { skills: { some: { skillId: { in: [...filter.skillIds] } } } }),
+      },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        type: true,
+        difficulty: true,
+        exposureCount: true,
+        skills: {
+          orderBy: { position: 'asc' },
+          select: { skillId: true, skill: { select: { competency: true } } },
+        },
+      },
+    });
+
+    return rows.flatMap((row) => {
+      const primary = row.skills[0];
+
+      return primary === undefined
+        ? []
+        : [
+            {
+              id: row.id,
+              type: row.type,
+              difficulty: row.difficulty,
+              exposureCount: row.exposureCount,
+              competency: primary.skill.competency,
+              skillIds: row.skills.map((link) => link.skillId),
+            },
+          ];
+    });
+  }
+
+  /** Itens com exposição suficiente para calibrar (8), e a skill principal. */
+  async findCalibratable(minExposure: number) {
+    const rows = await this.prisma.item.findMany({
+      where: { exposureCount: { gte: minExposure } },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        difficulty: true,
+        skills: {
+          orderBy: { position: 'asc' },
+          take: 1,
+          select: { skillId: true },
+        },
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      difficulty: row.difficulty,
+      primarySkillId: row.skills[0]?.skillId ?? null,
+    }));
+  }
+
+  /**
+   * Grava a dificuldade recalibrada pelo assessment (8). Como a
+   * estatística, não passa pela trava de imutabilidade: a trava protege o
+   * enunciado, e a dificuldade é justamente o que se mede dele.
+   */
+  async applyCalibration(itemId: string, difficulty: number): Promise<void> {
+    await this.prisma.item.updateMany({
+      where: { id: itemId },
+      data: { difficulty },
+    });
+  }
+
+  /**
    * Grava a estatística de exposição calculada pelo learning (6).
    *
    * Não passa pela trava de imutabilidade: `exposureCount` e `correctRate`

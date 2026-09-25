@@ -93,13 +93,19 @@ export function skillWeight(position: number): number {
 }
 
 /**
- * Ponto de partida de uma skill nunca praticada: a dificuldade típica do
- * nível dela. Assim a mastery começa em 0.5 — "não sei" — e não em 0.88
- * para uma skill A1 só porque theta 0 é B1.
+ * Ponto de partida de uma skill nunca praticada.
+ *
+ * Com nivelamento (8), é o theta da competência que ele mediu — um aluno
+ * B1 não começa uma skill A1 do zero. Sem nivelamento, a dificuldade
+ * típica do nível da skill: a mastery começa em 0.5 — "não sei" — e não em
+ * 0.88 para uma skill A1 só porque theta 0 é B1.
  */
-export function initialSkillState(level: CefrLevel): SkillState {
+export function initialSkillState(
+  level: CefrLevel,
+  priorTheta?: number,
+): SkillState {
   return {
-    theta: typicalDifficulty(level),
+    theta: priorTheta ?? typicalDifficulty(level),
     evidenceCount: 0,
     correctStreak: 0,
     lastPracticedAt: null,

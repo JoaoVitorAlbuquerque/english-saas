@@ -224,6 +224,46 @@ export class AnswerService {
     });
   }
 
+  /**
+   * Questões que o aluno já respondeu, sem repetição — para o assessment
+   * (8) não servir de novo. Filtra por janela e por contexto quando pedido.
+   */
+  async answeredItemIds(
+    userId: string,
+    filter: { since?: Date; contexts?: readonly AnswerContext[] } = {},
+  ): Promise<string[]> {
+    const rows = await this.prisma.answer.findMany({
+      where: {
+        userId,
+        ...(filter.since === undefined
+          ? {}
+          : { createdAt: { gte: filter.since } }),
+        ...(filter.contexts === undefined
+          ? {}
+          : { context: { in: [...filter.contexts] } }),
+      },
+      distinct: ['itemId'],
+      select: { itemId: true },
+    });
+
+    return rows.map((row) => row.itemId);
+  }
+
+  /**
+   * Primeiras tentativas por item, com quem respondeu — a matéria-prima da
+   * calibração (8).
+   */
+  async firstTriesForItems(itemIds: readonly string[]) {
+    if (itemIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.answer.findMany({
+      where: { itemId: { in: [...itemIds] }, isFirstTry: true },
+      select: { itemId: true, userId: true, isCorrect: true },
+    });
+  }
+
   // -------------------------------------------------------------------
 
   private async loadPublishedItem(itemId: string): Promise<LoadedItem> {

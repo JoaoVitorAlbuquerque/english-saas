@@ -185,6 +185,37 @@ export interface DomainEventPayloads {
     errorPatternIds: string[];
     overallLevel: string;
   };
+
+  // --- módulo 8: assessment ---
+
+  /**
+   * Nivelamento concluído. O learner-model (7) grava como ponto de partida;
+   * o planejador (10) pula as `masteredSkillIds`.
+   */
+  'placement.completed': {
+    placementId: string;
+    overallLevel: string;
+    theta: number;
+    standardError: number;
+    /** Competency → { theta, standardError, level, items }. */
+    levelsByCompetency: Record<
+      string,
+      { theta: number; standardError: number; level: string; items: number }
+    >;
+    masteredSkillIds: string[];
+    itemsAnswered: number;
+    bankExhausted: boolean;
+    completedAt: string;
+  };
+  /** Checkpoint de unidade concluído. Diagnóstico — não trava nada. */
+  'checkpoint.completed': {
+    checkpointId: string;
+    unitId: string;
+    result: string;
+    score: number;
+    reinforceSkillIds: string[];
+    itemsAnswered: number;
+  };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

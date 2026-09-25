@@ -61,6 +61,8 @@ export function applyAnswers(input: {
   errorPatternsBySkill: ReadonlyMap<string, readonly string[]>;
   skillStates: ReadonlyMap<string, SkillState>;
   errorStates: ReadonlyMap<string, ErrorState>;
+  /** Ponto de partida por skill, vindo do nivelamento. Opcional. */
+  priorThetas?: ReadonlyMap<string, number>;
 }): ApplyResult {
   const skillStates = new Map(input.skillStates);
   const errorStates = new Map(input.errorStates);
@@ -81,7 +83,9 @@ export function applyAnswers(input: {
         // Skill fora da taxonomia atual: sem nível, não há ponto de partida.
         if (level === undefined) return;
 
-        const current = skillStates.get(skillId) ?? initialSkillState(level);
+        const current =
+          skillStates.get(skillId) ??
+          initialSkillState(level, input.priorThetas?.get(skillId));
 
         skillStates.set(
           skillId,

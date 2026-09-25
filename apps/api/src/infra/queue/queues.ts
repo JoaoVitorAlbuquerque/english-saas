@@ -25,6 +25,8 @@ export const QUEUES = {
    * aluno (trava no Redis + marca d'água), nunca em paralelo para o mesmo.
    */
   LEARNER_UPDATES: 'learner-updates',
+  /** Calibração semanal da dificuldade dos itens. */
+  ASSESSMENT: 'assessment',
   /** Reagendamento de revisão espaçada e do cronograma. */
   SCHEDULING: 'scheduling',
   /** E-mail, push e lembretes. */
@@ -44,4 +46,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.MEDIA,
   QUEUES.LEARNING,
   QUEUES.LEARNER_UPDATES,
+  QUEUES.ASSESSMENT,
 ];

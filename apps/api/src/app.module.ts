@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { InfraModule } from './infra/infra.module';
 import { AiModule } from './modules/ai/ai.module';
+import { AssessmentModule } from './modules/assessment/assessment.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ContentStudioModule } from './modules/content-studio/content-studio.module';
 import { CurriculumModule } from './modules/curriculum/curriculum.module';
@@ -37,7 +38,8 @@ import { UsersModule } from './modules/users/users.module';
     ContentStudioModule,
     LearningModule,
     LearnerModelModule,
-    // 8 assessment · 9 srs · ... (ver CLAUDE.md)
+    AssessmentModule,
+    // 9 srs · 10 planner · ... (ver CLAUDE.md)
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
