@@ -216,6 +216,27 @@ export interface DomainEventPayloads {
     reinforceSkillIds: string[];
     itemsAnswered: number;
   };
+
+  // --- módulo 9: srs ---
+
+  /**
+   * Um card de revisão foi respondido e o FSRS recalculou o agendamento.
+   * O learner-model (7) escuta para VOCAB/CHUNK (evidência de mastery, peso
+   * baixo) e ERROR_PATTERN (nova oportunidade na janela de recorrência) —
+   * SKILL já chega pelo `answer.submitted` de sempre.
+   */
+  'review.answered': {
+    cardId: string;
+    kind: string;
+    refId: string;
+    rating: string;
+    due: string;
+    stability: number;
+    reps: number;
+    lapses: number;
+    state: string;
+    answeredAt: string;
+  };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

@@ -1,21 +1,30 @@
-import { randomUUID } from 'node:crypto';
-
 import { Injectable, Logger } from '@nestjs/common';
 import type { CefrLevel, Competency, Prisma } from '@prisma/client';
 
 import { EventBusService } from 'src/infra/events/event-bus.service';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 import { RedisService } from 'src/infra/redis/redis.service';
+import { withLock as withUserLock } from 'src/infra/redis/user-lock';
 import { ItemService } from 'src/modules/curriculum/services/item.service';
 import { TaxonomyService } from 'src/modules/curriculum/services/taxonomy.service';
 import { AnswerService } from 'src/modules/learning/services/answer.service';
 
 import { applyAnswers, type ModelItem } from '../domain/apply-answers';
 import { weekStartOf } from '../domain/competency-level';
-import type { ErrorState } from '../domain/error-profile';
-import type { SkillState } from '../domain/mastery';
+import {
+  emptyErrorState,
+  recordOpportunity,
+  type ErrorState,
+} from '../domain/error-profile';
+import {
+  applyAnswer,
+  initialSkillState,
+  typicalDifficulty,
+  type SkillState,
+} from '../domain/mastery';
 import {
   adjustToPlacement,
+  priorThetaFor,
   priorThetasBySkill,
   type PlacementPrior,
 } from '../domain/placement-prior';
@@ -27,18 +36,24 @@ import {
 
 export const LEARNER_UPDATE_JOB = 'learner-update';
 export const PLACEMENT_PRIOR_JOB = 'placement-prior';
+export const REVIEW_OUTCOME_JOB = 'review-outcome';
+
+/**
+ * Score de um rating auto-avaliado do SRS (9), para o Elo do mastery. Peso
+ * baixo: é um sinal sem calibração por trás, ao contrário de uma questão.
+ */
+const REVIEW_SCORE: Record<'AGAIN' | 'HARD' | 'GOOD' | 'EASY', number> = {
+  AGAIN: 0,
+  HARD: 0.6,
+  GOOD: 1,
+  EASY: 1,
+};
+const REVIEW_EVIDENCE_WEIGHT = 0.3;
 
 /** Respostas lidas por volta. Um aluno ativo gera dezenas por dia, não milhares. */
 const BATCH_SIZE = 200;
 /** A trava expira sozinha se o worker morrer segurando. */
 const LOCK_TTL_MS = 60_000;
-
-/** Solta a trava só se ainda for nossa — ela pode ter expirado e sido pega. */
-const RELEASE_LOCK = `
-if redis.call("get", KEYS[1]) == ARGV[1] then
-  return redis.call("del", KEYS[1])
-end
-return 0`;
 
 export type UpdateOutcome =
   { status: 'LOCKED' } | { status: 'DONE'; processed: number };
@@ -140,29 +155,134 @@ export class LearnerUpdateService {
     });
   }
 
+  /**
+   * Um card de revisão do SRS (9) foi respondido. SKILL já chega pelo
+   * `answer.submitted` de sempre — isto é só para VOCAB/CHUNK (evidência de
+   * mastery, com peso baixo, porque não é uma questão calibrada) e
+   * ERROR_PATTERN (mais uma oportunidade na janela de recorrência: duas
+   * revisões boas seguidas empurram o erro para fora da janela sozinhas).
+   */
+  async applyReviewOutcome(
+    userId: string,
+    outcome: {
+      kind: 'VOCAB' | 'CHUNK' | 'ERROR_PATTERN';
+      refId: string;
+      rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
+      at: Date;
+    },
+  ): Promise<UpdateOutcome> {
+    return this.withLock(userId, async () => {
+      const touchedSkills =
+        outcome.kind === 'ERROR_PATTERN'
+          ? new Set<string>()
+          : await this.applySkillReview(
+              userId,
+              outcome.refId,
+              outcome.rating,
+              outcome.at,
+            );
+      const touchedErrors = new Set<string>();
+
+      if (outcome.kind === 'ERROR_PATTERN') {
+        await this.applyErrorReview(
+          userId,
+          outcome.refId,
+          outcome.rating,
+          outcome.at,
+        );
+        touchedErrors.add(outcome.refId);
+      }
+
+      await this.afterUpdate(userId, 0, touchedSkills, touchedErrors);
+
+      return { status: 'DONE', processed: 0 };
+    });
+  }
+
+  private async applyErrorReview(
+    userId: string,
+    errorPatternId: string,
+    rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY',
+    at: Date,
+  ): Promise<void> {
+    const row = await this.prisma.learnerErrorPattern.findUnique({
+      where: { userId_errorPatternId: { userId, errorPatternId } },
+    });
+    const state = row === null ? emptyErrorState() : toErrorState(row);
+    const next = recordOpportunity(state, {
+      hit: rating === 'AGAIN' || rating === 'HARD',
+      at,
+    });
+    const data = {
+      recentOutcomes: next.recentOutcomes,
+      totalOccurrences: next.totalOccurrences,
+      lastOccurredAt: next.lastOccurredAt,
+      examples: next.examples as unknown as Prisma.InputJsonValue,
+    };
+
+    await this.prisma.learnerErrorPattern.upsert({
+      where: { userId_errorPatternId: { userId, errorPatternId } },
+      create: { userId, errorPatternId, ...data },
+      update: data,
+    });
+  }
+
+  private async applySkillReview(
+    userId: string,
+    skillId: string,
+    rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY',
+    at: Date,
+  ): Promise<Set<string>> {
+    const [graph, row, prior] = await Promise.all([
+      this.taxonomy.skillGraph(),
+      this.prisma.learnerSkillState.findUnique({
+        where: { userId_skillId: { userId, skillId } },
+      }),
+      this.profiles.placementPrior(userId),
+    ]);
+    const node = graph.find((candidate) => candidate.id === skillId);
+
+    if (node === undefined) {
+      return new Set();
+    }
+
+    const priorTheta =
+      prior === null ? undefined : priorThetaFor(prior, node.competency);
+    const state =
+      row === null
+        ? initialSkillState(node.cefrLevel, priorTheta)
+        : toSkillState(row);
+
+    const next = applyAnswer(state, {
+      difficulty: typicalDifficulty(node.cefrLevel),
+      score: REVIEW_SCORE[rating],
+      isCorrect: rating !== 'AGAIN',
+      hintsUsed: 0,
+      weight: REVIEW_EVIDENCE_WEIGHT,
+      at,
+    });
+
+    await this.prisma.learnerSkillState.upsert({
+      where: { userId_skillId: { userId, skillId } },
+      create: { userId, skillId, ...next },
+      update: next,
+    });
+
+    return new Set([skillId]);
+  }
+
   private async withLock(
     userId: string,
     work: () => Promise<UpdateOutcome>,
   ): Promise<UpdateOutcome> {
-    const key = LearnerUpdateService.lockKey(userId);
-    const token = randomUUID();
-    const acquired = await this.redis.client.set(
-      key,
-      token,
-      'PX',
+    const outcome = await withUserLock(
+      this.redis,
+      LearnerUpdateService.lockKey(userId),
       LOCK_TTL_MS,
-      'NX',
+      work,
     );
 
-    if (acquired === null) {
-      return { status: 'LOCKED' };
-    }
-
-    try {
-      return await work();
-    } finally {
-      await this.redis.client.eval(RELEASE_LOCK, 1, key, token);
-    }
+    return outcome.status === 'LOCKED' ? { status: 'LOCKED' } : outcome.result;
   }
 
   private async drain(userId: string): Promise<number> {

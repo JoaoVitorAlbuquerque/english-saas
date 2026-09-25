@@ -18,6 +18,7 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { HealthModule } from './modules/health/health.module';
 import { LearnerModelModule } from './modules/learner-model/learner-model.module';
 import { LearningModule } from './modules/learning/learning.module';
+import { SrsModule } from './modules/srs/srs.module';
 import { UsersModule } from './modules/users/users.module';
 
 /**
@@ -39,7 +40,8 @@ import { UsersModule } from './modules/users/users.module';
     LearningModule,
     LearnerModelModule,
     AssessmentModule,
-    // 9 srs · 10 planner · ... (ver CLAUDE.md)
+    SrsModule,
+    // 10 planner · ... (ver CLAUDE.md)
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

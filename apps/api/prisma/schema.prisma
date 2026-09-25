@@ -219,6 +219,9 @@ model User {
   placementTests  PlacementTest[]
   unitCheckpoints UnitCheckpoint[]
 
+  reviewCards     ReviewCard[]
+  srsUpdateCursor SrsUpdateCursor?
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -1547,4 +1550,82 @@ model ItemCalibration {
   @@index([itemId, calibratedAt])
   @@index([resolvedAt])
   @@map("item_calibrations")
+}
+
+enum ReviewCardKind {
+  SKILL         @map("skill")
+  VOCAB         @map("vocab")
+  CHUNK         @map("chunk")
+  REGISTER_NOTE @map("register_note")
+  ERROR_PATTERN @map("error_pattern")
+
+  @@map("review_card_kind")
+}
+
+enum ReviewCardSource {
+  LESSON             @map("lesson")
+  GENERATED_MATERIAL @map("generated_material")
+  TUTOR_FEEDBACK     @map("tutor_feedback")
+  PLACEMENT          @map("placement")
+
+  @@map("review_card_source")
+}
+
+/// Mesmos quatro estados do `State` do ts-fsrs.
+enum ReviewCardState {
+  NEW        @map("new")
+  LEARNING   @map("learning")
+  REVIEW     @map("review")
+  RELEARNING @map("relearning")
+
+  @@map("review_card_state")
+}
+
+/// Card de revisão espaçada (FSRS). `refId` aponta para Skill, RegisterNote
+/// ou ErrorPattern conforme o `kind` — sem FK, porque são três tabelas
+/// diferentes (mesma ideia da referência dentro de JSON do módulo 4).
+model ReviewCard {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String           @map("user_id") @db.Uuid
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind   ReviewCardKind
+  refId  String           @map("ref_id")
+  source ReviewCardSource
+
+  due            DateTime
+  stability      Float
+  difficulty     Float
+  /// Campos que o ts-fsrs precisa para o próximo cálculo.
+  scheduledDays  Int             @default(0) @map("scheduled_days")
+  learningSteps  Int             @default(0) @map("learning_steps")
+  reps           Int             @default(0)
+  lapses         Int             @default(0)
+  state          ReviewCardState @default(NEW)
+  lastReviewedAt DateTime?       @map("last_reviewed_at")
+
+  suspended Boolean @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, kind, refId])
+  @@index([userId, due])
+  @@map("review_cards")
+}
+
+/// Marca d'água por aluno para processar `lesson.completed` e
+/// `answer.submitted` em ordem, sob a mesma trava (padrão do módulo 7).
+model SrsUpdateCursor {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId       String    @unique @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastAnswerAt DateTime? @map("last_answer_at")
+  lastAnswerId String?   @map("last_answer_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("srs_update_cursors")
 }

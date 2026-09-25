@@ -9,6 +9,7 @@ import {
   LEARNER_UPDATE_JOB,
   LearnerUpdateService,
   PLACEMENT_PRIOR_JOB,
+  REVIEW_OUTCOME_JOB,
   type UpdateOutcome,
 } from '../services/learner-update.service';
 
@@ -20,6 +21,14 @@ type PlacementPriorJobData = {
   theta: number;
   competencyThetas: Partial<Record<Competency, number>>;
   completedAt: string;
+};
+
+type ReviewOutcomeJobData = {
+  userId: string;
+  kind: 'VOCAB' | 'CHUNK' | 'ERROR_PATTERN';
+  refId: string;
+  rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
+  at: string;
 };
 
 /** Espera quando outro worker está com o mesmo aluno. */
@@ -40,7 +49,9 @@ export class LearnerUpdatesProcessor extends WorkerHost {
   }
 
   async process(
-    job: Job<LearnerUpdateJobData | PlacementPriorJobData>,
+    job: Job<
+      LearnerUpdateJobData | PlacementPriorJobData | ReviewOutcomeJobData
+    >,
     token?: string,
   ): Promise<unknown> {
     let outcome: UpdateOutcome;
@@ -54,6 +65,14 @@ export class LearnerUpdatesProcessor extends WorkerHost {
         theta: data.theta,
         competencyThetas: data.competencyThetas,
         completedAt: new Date(data.completedAt),
+      });
+    } else if (job.name === REVIEW_OUTCOME_JOB) {
+      const data = job.data as ReviewOutcomeJobData;
+      outcome = await this.updates.applyReviewOutcome(data.userId, {
+        kind: data.kind,
+        refId: data.refId,
+        rating: data.rating,
+        at: new Date(data.at),
       });
     } else {
       return { skipped: true };

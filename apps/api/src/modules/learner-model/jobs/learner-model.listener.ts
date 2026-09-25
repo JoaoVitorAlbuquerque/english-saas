@@ -10,6 +10,7 @@ import { LearnerProfileService } from '../services/learner-profile.service';
 import {
   LEARNER_UPDATE_JOB,
   PLACEMENT_PRIOR_JOB,
+  REVIEW_OUTCOME_JOB,
 } from '../services/learner-update.service';
 
 /**
@@ -78,6 +79,36 @@ export class LearnerModelListener {
         completedAt: payload.completedAt,
       },
       { jobId: `placement-${payload.placementId}` },
+    );
+  }
+
+  /**
+   * SKILL já chega pelo `answer.submitted` de sempre — só VOCAB, CHUNK e
+   * ERROR_PATTERN entram aqui (ver `LearnerUpdateService.applyReviewOutcome`).
+   */
+  @OnEvent('review.answered')
+  async onReviewAnswered(event: DomainEvent<'review.answered'>): Promise<void> {
+    const { userId, payload } = event;
+
+    if (
+      userId === undefined ||
+      (payload.kind !== 'VOCAB' &&
+        payload.kind !== 'CHUNK' &&
+        payload.kind !== 'ERROR_PATTERN')
+    ) {
+      return;
+    }
+
+    await this.queue.add(
+      REVIEW_OUTCOME_JOB,
+      {
+        userId,
+        kind: payload.kind,
+        refId: payload.refId,
+        rating: payload.rating,
+        at: payload.answeredAt,
+      },
+      { jobId: `review-${payload.cardId}-${payload.answeredAt}` },
     );
   }
 }

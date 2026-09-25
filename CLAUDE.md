@@ -159,7 +159,7 @@ dos que vêm antes dele.
 | 6   | `learning`                      | 5          | Player da lição: tentativas, etapas, correção de resposta objetiva, XP e sequência. ✅ pronto         |
 | 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses. ✅ pronto          |
 | 8   | `assessment`                    | 7          | Nivelamento adaptativo, checkpoints de unidade, `selectItems` nivelado, calibração. ✅ pronto         |
-| 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                   |
+| 9   | `srs`                           | 7          | Revisão espaçada com FSRS: `ReviewCard`, sessão diária, criação por evento. ✅ pronto                 |
 | 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                               |
 | 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                     |
 | 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                    |
@@ -440,6 +440,53 @@ Os parâmetros saíram de simulação — mudar exige rodar
 - A escrita do nivelamento é um gancho (`WritingAssessor`, `@Optional()`)
   que o tutor (12) implementa.
 
+### Revisão espaçada (srs)
+
+Agendamento por **FSRS** (`ts-fsrs`), não SM-2. `ReviewCard.kind` diz o que
+o `refId` referencia — SKILL, VOCAB, CHUNK, REGISTER_NOTE ou ERROR_PATTERN —
+sem chave estrangeira, porque são três tabelas diferentes conforme o tipo
+(mesma ideia da referência dentro de JSON do módulo 4). Vocabulário e chunk
+já são `Skill` (`SkillType.VOCAB_SET` e `CHUNK`); vocabulário é por
+**conjunto**, não por palavra — é o grão que o schema hoje permite.
+
+- **Criação de card é passiva, nunca ativa.** Ninguém chama "criar card": o
+  SRS escuta `lesson.completed` (cria o que falta para as target skills,
+  chunks e vocabulário da lição) e `answer.submitted` errado de primeira
+  tentativa (cria ou lapsa o card da skill principal do item e de cada
+  ErrorPattern revelado). Responder certo fora de uma revisão de verdade não
+  mexe no agendamento de nenhum card.
+- **`GET /reviews/session?minutes=N` só corta o que é servido, nunca
+  reagenda.** O cálculo de quantos cards cabem é `minutes·60 / 25s`; o que
+  não coube continua vencido e aparece na sessão seguinte. É assim que o
+  backlog de quem ficou dias sem estudar se espalha sozinho, sem mexer no
+  `due` de ninguém.
+- **Prioridade da sessão não é campo, é ordenação.** ErrorPattern e card com
+  2+ lapsos vêm primeiro; o resto, do mais atrasado pro mais recente.
+- **Card de SKILL usa questão real**, escolhida pelo `AdaptiveItemService`
+  (8) — mesmo contrato do planner e do generator. Os outros quatro tipos
+  viram um **flashcard simples** (frente/verso de `Skill`, `RegisterNote` ou
+  `ErrorPattern`), **auto-avaliado pelo aluno** (Again/Hard/Good/Easy,
+  estilo Anki) — não há banco calibrado de vocabulário, chunk, nota de
+  registro ou erro por trás para corrigir automaticamente.
+- Responder um card de SKILL passa pelo `AnswerService.record` do learning
+  (contexto REVIEW) — ganha `answer.submitted` de graça, e o learner-model
+  (7) processa como qualquer resposta. O rating vem de acerto, dica e tempo
+  (`domain/rating.ts`); o de flashcard é o `selfRating` que o aluno mandou.
+- **`review.answered` também alimenta o learner-model**, só para
+  VOCAB/CHUNK (evidência de mastery com peso baixo — não é questão
+  calibrada) e ERROR_PATTERN (mais uma oportunidade na janela de
+  recorrência do módulo 7: revisões boas seguidas empurram o erro pra fora
+  da janela sozinhas, sem lógica nova). SKILL já chega pelo
+  `answer.submitted` de sempre.
+- **Card novo nasce vencido** (`due = agora`, estado NEW) — é assim que o
+  ts-fsrs cria. "Due amanhã e em alguns dias" só aparece depois da
+  _primeira_ revisão de verdade: Easy num card novo já pula direto pra
+  REVIEW com o due dias à frente; Good passa primeiro pelos passos curtos
+  (minutos) do aprendizado.
+- Mesma trava por aluno do learner-model, agora num helper comum
+  (`infra/redis/user-lock.ts`) que os dois módulos usam — sem marca d'água
+  aqui, porque criar card é idempotente por `[userId, kind, refId]`.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -523,7 +570,7 @@ valida a mensagem.
 | **LessonAttempt**     | Uma passada do aluno por uma lição, presa à versão que ele fez: etapas concluídas, XP, de onde ele veio (plano, livre, revisão).     |
 | **Answer**            | Uma resposta a um Item, já corrigida: o que respondeu, score, tempo, dicas, erros típicos revelados e se foi a primeira tentativa.   |
 | **Mastery**           | Quanto o aluno domina uma Skill, estimado a partir das Answers. Decai com o tempo sem prática.                                       |
-| **ReviewCard**        | Cartão de revisão espaçada ligado a uma Skill ou item de vocabulário: quando revisar, intervalo atual, facilidade.                   |
+| **ReviewCard**        | Cartão de revisão espaçada (FSRS) ligado a uma Skill, RegisterNote ou ErrorPattern: `kind` diz a qual, `due` diz quando.             |
 | **StudyPlan**         | Cronograma personalizado do aluno — o caminho recomendado ao longo de semanas. Recomendação, **não** bloqueio.                       |
 | **Agenda**            | O recorte de hoje do StudyPlan: o que fazer agora (lições sugeridas + fila de revisão).                                              |
 | **RegisterNote**      | Nota que contrasta a forma gramatical padrão com a forma falada no dia a dia (`I'm going to` × `I'm gonna`).                         |

@@ -540,6 +540,29 @@ export class TaxonomyService {
     });
   }
 
+  /** Título e descrição de skills, para o flashcard de vocab/chunk do SRS (9). */
+  async skillsByIds(ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.prisma.skill.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, title: true, description: true, type: true },
+    });
+  }
+
+  /** Notas de registro em lote, para o flashcard do SRS (9). */
+  async registerNotesByIds(ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.prisma.registerNote.findMany({
+      where: { id: { in: [...ids] } },
+    });
+  }
+
   private async assertSkillsExist(ids: readonly string[]): Promise<void> {
     if (ids.length === 0) {
       return;

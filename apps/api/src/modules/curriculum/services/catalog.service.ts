@@ -439,6 +439,37 @@ export class CatalogService {
     };
   }
 
+  /**
+   * O que uma versão de lição toca: as skills-alvo dela e tudo que as
+   * etapas referenciam (inclui vocabulário e chunk, que são `Skill` também).
+   * O SRS (9) usa para criar os cards de revisão ao completar a lição.
+   */
+  async lessonVersionOutline(lessonVersionId: string): Promise<{
+    targetSkillIds: string[];
+    referencedSkillIds: string[];
+    registerNoteIds: string[];
+  }> {
+    const version = await this.prisma.lessonVersion.findUniqueOrThrow({
+      where: { id: lessonVersionId },
+      select: {
+        steps: {
+          orderBy: { order: 'asc' },
+          select: { order: true, type: true, content: true },
+        },
+        targetSkills: { select: { skillId: true } },
+      },
+    });
+
+    const steps = version.steps as ({ order: number } & LessonStepInput)[];
+    const references = collectStepReferences(steps);
+
+    return {
+      targetSkillIds: version.targetSkills.map((target) => target.skillId),
+      referencedSkillIds: references.skillIds,
+      registerNoteIds: references.registerNoteIds,
+    };
+  }
+
   /** Monta a lição a partir do banco e guarda no cache. */
   private async buildLesson(
     versionId: string,
