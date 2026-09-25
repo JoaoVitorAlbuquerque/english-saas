@@ -172,6 +172,19 @@ export interface DomainEventPayloads {
     correctFirstTries: number;
     currentStreak: number;
   };
+
+  // --- módulo 7: learner-model ---
+
+  /**
+   * O modelo do aluno mudou. O SRS (9) e o planejador (10) escutam para
+   * reagendar e remontar a agenda.
+   */
+  'learner.model_updated': {
+    processedAnswers: number;
+    skillIds: string[];
+    errorPatternIds: string[];
+    overallLevel: string;
+  };
 }
 
 export type DomainEventName = keyof DomainEventPayloads & string;

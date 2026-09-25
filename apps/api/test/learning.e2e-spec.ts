@@ -23,6 +23,7 @@ const PASSWORD = 'senhaforte2026';
 describe('Learning (e2e)', () => {
   let context: TestApp;
   let learningQueue: Queue;
+  let learnerQueue: Queue;
   let emitter: EventEmitter2;
   let events: DomainEvent[] = [];
 
@@ -35,6 +36,9 @@ describe('Learning (e2e)', () => {
   beforeAll(async () => {
     context = await createTestApp();
     learningQueue = context.app.get<Queue>(getQueueToken(QUEUES.LEARNING));
+    learnerQueue = context.app.get<Queue>(
+      getQueueToken(QUEUES.LEARNER_UPDATES),
+    );
     emitter = context.app.get(EventEmitter2);
     emitter.onAny(capture);
   });
@@ -50,6 +54,8 @@ describe('Learning (e2e)', () => {
   afterAll(async () => {
     emitter?.offAny(capture);
     await learningQueue?.obliterate({ force: true });
+    // Toda resposta também acorda o modelo do aluno (7).
+    await learnerQueue?.obliterate({ force: true });
     await context?.close();
   });
 
@@ -148,7 +154,7 @@ describe('Learning (e2e)', () => {
       'ROLEPLAY',
       'SUMMARY',
     ]);
-    expect(started.body.steps[2].itemIds).toHaveLength(7);
+    expect(started.body.steps[2].itemIds).toHaveLength(8);
 
     const resumed = await http()
       .post(`/lessons/${id}/attempts`)
@@ -173,7 +179,7 @@ describe('Learning (e2e)', () => {
 
     const earlyPractice = await step(2).expect(422);
     expect(earlyPractice.body.error.code).toBe('PRACTICE_INCOMPLETE');
-    expect(earlyPractice.body.error.details.unansweredItemIds).toHaveLength(7);
+    expect(earlyPractice.body.error.details.unansweredItemIds).toHaveLength(8);
 
     const earlyFinish = await http()
       .post(`/attempts/${attemptId}/complete`)
@@ -249,6 +255,8 @@ describe('Learning (e2e)', () => {
       text: 'she is from austin',
     }).expect(201);
 
+    await answer('a1-type-im-20-years-old', { text: "I'm 20" }).expect(201);
+
     // --- o resto das etapas ---
 
     await step(2).expect(200);
@@ -267,20 +275,20 @@ describe('Learning (e2e)', () => {
       .set(auth)
       .expect(200);
 
-    // 7 questões de primeira: 5 certas (50) + 0.75 (8) + 1 errada (0) = 58.
+    // 8 questões de primeira: 6 certas (60) + 0.75 (8) + 1 errada (0) = 68.
     expect(done.body.xp).toEqual({
-      fromAnswers: 58,
+      fromAnswers: 68,
       completionBonus: 20,
-      total: 78,
+      total: 88,
     });
     expect(done.body.stats).toMatchObject({
-      totalXp: 78,
+      totalXp: 88,
       currentStreak: 1,
       longestStreak: 1,
     });
     expect(done.body.attempt).toMatchObject({
       status: 'COMPLETED',
-      xpEarned: 78,
+      xpEarned: 88,
     });
 
     // Concluir de novo não soma XP.
@@ -288,8 +296,8 @@ describe('Learning (e2e)', () => {
       .post(`/attempts/${attemptId}/complete`)
       .set(auth)
       .expect(200);
-    expect(twice.body.xp.total).toBe(78);
-    expect(twice.body.stats.totalXp).toBe(78);
+    expect(twice.body.xp.total).toBe(88);
+    expect(twice.body.stats.totalXp).toBe(88);
 
     // --- o que ficou salvo ---
 
@@ -298,8 +306,8 @@ describe('Learning (e2e)', () => {
       orderBy: { createdAt: 'asc' },
     });
 
-    expect(saved).toHaveLength(9);
-    expect(saved.filter((row) => row.isFirstTry)).toHaveLength(7);
+    expect(saved).toHaveLength(10);
+    expect(saved.filter((row) => row.isFirstTry)).toHaveLength(8);
     expect(saved.every((row) => row.context === 'LESSON')).toBe(true);
     expect(saved.every((row) => row.stepIndex === 2)).toBe(true);
     expect(
@@ -323,7 +331,7 @@ describe('Learning (e2e)', () => {
 
     expect(named('lesson.started')).toHaveLength(1);
     expect(named('lesson.step_completed')).toHaveLength(6);
-    expect(named('answer.submitted')).toHaveLength(9);
+    expect(named('answer.submitted')).toHaveLength(10);
     expect(named('lesson.completed')).toHaveLength(1);
 
     const partialEvent = named('answer.submitted').find(
@@ -347,9 +355,9 @@ describe('Learning (e2e)', () => {
       attemptId,
       lessonId: id,
       source: 'PLAN',
-      xpEarned: 78,
-      answeredItems: 7,
-      correctFirstTries: 5,
+      xpEarned: 88,
+      answeredItems: 8,
+      correctFirstTries: 6,
       currentStreak: 1,
     });
 
@@ -363,7 +371,7 @@ describe('Learning (e2e)', () => {
       lessonSlug: 'nice-to-meet-you',
       title: 'Nice to meet you',
       status: 'COMPLETED',
-      xpEarned: 78,
+      xpEarned: 88,
     });
 
     // --- estatística do item, pelo job em lote ---

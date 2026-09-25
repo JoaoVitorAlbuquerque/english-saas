@@ -240,8 +240,13 @@ async function seedTaxonomy(
         cefrLevel: skill.cefrLevel,
         title: skill.title,
         description: skill.description,
+        goals: skill.goals ?? [],
       },
-      update: { title: skill.title, description: skill.description },
+      update: {
+        title: skill.title,
+        description: skill.description,
+        goals: skill.goals ?? [],
+      },
     });
   }
 

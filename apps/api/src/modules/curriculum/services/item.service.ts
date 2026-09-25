@@ -334,6 +334,38 @@ export class ItemService {
   }
 
   /**
+   * Os itens que o modelo do aluno (7) precisa para interpretar respostas:
+   * skills **em ordem** (a primeira é a principal), dificuldade, e o que dá
+   * para saber dos erros típicos que o item revela. Qualquer status — um
+   * item arquivado depois de respondido continua explicando a resposta.
+   */
+  async findManyForModel(ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.prisma.item.findMany({
+      where: { id: { in: [...ids] } },
+      select: {
+        id: true,
+        type: true,
+        prompt: true,
+        content: true,
+        acceptedAnswers: true,
+        errorPatternMap: true,
+        cefrLevel: true,
+        difficulty: true,
+        skills: {
+          orderBy: { position: 'asc' },
+          select: { skillId: true },
+        },
+      },
+    });
+
+    return rows.map((row) => this.flatten(row));
+  }
+
+  /**
    * Grava a estatística de exposição calculada pelo learning (6).
    *
    * Não passa pela trava de imutabilidade: `exposureCount` e `correctRate`
@@ -343,7 +375,10 @@ export class ItemService {
     itemId: string,
     stats: { exposureCount: number; correctRate: number | null },
   ): Promise<void> {
-    await this.prisma.item.update({
+    // `updateMany`, não `update`: item apagado entre a resposta e o lote não
+    // é erro — não há mais o que atualizar, e um job falhando por isso só
+    // geraria retentativa inútil.
+    await this.prisma.item.updateMany({
       where: { id: itemId },
       data: {
         exposureCount: stats.exposureCount,

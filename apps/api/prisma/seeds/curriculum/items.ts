@@ -1,9 +1,9 @@
 import type { CefrLevel, ItemType } from '@prisma/client';
 
 /**
- * 20 questões A1 da unidade 1.
+ * 21 questões A1 da unidade 1.
  *
- * As sete primeiras são a prática da lição "Nice to meet you", na ordem em
+ * As oito primeiras são a prática da lição "Nice to meet you", na ordem em
  * que aparecem; as outras treze enchem o banco para o nivelamento (módulo
  * 8) ter de onde sortear, e cobrem os nove tipos de item.
  *
@@ -32,6 +32,7 @@ export const LESSON_ITEM_SLUGS = [
   'a1-reply-nice-to-meet-you',
   'a1-order-nice-to-meet-you',
   'a1-type-shes-from-austin',
+  'a1-type-im-20-years-old',
 ] as const;
 
 /** Áudios que os itens usam, pela chave do mapa de assets. */
@@ -154,6 +155,27 @@ export function buildSeedItems(audio: Record<string, string>): SeedItem[] {
         'grammar.contractions.be',
         'chunk.where-are-you-from',
       ],
+    },
+
+    {
+      slug: 'a1-type-im-20-years-old',
+      type: 'TYPE_ANSWER',
+      prompt: 'Escreva em inglês: "Eu tenho 20 anos."',
+      content: {
+        sourceText: 'Eu tenho 20 anos.',
+        hint: 'Em inglês, idade vai com o verbo to be.',
+      },
+      acceptedAnswers: ["I'm 20 years old", "I'm 20"],
+      explanation:
+        'Idade em inglês é com "to be": I\'m 20 (years old). "I have 20 years" é o português traduzido palavra por palavra.',
+      // É o erro de brasileiro mais clássico que existe: o item está aqui
+      // para o modelo do aluno (7) ter como enxergá-lo.
+      errorPatternMap: {
+        'I have 20 years': 'l1.have-for-age',
+        'I have 20 years old': 'l1.have-for-age',
+      },
+      cefrLevel: 'A1',
+      skillIds: ['vocab.numbers-1-20', 'grammar.be.present.affirmative'],
     },
 
     // --- banco extra ---

@@ -20,8 +20,11 @@ export const QUEUES = {
   MEDIA: 'media',
   /** Trabalho em lote sobre o que o aluno fez: estatística dos itens. */
   LEARNING: 'learning',
-  /** Recálculo de mastery e do modelo do aluno após tentativas. */
-  LEARNER_MODEL: 'learner-model',
+  /**
+   * Atualização do modelo do aluno a cada resposta. Processada em ordem por
+   * aluno (trava no Redis + marca d'água), nunca em paralelo para o mesmo.
+   */
+  LEARNER_UPDATES: 'learner-updates',
   /** Reagendamento de revisão espaçada e do cronograma. */
   SCHEDULING: 'scheduling',
   /** E-mail, push e lembretes. */
@@ -40,4 +43,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.CONTENT_QA,
   QUEUES.MEDIA,
   QUEUES.LEARNING,
+  QUEUES.LEARNER_UPDATES,
 ];

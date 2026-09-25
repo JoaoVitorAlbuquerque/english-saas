@@ -157,7 +157,7 @@ dos que vêm antes dele.
 | 4   | `curriculum`                    | 3          | Taxonomia, personagens, unidades, lições versionadas, banco de questões, apostilas PDF. ✅ pronto     |
 | 5   | `content-studio`                | 2, 4       | Rascunho por IA, QA automática, revisão humana, TTS e apostila em PDF. ✅ pronto                      |
 | 6   | `learning`                      | 5          | Player da lição: tentativas, etapas, correção de resposta objetiva, XP e sequência. ✅ pronto         |
-| 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses                     |
+| 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses. ✅ pronto          |
 | 8   | `assessment`                    | 7          | Questionários e provas adaptativos, nivelados pelo aluno, certificação de nível                       |
 | 9   | `srs`                           | 7          | Revisão espaçada: `ReviewCard`, agendamento, fila diária de revisão                                   |
 | 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                               |
@@ -378,6 +378,39 @@ CHECKPOINT e GENERATED_MATERIAL são gravados pelo módulo dono, chamando
 
 Sequência conta o dia **no fuso do aluno**, e perder um dia só faz ela
 recomeçar do um. Nada de vidas ou punição.
+
+### Modelo do aluno (learner-model)
+
+**Quem gera ou recomenda conteúdo chama
+`LearnerProfileService.getSnapshot(userId)`** — nunca lê as tabelas do
+learner-model nem monta o próprio resumo do aluno. O snapshot é compacto,
+determinístico (mesmo estado, mesmo JSON, para o cache de IA acertar) e
+fica no Redis até o modelo mudar.
+
+**Os exemplos de erro do snapshot são frases reais do aluno.** Vão para a
+IA como conteúdo não confiável, em mensagem separada, e nunca para log.
+
+Habilidade por skill é `theta` na mesma escala logit da dificuldade do
+item, atualizada tipo Elo. Regras que não são óbvias:
+
+- **Theta aprende só com a primeira tentativa; o perfil de erro conta
+  todas.** A retentativa depois do gabarito não mede habilidade, mas o erro
+  digitado nela foi digitado.
+- Skill nova começa na dificuldade típica do nível dela (mastery 0.5 =
+  "não sei"), não em zero.
+- O decaimento por tempo é **só na leitura**; o banco guarda o theta puro.
+- Com 60 respostas, o theta tem erro padrão de ~0.25 logit — limite de
+  informação, não defeito. Teste de convergência olha a distribuição em
+  muitas sementes, nunca uma semente escolhida.
+
+**Ordem por aluno sem agrupamento de fila** (é recurso pago do BullMQ): um
+job por resposta, trava no Redis por aluno e marca d'água
+(`LearnerModelCursor`). Quem pega a trava processa tudo depois da marca, em
+ordem; a marca anda na mesma transação da escrita. Para reconstruir o
+modelo de um aluno do zero, apague o cursor e os estados.
+
+`Skill.goals` diz a que objetivos do aluno a skill serve. Vazio = serve a
+todos. É o que liga "o aluno quer viajar" à prioridade das necessidades.
 
 ### Erros e logs
 

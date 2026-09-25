@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   CefrLevel,
   Competency,
+  LearningGoal,
   Prisma,
   RegisterLevel,
   SkillType,
@@ -35,6 +36,21 @@ export type SkillInput = {
   description?: string | null;
   prerequisites?: string[];
   commonErrors?: string[];
+  goals?: LearningGoal[];
+};
+
+/** Uma skill como o modelo do aluno (7) enxerga: o grafo, sem autoria. */
+export type SkillGraphNode = {
+  id: string;
+  title: string;
+  type: SkillType;
+  competency: Competency;
+  cefrLevel: CefrLevel;
+  goals: LearningGoal[];
+  prerequisiteIds: string[];
+  /** De quantas skills esta é pré-requisito. */
+  requiredByCount: number;
+  errorPatternIds: string[];
 };
 
 export type ErrorPatternInput = {
@@ -65,6 +81,7 @@ const skillSelect = {
   cefrLevel: true,
   title: true,
   description: true,
+  goals: true,
   deprecatedAt: true,
   replacedById: true,
   createdAt: true,
@@ -136,6 +153,7 @@ export class TaxonomyService {
           cefrLevel: input.cefrLevel,
           title: input.title,
           description: input.description ?? null,
+          goals: input.goals ?? [],
         },
       });
 
@@ -169,6 +187,7 @@ export class TaxonomyService {
           ...(input.description === undefined
             ? {}
             : { description: input.description }),
+          ...(input.goals === undefined ? {} : { goals: input.goals }),
         },
       });
 
@@ -463,6 +482,42 @@ export class TaxonomyService {
     });
 
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * O grafo de skills em circulação, para o modelo do aluno (7).
+   *
+   * Vem inteiro: a taxonomia tem dezenas de skills por nível, não milhares,
+   * e as necessidades do aluno são calculadas sobre o conjunto.
+   */
+  async skillGraph(): Promise<SkillGraphNode[]> {
+    const rows = await this.prisma.skill.findMany({
+      where: { deprecatedAt: null },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        competency: true,
+        cefrLevel: true,
+        goals: true,
+        prerequisites: { select: { prerequisiteId: true } },
+        commonErrors: { select: { errorPatternId: true } },
+        _count: { select: { requiredBy: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      type: row.type,
+      competency: row.competency,
+      cefrLevel: row.cefrLevel,
+      goals: row.goals,
+      prerequisiteIds: row.prerequisites.map((link) => link.prerequisiteId),
+      requiredByCount: row._count.requiredBy,
+      errorPatternIds: row.commonErrors.map((link) => link.errorPatternId),
+    }));
   }
 
   /**

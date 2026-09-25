@@ -182,6 +182,48 @@ export class AnswerService {
     return this.toResult(answer.id, item, evaluation, isFirstTry);
   }
 
+  /**
+   * Respostas do aluno depois de um ponto, em ordem de criação.
+   *
+   * É como o modelo do aluno (7) consome o histórico: ele guarda até onde
+   * leu e pede o resto, na ordem em que aconteceu. `id` desempata respostas
+   * gravadas no mesmo milissegundo.
+   */
+  async listSince(
+    userId: string,
+    after: { at: Date; id: string } | null,
+    limit: number,
+  ) {
+    return this.prisma.answer.findMany({
+      where: {
+        userId,
+        ...(after === null
+          ? {}
+          : {
+              OR: [
+                { createdAt: { gt: after.at } },
+                { createdAt: after.at, id: { gt: after.id } },
+              ],
+            }),
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: limit,
+      select: {
+        id: true,
+        itemId: true,
+        context: true,
+        response: true,
+        isCorrect: true,
+        score: true,
+        hintsUsed: true,
+        responseTimeMs: true,
+        isFirstTry: true,
+        detectedErrorPatterns: true,
+        createdAt: true,
+      },
+    });
+  }
+
   // -------------------------------------------------------------------
 
   private async loadPublishedItem(itemId: string): Promise<LoadedItem> {

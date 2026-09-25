@@ -210,6 +210,11 @@ model User {
   answers        Answer[]
   learningStats  LearningStats?
 
+  learnerSkills        LearnerSkillState[]
+  learnerErrorPatterns LearnerErrorPattern[]
+  learnerSnapshots     LearnerLevelSnapshot[]
+  learnerModelCursor   LearnerModelCursor?
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -486,11 +491,14 @@ model Skill {
 
   type        SkillType
   competency  Competency
-  cefrLevel   CefrLevel  @map("cefr_level")
+  cefrLevel   CefrLevel      @map("cefr_level")
   /// pt-BR.
   title       String
   /// pt-BR.
   description String?
+  /// A que objetivos do aluno esta skill serve. O learner-model (7) usa para
+  /// priorizar o que estudar. Vazio = serve a todos igualmente.
+  goals       LearningGoal[] @default([])
 
   deprecatedAt DateTime? @map("deprecated_at")
   replacedById String?   @map("replaced_by_id")
@@ -1265,4 +1273,94 @@ model LearningStats {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("learning_stats")
+}
+
+// ===========================================================================
+// Módulo 7 — learner-model
+//
+// O que o sistema sabe do aluno: habilidade por skill, erros recorrentes e
+// a evolução do nível. Tudo derivado das respostas do learning (6) — dá
+// para reconstruir do zero reprocessando as `answers`.
+// ===========================================================================
+
+/// Habilidade do aluno numa skill, em logit (mesma escala da dificuldade do item).
+model LearnerSkillState {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId  String @map("user_id") @db.Uuid
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Slug de Skill. Sem FK de propósito: skill descontinuada não apaga histórico.
+  skillId String @map("skill_id")
+
+  theta           Float
+  /// Soma dos pesos das respostas que atualizaram o theta (principal 1, secundária 0.5).
+  evidenceCount   Float     @default(0) @map("evidence_count")
+  correctStreak   Int       @default(0) @map("correct_streak")
+  lastPracticedAt DateTime? @map("last_practiced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, skillId])
+  @@map("learner_skill_states")
+}
+
+/// Um erro típico no histórico do aluno, com janela móvel.
+model LearnerErrorPattern {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId         String @map("user_id") @db.Uuid
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  errorPatternId String @map("error_pattern_id")
+
+  /// As últimas respostas que **poderiam** revelar este erro, da mais antiga
+  /// para a mais nova: true = o erro apareceu. Até 30.
+  recentOutcomes   Boolean[] @map("recent_outcomes")
+  totalOccurrences Int       @default(0) @map("total_occurrences")
+  lastOccurredAt   DateTime? @map("last_occurred_at")
+  /// As últimas 3 frases erradas do aluno, com a correção. Conteúdo do aluno:
+  /// nunca vai para log, e vai para a IA só como dado não confiável.
+  examples         Json      @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, errorPatternId])
+  @@map("learner_error_patterns")
+}
+
+/// Foto semanal do nível, para mostrar a evolução. Gravada quando o modelo
+/// muda — aluno parado não muda de nível.
+model LearnerLevelSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId       String     @map("user_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Segunda-feira da semana, em UTC.
+  weekStart    DateTime   @map("week_start") @db.Date
+  overallLevel CefrLevel? @map("overall_level")
+  /// Por competência: { theta, level, confidence, evidence }.
+  levels       Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, weekStart])
+  @@map("learner_level_snapshots")
+}
+
+/// Até onde o modelo do aluno já processou as respostas. É o que mantém a
+/// ordem: o processamento sempre parte daqui, em ordem de criação.
+model LearnerModelCursor {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId       String    @unique @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastAnswerAt DateTime? @map("last_answer_at")
+  lastAnswerId String?   @map("last_answer_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("learner_model_cursors")
 }

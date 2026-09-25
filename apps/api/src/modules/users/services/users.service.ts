@@ -227,6 +227,47 @@ export class UsersService {
     return this.listInterests(userId);
   }
 
+  /**
+   * Grava o peso de um interesse aprendido pelo uso (módulo 7).
+   *
+   * Tema novo entra como LEARNED; tema que o aluno escolheu continua
+   * ONBOARDING, só com o peso ajustado — senão uma edição de perfil
+   * apagaria o que ele mesmo escolheu.
+   */
+  async setInterestWeight(
+    userId: string,
+    topic: string,
+    weight: number,
+  ): Promise<void> {
+    await this.prisma.studentInterest.upsert({
+      where: { userId_topic: { userId, topic } },
+      create: { userId, topic, weight, source: InterestSource.LEARNED },
+      update: { weight },
+    });
+  }
+
+  /**
+   * O que o modelo do aluno (7) precisa do perfil: objetivos, nível que ele
+   * disse ter e interesses. Sem perfil ainda, tudo vazio — o modelo decide
+   * o que fazer com a falta de dado.
+   */
+  async learnerContext(userId: string): Promise<{
+    goals: LearningGoal[];
+    selfReportedLevel: SelfReportedLevel | null;
+    interests: Interest[];
+  }> {
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { userId },
+      select: { goals: true, selfReportedLevel: true },
+    });
+
+    return {
+      goals: profile?.goals ?? [],
+      selfReportedLevel: profile?.selfReportedLevel ?? null,
+      interests: await this.listInterests(userId),
+    };
+  }
+
   // -------------------------------------------------------------------
   // Painel interno
   // -------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import type {
   CefrLevel,
   Competency,
+  LearningGoal,
   RegisterLevel,
   SkillType,
 } from '@prisma/client';
@@ -21,6 +22,8 @@ export type SeedSkill = {
   description: string;
   prerequisites?: string[];
   commonErrors?: string[];
+  /** A que objetivos serve. Sem isso, serve a todos igualmente. */
+  goals?: LearningGoal[];
 };
 
 export const SEED_SKILLS: SeedSkill[] = [
@@ -129,6 +132,7 @@ export const SEED_SKILLS: SeedSkill[] = [
     description: 'Perguntar e dizer de onde você é.',
     prerequisites: ['grammar.be.present.questions'],
     commonErrors: ['article.country-the'],
+    goals: ['TRAVEL', 'CONVERSATION', 'MOVING_ABROAD'],
   },
   {
     id: 'chunk.my-name-is',
@@ -146,6 +150,7 @@ export const SEED_SKILLS: SeedSkill[] = [
     title: 'Países e nacionalidades',
     description: 'Brazil/Brazilian, the US/American, Spain/Spanish.',
     commonErrors: ['article.country-the'],
+    goals: ['TRAVEL', 'MOVING_ABROAD'],
   },
   {
     id: 'vocab.numbers-1-20',
@@ -165,6 +170,7 @@ export const SEED_SKILLS: SeedSkill[] = [
     description: 'Dizer nome e origem, e responder a uma apresentação.',
     prerequisites: ['chunk.my-name-is', 'chunk.where-are-you-from'],
     commonErrors: ['l1.have-for-age'],
+    goals: ['CONVERSATION', 'WORK', 'TRAVEL', 'MOVING_ABROAD'],
   },
   {
     id: 'register.contracted-be',

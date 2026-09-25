@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { cefrLevelSchema, type CefrLevel } from './cefr';
 import { competencySchema } from './competency';
+import { learningGoalSchema } from './user';
 
 /**
  * Taxonomia do conteúdo: Skill, ErrorPattern e RegisterNote.
@@ -116,6 +117,8 @@ export const skillSchema = z.object({
   description: z.string().max(1_000).nullable(),
   prerequisites: z.array(taxonomySlugSchema),
   commonErrors: z.array(taxonomySlugSchema),
+  /** Objetivos a que a skill serve. Vazio = todos igualmente. */
+  goals: z.array(learningGoalSchema),
   deprecatedAt: z.string().nullable(),
   replacedById: taxonomySlugSchema.nullable(),
 });

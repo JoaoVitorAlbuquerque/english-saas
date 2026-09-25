@@ -373,6 +373,37 @@ export class AttemptService {
     };
   }
 
+  /**
+   * Títulos das últimas lições concluídas, sem repetição, mais recente
+   * primeiro. O modelo do aluno (7) usa como "temas recentes", para o que
+   * for gerado não repetir o assunto.
+   */
+  async recentLessonTitles(userId: string, limit = 5): Promise<string[]> {
+    const rows = await this.prisma.lessonAttempt.findMany({
+      where: { userId, status: LessonAttemptStatus.COMPLETED },
+      orderBy: { completedAt: 'desc' },
+      take: limit * 3,
+      select: { lessonVersionId: true },
+    });
+
+    const versionIds = [...new Set(rows.map((row) => row.lessonVersionId))];
+    const titles = new Map(
+      (await this.catalog.versionSummaries(versionIds)).map((summary) => [
+        summary.versionId,
+        summary.title,
+      ]),
+    );
+
+    return [
+      ...new Set(
+        versionIds.flatMap((id) => {
+          const title = titles.get(id);
+          return title === undefined ? [] : [title];
+        }),
+      ),
+    ].slice(0, limit);
+  }
+
   // -------------------------------------------------------------------
   // Usado pelo AnswerService
   // -------------------------------------------------------------------

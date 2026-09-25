@@ -2,6 +2,7 @@ import {
   cefrLevelSchema,
   competencySchema,
   cursorPaginationQuerySchema,
+  learningGoalSchema,
   registerLevelSchema,
   skillTypeSchema,
   taxonomySlugSchema,
@@ -26,6 +27,7 @@ export class CreateSkillDto extends createZodDto(
     description: z.string().trim().max(1_000).nullable().optional(),
     prerequisites: z.array(taxonomySlugSchema).max(20).optional(),
     commonErrors: z.array(taxonomySlugSchema).max(20).optional(),
+    goals: z.array(learningGoalSchema).max(7).optional(),
   }),
 ) {}
 
@@ -38,6 +40,7 @@ export class UpdateSkillDto extends createZodDto(
     description: z.string().trim().max(1_000).nullable().optional(),
     prerequisites: z.array(taxonomySlugSchema).max(20).optional(),
     commonErrors: z.array(taxonomySlugSchema).max(20).optional(),
+    goals: z.array(learningGoalSchema).max(7).optional(),
   }),
 ) {}
 

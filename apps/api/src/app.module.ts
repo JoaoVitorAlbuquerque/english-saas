@@ -15,6 +15,7 @@ import { CurriculumModule } from './modules/curriculum/curriculum.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { HealthModule } from './modules/health/health.module';
+import { LearnerModelModule } from './modules/learner-model/learner-model.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -35,7 +36,8 @@ import { UsersModule } from './modules/users/users.module';
     CurriculumModule,
     ContentStudioModule,
     LearningModule,
-    // 7 learner-model · 8 assessment · ... (ver CLAUDE.md)
+    LearnerModelModule,
+    // 8 assessment · 9 srs · ... (ver CLAUDE.md)
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

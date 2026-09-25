@@ -324,6 +324,7 @@ export function buildLessonSteps(ctx: LessonContext): StepSeed[] {
           item('a1-reply-nice-to-meet-you'),
           item('a1-order-nice-to-meet-you'),
           item('a1-type-shes-from-austin'),
+          item('a1-type-im-20-years-old'),
         ],
         shuffle: false,
       },
