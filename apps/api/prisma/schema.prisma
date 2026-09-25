@@ -222,6 +222,9 @@ model User {
   reviewCards     ReviewCard[]
   srsUpdateCursor SrsUpdateCursor?
 
+  studyPlan    StudyPlan?
+  dailyAgendas DailyAgenda[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -1628,4 +1631,56 @@ model SrsUpdateCursor {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("srs_update_cursors")
+}
+
+/// A trilha de lições e o forecast até o nível-alvo. Um ativo por aluno —
+/// reconstrução idempotente, não um histórico de versões.
+model StudyPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  targetLevel CefrLevel @map("target_level")
+  /// Espelha o `StudentProfile.targetDate` no momento do último rebuild.
+  targetDate  DateTime? @map("target_date")
+
+  /// Só o que falta: `{lessonId, unitId, cefrLevel, order, reason}[]`, na
+  /// ordem em que o aluno deveria fazer.
+  path Json
+
+  /// Fraquezas priorizadas: do learner-model e de checkpoint com reforço.
+  reinforceSkillIds String[] @map("reinforce_skill_ids")
+
+  /// `{estimatedArrival, weeksNeeded, realistic, message}`.
+  forecast Json?
+
+  version Int @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("study_plans")
+}
+
+/// A agenda de um dia local do aluno. Gerada sob demanda e cacheada aqui só
+/// para os blocos poderem ser marcados como pulados entre uma leitura e
+/// outra no mesmo dia.
+model DailyAgenda {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId    String @map("user_id") @db.Uuid
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// `YYYY-MM-DD` no fuso do aluno — não é o `created_at` em UTC.
+  localDate String @map("local_date")
+
+  /// `{id, type, refId, estimatedMinutes, reason, skipped}[]`.
+  blocks      Json
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, localDate])
+  @@map("daily_agendas")
 }

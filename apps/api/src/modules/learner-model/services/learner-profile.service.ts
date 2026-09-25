@@ -248,6 +248,54 @@ export class LearnerProfileService {
   }
 
   /**
+   * Mastery (0–1) e evidência de várias skills, em lote — o planner (10) usa
+   * pra decidir que lição pular ("target skills já dominadas"). Mesma busca
+   * de `skillThetas`, só que devolve a mastery pronta em vez do theta cru.
+   */
+  async masteryBySkill(
+    userId: string,
+    skillIds: readonly string[],
+    now = new Date(),
+  ): Promise<Map<string, { mastery: number; evidence: number }>> {
+    if (skillIds.length === 0) {
+      return new Map();
+    }
+
+    const [graph, rows, prior] = await Promise.all([
+      this.taxonomy.skillGraph(),
+      this.prisma.learnerSkillState.findMany({
+        where: { userId, skillId: { in: [...skillIds] } },
+      }),
+      this.placementPrior(userId),
+    ]);
+
+    const nodes = new Map(graph.map((node) => [node.id, node]));
+    const states = new Map(rows.map((row) => [row.skillId, toSkillState(row)]));
+    const priors = priorThetasBySkill(prior, graph);
+
+    return new Map(
+      skillIds.flatMap((skillId) => {
+        const node = nodes.get(skillId);
+        if (node === undefined) return [];
+
+        const state =
+          states.get(skillId) ??
+          initialSkillState(node.cefrLevel, priors.get(skillId));
+
+        return [
+          [
+            skillId,
+            {
+              mastery: masteryOf(state, node.cefrLevel, now),
+              evidence: state.evidenceCount,
+            },
+          ] as const,
+        ];
+      }),
+    );
+  }
+
+  /**
    * Habilidade de vários alunos numa skill, para a calibração (8). Mesma
    * regra de `skillThetas`, em lote.
    */

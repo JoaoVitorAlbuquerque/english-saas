@@ -24,6 +24,9 @@ import { SrsUpdateService } from './services/srs-update.service';
  *
  * Dono da tabela `review_cards`. Escuta `lesson.completed` e
  * `answer.submitted` do learning (6) pela fila `scheduling`.
+ *
+ * `ReviewCardService` é exportado: o planner (10) conta cards vencidos pra
+ * montar o bloco de revisão da agenda do dia.
  */
 @Module({
   imports: [
@@ -41,5 +44,6 @@ import { SrsUpdateService } from './services/srs-update.service';
     SrsListener,
     SrsUpdatesProcessor,
   ],
+  exports: [ReviewCardService],
 })
 export class SrsModule {}

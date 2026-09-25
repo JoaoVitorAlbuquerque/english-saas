@@ -440,6 +440,74 @@ export class CatalogService {
   }
 
   /**
+   * Toda lição publicada, na ordem do curso (nível → unidade → lição), com
+   * o que o planner (10) precisa pra montar a trilha. Curso pequeno — dezenas
+   * de lições, não milhares —, então vem inteiro, sem paginação.
+   */
+  async publishedCoursePath(): Promise<
+    {
+      lessonId: string;
+      lessonVersionId: string;
+      unitId: string;
+      title: string;
+      cefrLevel: CefrLevel;
+      estimatedMinutes: number;
+      targetSkillIds: string[];
+    }[]
+  > {
+    const units = await this.prisma.unit.findMany({
+      where: { status: ContentStatus.PUBLISHED },
+      orderBy: [{ level: { order: 'asc' } }, { order: 'asc' }],
+      select: {
+        id: true,
+        lessons: {
+          where: { publishedVersionId: { not: null } },
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            publishedVersion: {
+              select: {
+                id: true,
+                title: true,
+                cefrLevel: true,
+                estimatedMinutes: true,
+                targetSkills: {
+                  orderBy: { position: 'asc' },
+                  select: { skillId: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return units.flatMap((unit) =>
+      unit.lessons.flatMap((lesson) => {
+        const version = lesson.publishedVersion;
+
+        if (version === null) {
+          return [];
+        }
+
+        return [
+          {
+            lessonId: lesson.id,
+            lessonVersionId: version.id,
+            unitId: unit.id,
+            title: version.title,
+            cefrLevel: version.cefrLevel,
+            estimatedMinutes: version.estimatedMinutes,
+            targetSkillIds: version.targetSkills.map(
+              (target) => target.skillId,
+            ),
+          },
+        ];
+      }),
+    );
+  }
+
+  /**
    * O que uma versão de lição toca: as skills-alvo dela e tudo que as
    * etapas referenciam (inclui vocabulário e chunk, que são `Skill` também).
    * O SRS (9) usa para criar os cards de revisão ao completar a lição.

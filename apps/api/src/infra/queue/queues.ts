@@ -27,8 +27,10 @@ export const QUEUES = {
   LEARNER_UPDATES: 'learner-updates',
   /** Calibração semanal da dificuldade dos itens. */
   ASSESSMENT: 'assessment',
-  /** Reagendamento de revisão espaçada e do cronograma. */
+  /** Reagendamento de revisão espaçada (FSRS). */
   SCHEDULING: 'scheduling',
+  /** Montagem e recálculo do cronograma e da agenda diária. */
+  PLANNER: 'planner',
   /** E-mail, push e lembretes. */
   NOTIFICATIONS: 'notifications',
   /** Webhooks e sincronização de assinatura com o Asaas. */
@@ -48,4 +50,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.LEARNER_UPDATES,
   QUEUES.ASSESSMENT,
   QUEUES.SCHEDULING,
+  QUEUES.PLANNER,
 ];

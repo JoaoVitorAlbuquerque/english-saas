@@ -169,13 +169,34 @@ export class UsersService {
       create: { userId, ...data },
       update: data,
     });
+    const availability = normalizeAvailability(
+      profile.availabilityMinutes as Partial<AvailabilityMinutes>,
+    );
 
-    return {
-      ...profile,
-      availabilityMinutes: normalizeAvailability(
-        profile.availabilityMinutes as Partial<AvailabilityMinutes>,
-      ),
-    };
+    // Só depois do onboarding: a primeira montagem do plano já sai do
+    // `user.onboarded`, que `completeOnboarding` emite chamando este mesmo
+    // método por baixo — emitir os dois aqui duplicaria o rebuild inicial.
+    const relevantFieldChanged =
+      input.availabilityMinutes !== undefined ||
+      input.timezone !== undefined ||
+      input.targetDate !== undefined ||
+      input.goals !== undefined;
+
+    if (relevantFieldChanged && profile.onboardingCompletedAt !== null) {
+      this.events.emit(
+        'profile.availability_changed',
+        {
+          userId,
+          goals: profile.goals,
+          weeklyMinutes: totalWeeklyMinutes(availability),
+          timezone: profile.timezone,
+          targetDate: profile.targetDate?.toISOString() ?? null,
+        },
+        { userId },
+      );
+    }
+
+    return { ...profile, availabilityMinutes: availability };
   }
 
   // -------------------------------------------------------------------

@@ -160,7 +160,7 @@ dos que vêm antes dele.
 | 7   | `learner-model`                 | 6          | Nível por competência, mastery, erros recorrentes, forças e fraquezas, interesses. ✅ pronto          |
 | 8   | `assessment`                    | 7          | Nivelamento adaptativo, checkpoints de unidade, `selectItems` nivelado, calibração. ✅ pronto         |
 | 9   | `srs`                           | 7          | Revisão espaçada com FSRS: `ReviewCard`, sessão diária, criação por evento. ✅ pronto                 |
-| 10  | `planner`                       | 8, 9       | Cronograma personalizado e agenda diária — recomendação, nunca bloqueio                               |
+| 10  | `planner`                       | 8, 9       | Trilha até o nível-alvo e agenda diária — recomendação, nunca bloqueio. ✅ pronto                     |
 | 11  | `billing`                       | 3          | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, `AiCredit` do Plus                     |
 | 12  | `tutor`                         | 2, 7, 11   | Roleplay com IA, conversa livre, feedback usando o modelo do aluno                                    |
 | 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios                  |
@@ -487,6 +487,53 @@ já são `Skill` (`SkillType.VOCAB_SET` e `CHUNK`); vocabulário é por
   (`infra/redis/user-lock.ts`) que os dois módulos usam — sem marca d'água
   aqui, porque criar card é idempotente por `[userId, kind, refId]`.
 
+### Cronograma automático (planner)
+
+`StudyPlan.path` guarda só o que **falta** — não um histórico. Completar uma
+lição (de qualquer jeito, inclusive fora do plano) tira ela do path; não
+existe "marcar como feito" separado disso.
+
+- **Reconstrução é sempre completa, nunca incremental.** `rebuild` lê o
+  learner-model, o catálogo e a disponibilidade atuais e monta o path do
+  zero — refazer duas vezes seguidas dá o mesmo resultado. As únicas
+  escritas incrementais são tirar uma lição concluída do path e somar
+  `reinforceSkillIds` de um checkpoint; nenhuma das duas remonta a trilha.
+- **A agenda é gerada uma vez por dia local e guardada.** Não é o cálculo
+  que é caro — é o `skip` que precisa persistir dentro do mesmo dia sem
+  recalcular tudo de novo a cada leitura. `GET /me/agenda?date=` só aceita o
+  dia de hoje: não existe agenda do passado.
+- **A ordem dos blocos é fixa e o corte é sempre pelo orçamento do dia:**
+  revisão vencida (até ~30%, usando o que existir), a próxima lição do path
+  se couber inteira, prática das fraquezas preenchendo o resto. O
+  espalhamento de quem ficou dias sem estudar já vem pronto do SRS (9) — o
+  planner só lê `ReviewCardService.dueFor` e reaproveita
+  `buildSession`/`sessionCapacity` de `srs/domain/session.ts` direto (função
+  pura, sem precisar o SRS exportar nada pra isso).
+- **Unidade ligada ao objetivo do aluno é promovida dentro do mesmo nível**,
+  mas nunca na frente de quem ensina o pré-requisito de uma skill dela —
+  troca adjacente, um passo de cada vez (`domain/build-path.ts`). Reforço de
+  fraqueza só entra se o pré-requisito dela já está dominado: sugerir
+  reforço de algo cuja base o aluno nem viu ainda não ajuda.
+- **`targetLevel` não existe no perfil do aluno** — é parâmetro do rebuild,
+  guardado no plano; sem informar, o padrão é C1.
+- **Plano Plus e o generator (13) não existem ainda.** O bloco de "material
+  personalizado sugerido" do pedido original fica de fora até o módulo 11
+  (billing) e o 13 existirem — não há nem campo de plano no banco hoje.
+- **Portão do checkpoint é só sugestão de texto, nunca bloqueio** — o aluno
+  sempre pode abrir qualquer lição, checkpoint feito ou não (ver seção 1:
+  conteúdo é todo liberado).
+- **Cron diário por fuso horário, não por aluno.** Um job repetível por
+  fuso distinto (`repeat.tz`, o `cron-parser` do BullMQ cuida do horário de
+  verão sozinho), às 00:30 local; cada disparo enfileira um rebuild por
+  aluno daquele fuso. Fuso novo ganha o job na hora, via
+  `profile.availability_changed` — não precisa esperar o próximo restart.
+- **`rebuild` tenta de nada a trava algumas vezes antes de desistir.** O
+  `user.onboarded` já dispara um rebuild em segundo plano; um cliente que
+  chama `POST /me/plan/rebuild` logo depois do onboarding entraria numa
+  corrida real com esse job. A montagem é rápida (curso pequeno, sem IA),
+  então vale mais tentar de novo que devolver "plano não existe" pra quem
+  acabou de se cadastrar.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -572,7 +619,7 @@ valida a mensagem.
 | **Mastery**           | Quanto o aluno domina uma Skill, estimado a partir das Answers. Decai com o tempo sem prática.                                       |
 | **ReviewCard**        | Cartão de revisão espaçada (FSRS) ligado a uma Skill, RegisterNote ou ErrorPattern: `kind` diz a qual, `due` diz quando.             |
 | **StudyPlan**         | Cronograma personalizado do aluno — o caminho recomendado ao longo de semanas. Recomendação, **não** bloqueio.                       |
-| **Agenda**            | O recorte de hoje do StudyPlan: o que fazer agora (lições sugeridas + fila de revisão).                                              |
+| **Agenda**            | O recorte de hoje do StudyPlan: blocos de revisão, lição e prática, cada um com um motivo em pt-BR.                                  |
 | **RegisterNote**      | Nota que contrasta a forma gramatical padrão com a forma falada no dia a dia (`I'm going to` × `I'm gonna`).                         |
 | **ErrorPattern**      | Erro típico de brasileiro, ligado a Skills: `l1.have-for-age` ("I have 20 years"), `article.country-the`, `third-person-s`.          |
 | **Span**              | Marcação `{start, end, kind}` sobre um trecho de texto de cena ou card. É o que permite destacar estrutura e chunk na interface.     |

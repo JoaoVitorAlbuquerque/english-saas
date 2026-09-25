@@ -55,6 +55,18 @@ export interface DomainEventPayloads {
     interests: string[];
     targetDate: string | null;
   };
+  /**
+   * Perfil editado depois do onboarding: disponibilidade, fuso, meta de
+   * data ou objetivos mudaram. O planejador (10) escuta para refazer a
+   * trilha e o forecast — a primeira montagem já sai do `user.onboarded`.
+   */
+  'profile.availability_changed': {
+    userId: string;
+    goals: string[];
+    weeklyMinutes: number;
+    timezone: string;
+    targetDate: string | null;
+  };
   /** Aluno pediu exclusão da conta. Soft delete já foi aplicado. */
   'user.deletion_requested': {
     userId: string;
