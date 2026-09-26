@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './fonts.css';
+
+@layer base {
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+  }
+
+  /* Alvo de toque mínimo (44px) em qualquer elemento interativo. */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    min-height: 2.75rem;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

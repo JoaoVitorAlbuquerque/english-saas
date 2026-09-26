@@ -1,0 +1,5 @@
+@import '@english-saas/ui/styles/index.css';
+
+/* packages/ui fica fora da raiz do Vite deste app — a detecção automática de
+   classes do Tailwind não entra lá sozinha, então apontamos manualmente. */
+@source '../../../packages/ui/src';

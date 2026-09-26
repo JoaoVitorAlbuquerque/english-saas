@@ -3,6 +3,7 @@ node_modules
 
 # build output
 dist
+dist-ladle
 build
 .turbo
 *.tsbuildinfo
@@ -17,6 +18,8 @@ yarn-debug.log*
 # tests
 coverage
 .nyc_output
+playwright-report
+test-results
 
 # env
 .env

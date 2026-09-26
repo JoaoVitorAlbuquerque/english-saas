@@ -888,7 +888,116 @@ valida a mensagem.
 
 ---
 
-## 5. Glossário do domínio
+## 5. Front-end
+
+**Estado atual: fundação pronta (design system, cliente de API, esqueleto
+dos dois apps). Nenhuma tela de negócio ainda** — cada uma entra como um
+módulo à parte, igual ao back-end.
+
+### Pacotes
+
+| Pacote                | O que é                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `apps/web`            | App do aluno — React + Vite + TypeScript, mobile-first.                                 |
+| `apps/admin`          | Painel interno para `EDITOR`/`ADMIN` — mesma stack, só desktop.                         |
+| `packages/ui`         | Design system compartilhado (tokens, componentes, Ladle).                               |
+| `packages/api-client` | Cliente HTTP tipado, auth (access token em memória + refresh), hooks de TanStack Query. |
+
+`packages/ui` e `packages/api-client` **não têm build** — só são consumidos
+por bundlers Vite (os dois apps e o Ladle), que apontam um alias direto para
+o `src/` de cada um (ver `resolve.alias` em `vite.config.ts`). Evita a
+complexidade de build dupla ESM/CJS que `packages/shared` precisa (esse
+também é consumido pela API Nest, que roda a partir de `dist/`).
+
+### Convenções
+
+- **Componentes em PascalCase**, um por arquivo/pasta.
+- **Tela = pasta com `index.tsx` (visual) + `use<Pagina>Controller.ts`
+  (lógica)** — o componente só recebe o que o hook devolve e renderiza; nada
+  de `useState`/`useEffect`/chamada de API dentro do `index.tsx`. Padrão do
+  projeto de referência `fincheck/fe`.
+- **Toda tela de negócio vive em `src/features/<nome>/<Pagina>/`.**
+  `src/pages/` é só para telas sem domínio (404, e por enquanto os
+  placeholders "em construção" do admin).
+- **Hook de dado só existe em `packages/api-client`.** Nenhum componente ou
+  controller chama `fetch` direto — sempre `apiFetch`/os hooks de
+  `modules/<recurso>` do api-client. Um recurso novo do back-end vira um
+  arquivo novo em `packages/api-client/src/modules/<recurso>/`
+  (`schemas.ts` + `service.ts` + `hooks.ts`), do mesmo jeito que o auth.
+- **Schema de request/response é zod.** Vem de `packages/shared` quando já
+  existe lá (ex.: `Role`); quando a DTO do back-end ainda não é exportada
+  para `shared`, o api-client define o próprio schema espelhando o
+  contrato do controller (é o caso hoje do módulo `auth`).
+- **Mensagens em `src/messages/pt-BR.ts`** por app, um dicionário plano lido
+  por `t(key)` — sem lib de i18n. Texto de tela nunca é string solta no
+  componente.
+- **Tema claro/escuro** é `data-theme` em `<html>` (`useTheme` de
+  `packages/ui`), nunca uma classe custom por componente.
+
+### Autenticação no front
+
+- Access token **só em memória** (`token-store` do api-client) — nunca em
+  `localStorage`. Some a cada reload; quem recupera a sessão é o
+  `AuthProvider` de cada app, chamando `refreshSession()` (cookie httpOnly)
+  ao montar.
+- 401 fora de `/auth/*` dispara refresh automático com fila (uma chamada só,
+  mesmo com requisições concorrentes) e repete a chamada original;
+  falhando, emite o evento `unauthenticated` (`http/events.ts`) — cada app
+  escuta e limpa a store de sessão, o `AuthGuard` redireciona para
+  `/login`.
+- `PLAN_REQUIRED`/`INSUFFICIENT_CREDITS` viram eventos globais do mesmo
+  jeito; hoje só documentam o contrato — o paywall visual entra com a
+  primeira tela que precisar dele.
+- CSRF: o cliente lê o cookie legível `csrf_token` direto do navegador
+  (`http/csrf-cookie.ts`) e copia para o header `x-csrf-token` nas rotas que
+  dependem do cookie (`/auth/refresh`, `/auth/logout`) — nunca guarda esse
+  valor em outro lugar.
+
+### Tokens do design system (`packages/ui/src/styles/tokens.css`)
+
+Variáveis CSS lidas pelo `@theme` do Tailwind v4; o escuro sobrescreve as
+mesmas variáveis sob `prefers-color-scheme` (tema "sistema") ou
+`[data-theme="dark"]` (tema escolhido).
+
+| Token      | Claro      | Escuro     |
+| ---------- | ---------- | ---------- |
+| `ground`   | `#EEF3F1`  | `#0F1816`  |
+| `surface`  | `#FFFFFF`  | `#17231F`  |
+| `ink`      | `#13231F`  | `#E6EEEA`  |
+| `muted`    | `#56675F`  | `#9DB0A8`  |
+| `line`     | `#CCD8D3`  | `#2C3D37`  |
+| `accent`   | `#0E6B5A`  | `#3FBFA2`  |
+| `chunk`    | `#F5C04A`  | `#F5C04A`  |
+| `chunk-bg` | `#FFF1CC`  | `#3A3016`  |
+| `ok`       | `#1E7A45`  | `#1E7A45`  |
+| `error`    | `#B23A2E`  | `#B23A2E`  |
+| `maya`     | `#7A4FBF`  | `#7A4FBF`  |
+| `lucas`    | = `accent` | = `accent` |
+
+Tipografia: `--font-display` (Bricolage Grotesque, títulos), `--font-body`
+(Atkinson Hyperlegible, texto), `--font-mono` (JetBrains Mono, rótulos e
+números) — self-hospedadas via `@fontsource`, sem depender de rede externa.
+
+Componentes base em `packages/ui/src/components/`: Button, Input, Textarea,
+Select, Checkbox, Chip, Card, Badge, Tabs, Dialog, Sheet, Toast, Tooltip,
+Popover, ProgressBar, StepDots, CharacterAvatar, Skeleton, EmptyState,
+ErrorState, AudioButton, Mark. Cada um tem `.stories.tsx` (Ladle) e
+`.test.tsx` (Vitest + Testing Library) ao lado.
+
+### Como rodar
+
+```bash
+pnpm dev                                    # web em :5173, admin em :5174
+pnpm --filter @english-saas/ui storybook    # Ladle em :61000
+pnpm test                                   # Vitest nos 4 pacotes de front
+pnpm --filter @english-saas/web test:e2e    # Playwright (build + preview)
+pnpm --filter @english-saas/admin test:e2e
+```
+
+`VITE_API_URL` vem do `.env` único na raiz (mesmo arquivo do back-end) — os
+`vite.config.ts` dos dois apps apontam `envDir` para lá.
+
+## 6. Glossário do domínio
 
 | Termo                 | O que é                                                                                                                              |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -920,7 +1029,7 @@ valida a mensagem.
 
 ---
 
-## 6. Como trabalhar comigo
+## 7. Como trabalhar comigo
 
 ### Antes de codar um módulo
 
@@ -959,7 +1068,7 @@ meu ok e então siga o plano.
 
 ---
 
-## 7. Ambiente local
+## 8. Ambiente local
 
 ```bash
 cp .env.example .env

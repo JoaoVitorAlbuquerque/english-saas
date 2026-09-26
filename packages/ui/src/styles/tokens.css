@@ -1,0 +1,66 @@
+/**
+ * Tokens do design system, como variáveis CSS. Tema claro é o padrão em
+ * `:root`; o escuro sobrescreve as mesmas variáveis sob `prefers-color-scheme`
+ * (tema "sistema") ou sob `[data-theme="dark"]` (tema escolhido pelo aluno).
+ */
+@theme {
+  --color-ground: var(--es-ground);
+  --color-surface: var(--es-surface);
+  --color-ink: var(--es-ink);
+  --color-muted: var(--es-muted);
+  --color-line: var(--es-line);
+  --color-accent: var(--es-accent);
+  --color-chunk: var(--es-chunk);
+  --color-chunk-bg: var(--es-chunk-bg);
+  --color-ok: var(--es-ok);
+  --color-error: var(--es-error);
+  --color-maya: var(--es-maya);
+  --color-lucas: var(--es-lucas);
+
+  --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+:root {
+  color-scheme: light;
+
+  --es-ground: #eef3f1;
+  --es-surface: #ffffff;
+  --es-ink: #13231f;
+  --es-muted: #56675f;
+  --es-line: #ccd8d3;
+  --es-accent: #0e6b5a;
+  --es-chunk: #f5c04a;
+  --es-chunk-bg: #fff1cc;
+  --es-ok: #1e7a45;
+  --es-error: #b23a2e;
+  --es-maya: #7a4fbf;
+  --es-lucas: var(--es-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --es-ground: #0f1816;
+    --es-surface: #17231f;
+    --es-ink: #e6eeea;
+    --es-muted: #9db0a8;
+    --es-line: #2c3d37;
+    --es-accent: #3fbfa2;
+    --es-chunk-bg: #3a3016;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --es-ground: #0f1816;
+  --es-surface: #17231f;
+  --es-ink: #e6eeea;
+  --es-muted: #9db0a8;
+  --es-line: #2c3d37;
+  --es-accent: #3fbfa2;
+  --es-chunk-bg: #3a3016;
+}
