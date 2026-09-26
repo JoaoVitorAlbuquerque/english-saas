@@ -179,6 +179,63 @@ export class UsersService {
     };
   }
 
+  /** Fusos em uso por quem terminou o onboarding. */
+  async distinctTimezones(): Promise<string[]> {
+    const rows = await this.prisma.studentProfile.findMany({
+      where: {
+        onboardingCompletedAt: { not: null },
+        user: { deletedAt: null },
+      },
+      distinct: ['timezone'],
+      select: { timezone: true },
+    });
+
+    return rows.map((row) => row.timezone);
+  }
+
+  /**
+   * Quem recebe lembrete num fuso: conta ativa com onboarding feito, em
+   * lotes por cursor. Leva o horário preferido — a hora do lembrete sai
+   * dele quando o aluno não escolheu outra.
+   */
+  async remindableInTimezone(input: {
+    timezone: string;
+    afterId?: string | undefined;
+    take: number;
+  }): Promise<
+    {
+      userId: string;
+      email: string;
+      name: string;
+      preferredStudyTime: PreferredStudyTime;
+    }[]
+  > {
+    const rows = await this.prisma.studentProfile.findMany({
+      where: {
+        timezone: input.timezone,
+        onboardingCompletedAt: { not: null },
+        user: { deletedAt: null },
+        ...(input.afterId === undefined
+          ? {}
+          : { userId: { gt: input.afterId } }),
+      },
+      orderBy: { userId: 'asc' },
+      take: input.take,
+      select: {
+        userId: true,
+        preferredStudyTime: true,
+        user: { select: { email: true, name: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      userId: row.userId,
+      email: row.user.email,
+      name: row.user.name,
+      preferredStudyTime: row.preferredStudyTime,
+    }));
+  }
+
   /** Contas criadas em `[from, to)` — as coortes de retenção. */
   async signupsBetween(
     from: Date,

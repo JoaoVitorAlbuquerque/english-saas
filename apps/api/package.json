@@ -57,6 +57,7 @@
     "robots-parser": "^3.0.1",
     "rxjs": "^7.8.1",
     "ts-fsrs": "^5.4.2",
+    "web-push": "^3.6.7",
     "zod": "^4.0.0"
   },
   "devDependencies": {
@@ -73,6 +74,7 @@
     "@types/node": "^22.10.7",
     "@types/react": "^18.3.31",
     "@types/supertest": "^6.0.2",
+    "@types/web-push": "^3.6.4",
     "cross-env": "^10.1.0",
     "dotenv": "^16.4.7",
     "eslint": "^9.18.0",

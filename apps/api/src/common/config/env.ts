@@ -233,6 +233,18 @@ export const envSchema = z.object({
   USD_BRL_RATE: z.coerce.number().positive().default(5.5),
 
   /**
+   * Web Push (15). 'auto' usa a biblioteca `web-push` quando as três chaves
+   * VAPID existem e cai no fake em teste ou sem elas — sem chave, o push
+   * fica indisponível e o e-mail segue normal. Gere o par com
+   * `npx web-push generate-vapid-keys`.
+   */
+  PUSH_PROVIDER: z.enum(['auto', 'webpush', 'fake']).default('auto'),
+  VAPID_PUBLIC_KEY: optional,
+  VAPID_PRIVATE_KEY: optional,
+  /** Contato do remetente para o serviço de push: `mailto:` ou URL. */
+  VAPID_SUBJECT: optional,
+
+  /**
    * Voz no tutor (12): o áudio vai para o storage, é transcrito em job e
    * segue o caminho do texto. Desligado até existir um STT de verdade — só o
    * fake está implementado.

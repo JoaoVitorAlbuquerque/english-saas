@@ -24,7 +24,7 @@ import {
   type WeaknessAction,
 } from '../domain/actions';
 import { mergeTallies, toMinutes } from '../domain/activity';
-import { localDateOf, recentWeeks, weekStart } from '../domain/dates';
+import { addDays, localDateOf, recentWeeks, weekStart } from '../domain/dates';
 import { paceForecast, type PaceForecast } from '../domain/forecast';
 import {
   ERROR_TREND_LABELS,
@@ -241,6 +241,45 @@ export class StudentProgressService {
         }),
         targetLevel: plan?.targetLevel ?? null,
       },
+    };
+  }
+
+  /**
+   * Os números de uma semana (segunda a domingo, dias locais do aluno), das
+   * linhas que o job gravou. É o que o resumo semanal (15) manda.
+   */
+  async weekSummary(
+    userId: string,
+    weekStartDate: string,
+  ): Promise<{
+    studyMinutes: number;
+    plannedMinutes: number;
+    lessonsCompleted: number;
+    reviewsDone: number;
+    firstTryAnswers: number;
+    firstTryCorrect: number;
+    activeDays: number;
+  }> {
+    const rows = await this.prisma.userDailyActivity.findMany({
+      where: {
+        userId,
+        date: {
+          gte: toDbDate(weekStartDate),
+          lte: toDbDate(addDays(weekStartDate, 6)),
+        },
+      },
+    });
+    const total = (pick: (row: (typeof rows)[number]) => number) =>
+      rows.reduce((sum, row) => sum + pick(row), 0);
+
+    return {
+      studyMinutes: toMinutes(total((row) => row.studySeconds)),
+      plannedMinutes: total((row) => row.plannedMinutes),
+      lessonsCompleted: total((row) => row.lessonsCompleted),
+      reviewsDone: total((row) => row.reviewsDone),
+      firstTryAnswers: total((row) => row.firstTryAnswers),
+      firstTryCorrect: total((row) => row.firstTryCorrect),
+      activeDays: rows.filter((row) => row.active).length,
     };
   }
 

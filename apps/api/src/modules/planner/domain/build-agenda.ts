@@ -18,6 +18,10 @@ export type AgendaBlock = {
   refId: string;
   estimatedMinutes: number;
   reason: string;
+  /** Título da lição (LESSON). Opcional: agenda antiga não tem. */
+  title?: string;
+  /** Quantos cards (REVIEW). Opcional: agenda antiga não tem. */
+  count?: number;
 };
 
 export type ReviewCandidate = {
@@ -72,6 +76,7 @@ export function buildAgenda(input: {
         type: 'REVIEW',
         refId: 'review',
         estimatedMinutes: minutes,
+        count: input.review.count,
         reason: input.review.hasRecurringError
           ? `${String(input.review.count)} cards de revisão vencidos, alguns de erros recorrentes.`
           : `${String(input.review.count)} cards de revisão vencidos.`,
@@ -89,6 +94,7 @@ export function buildAgenda(input: {
       type: 'LESSON',
       refId: input.nextLesson.lessonId,
       estimatedMinutes: input.nextLesson.estimatedMinutes,
+      title: input.nextLesson.title,
       reason: input.nextLesson.reason,
     });
     remaining -= input.nextLesson.estimatedMinutes;

@@ -171,7 +171,7 @@ dos que vêm antes dele.
 | 12  | `tutor`                         | 2, 7, 11   | Correção de produção livre e roleplay com IA, alimentando o modelo do aluno e o SRS. ✅ pronto        |
 | 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios. ✅ pronto       |
 | 14  | `progress`                      | 7, 9, 10   | Painel do aluno, métricas do admin, agregação diária noturna. ✅ pronto                               |
-| 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                     |
+| 15  | `notifications`                 | 10         | E-mail e Web Push, lembretes do planner por fuso, preferências e limite de frequência. ✅ pronto      |
 | 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                             |
 | 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas                                               |
 | 18  | `deploy`                        | todos      | Infra de produção, migrations, observabilidade, backup                                                |
@@ -781,6 +781,42 @@ cruas dos outros módulos.
 - O plano de um dia passado é reconstruído do estado atual da assinatura
   (`grantedAccessAt`): cancelada depois daquele dia ainda valia; EXPIRED
   não entra.
+
+### Notificações (notifications)
+
+Lembretes em cima do planner: o **diário** (plano de hoje não iniciado),
+o de **revisões acumulando** e o **resumo semanal** do progresso (14).
+
+- **E-mail é o canal padrão** (o `MailService` do infra, provedor por
+  `MAIL_PROVIDER`). **Web Push é opcional**: o aluno ativa em Perfil →
+  Notificações, o front assina com a chave VAPID e manda a inscrição —
+  uma por navegador (`PushSubscription`). 404/410 do serviço de push apaga
+  a inscrição. Sem as chaves VAPID, as rotas de push dão 409
+  `PUSH_UNAVAILABLE` e o e-mail segue. Canal novo (push de app) é mais uma
+  implementação de `NotificationChannel`.
+- **Um tick por fuso, de hora em hora** (fila `notifications`, mesma ideia
+  do planner): pega quem daquele fuso tem o lembrete nesta hora e enfileira
+  um job por aluno. A hora é a escolhida em `reminderHour` ou sai do
+  `preferredStudyTime` (manhã 8h, tarde 13h, noite 19h, madrugada 21h,
+  qualquer 19h). O resumo semanal sai na segunda, na mesma hora, só por
+  e-mail, com os números da semana anterior.
+- **"Não iniciou" = não estudou hoje no fuso dele** (etapa, resposta, lição
+  aberta ou revisão), lido pelos serviços do learning e do SRS. A agenda
+  não tem estado de "iniciada".
+- **No máximo um lembrete por dia**, somando diário e revisões acumuladas:
+  o `NotificationLog.dedupKey` (`reminder:{aluno}:{dia local}`) é único e
+  é gravado **antes** de enviar — dois jobs no mesmo dia, o segundo perde
+  na inserção. Nenhum canal entregou: a linha sai e o job tenta de novo.
+- Revisões acumuladas: 25+ vencidas, no máximo a cada 3 dias; nesse dia
+  substitui o diário. Horário silencioso (padrão 22h–8h) bloqueia tudo;
+  hora escolhida dentro dele é recusada (422).
+- **Textos específicos e sem culpa** (`domain/messages.ts`): quanto tempo
+  falta e o quê — "Faltam 12 min para fechar o plano de hoje: 1 revisão e
+  a lição "At the airport"". Nada de "você esqueceu", sequência em risco
+  ou exclamação. O bloco da agenda guarda `title` e `count` para isso.
+- Todo e-mail de aviso tem link "parar de receber" daquele tipo: token
+  HMAC (`aluno.tipo`, sem estado), o front chama
+  `POST /notifications/unsubscribe`.
 
 ### Erros e logs
 

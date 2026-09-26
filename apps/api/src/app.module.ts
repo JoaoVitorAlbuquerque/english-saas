@@ -25,6 +25,7 @@ import { LearningModule } from './modules/learning/learning.module';
 import { PlannerModule } from './modules/planner/planner.module';
 import { SrsModule } from './modules/srs/srs.module';
 import { GeneratorModule } from './modules/generator/generator.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProgressModule } from './modules/progress/progress.module';
 import { TutorModule } from './modules/tutor/tutor.module';
 import { UsersModule } from './modules/users/users.module';
@@ -66,6 +67,7 @@ import { UsersModule } from './modules/users/users.module';
     TutorModule,
     GeneratorModule,
     ProgressModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

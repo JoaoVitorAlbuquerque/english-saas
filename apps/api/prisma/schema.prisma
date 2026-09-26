@@ -238,6 +238,10 @@ model User {
   reviewLogs      ReviewLog[]
   dailyActivities UserDailyActivity[]
 
+  notificationPreference NotificationPreference?
+  pushSubscriptions      PushSubscription[]
+  notificationLogs       NotificationLog[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -2401,4 +2405,105 @@ model CohortRetention {
 
   @@unique([cohortWeek, weekOffset])
   @@map("cohort_retention")
+}
+
+// ===========================================================================
+// Módulo 15 — notifications
+//
+// Lembretes em cima do planner: e-mail (padrão) e Web Push (opcional, por
+// navegador). O `NotificationLog` é o que garante envio único e o limite de
+// frequência.
+// ===========================================================================
+
+enum NotificationType {
+  DAILY_REMINDER @map("daily_reminder")
+  REVIEW_BACKLOG @map("review_backlog")
+  WEEKLY_SUMMARY @map("weekly_summary")
+  TEST           @map("test")
+
+  @@map("notification_type")
+}
+
+enum NotificationChannelKind {
+  EMAIL    @map("email")
+  WEB_PUSH @map("web_push")
+
+  @@map("notification_channel_kind")
+}
+
+enum NotificationStatus {
+  SENT   @map("sent")
+  FAILED @map("failed")
+
+  @@map("notification_status")
+}
+
+/// O que o aluno quer receber, e quando. Criada com os padrões na primeira
+/// leitura: e-mail ligado, push desligado.
+model NotificationPreference {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  dailyReminder Boolean @default(true) @map("daily_reminder")
+  reviewBacklog Boolean @default(true) @map("review_backlog")
+  weeklySummary Boolean @default(true) @map("weekly_summary")
+
+  emailEnabled Boolean @default(true) @map("email_enabled")
+  pushEnabled  Boolean @default(false) @map("push_enabled")
+
+  /// Hora local do lembrete (0–23). Nula: sai do `preferredStudyTime`.
+  reminderHour Int? @map("reminder_hour")
+  /// Horário silencioso, em horas locais. Pode atravessar a meia-noite.
+  quietStart   Int  @default(22) @map("quiet_start")
+  quietEnd     Int  @default(8) @map("quiet_end")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
+}
+
+/// Um navegador (ou dispositivo) inscrito no Web Push.
+model PushSubscription {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// URL do serviço de push do navegador. Única: o mesmo navegador não duplica.
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?   @map("user_agent")
+  lastSuccessAt DateTime? @map("last_success_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/// Uma notificação enviada (ou que falhou). Append-only. `dedupKey` é único:
+/// é a trava do envio único e do limite de um lembrete por dia.
+model NotificationLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId    String                    @map("user_id") @db.Uuid
+  user      User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  /// `YYYY-MM-DD` no fuso do aluno.
+  localDate String                    @map("local_date")
+  dedupKey  String                    @unique @map("dedup_key")
+  /// Canais que receberam; vazio se todos falharam.
+  channels  NotificationChannelKind[]
+  status    NotificationStatus
+  title     String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, type, createdAt])
+  @@map("notification_logs")
 }

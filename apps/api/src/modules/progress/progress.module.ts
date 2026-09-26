@@ -52,5 +52,7 @@ import { StudentProgressService } from './services/student-progress.service';
     ProgressProcessor,
     ProgressScheduler,
   ],
+  // O resumo semanal das notificações (15) lê os números da semana daqui.
+  exports: [StudentProgressService],
 })
 export class ProgressModule {}
