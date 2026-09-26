@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   ContentStatus,
+  ItemSource,
   Prisma,
   type Answer,
   type AnswerContext,
@@ -107,6 +108,15 @@ export class AnswerService {
     }
 
     const item = await this.loadPublishedItem(input.itemId);
+
+    // Exercício de material gerado (13) só se responde pelo material dele.
+    if (
+      item.source === ItemSource.AI_GENERATED &&
+      input.context !== 'GENERATED_MATERIAL'
+    ) {
+      throw new NotFoundError('Esta questão não está disponível.');
+    }
+
     const stepIndex = await this.resolveStep(input);
 
     const shapeError = responseShapeError(item, input.response);
@@ -249,6 +259,34 @@ export class AnswerService {
     });
 
     return rows.map((row) => row.itemId);
+  }
+
+  /**
+   * O que o aluno já respondeu destas questões num contexto — o generator
+   * (13) mostra o estado de cada exercício do material. A primeira resposta
+   * de cada item, que é a que vale.
+   */
+  async firstAnswersForItems(
+    userId: string,
+    itemIds: readonly string[],
+    context: AnswerContext,
+  ) {
+    if (itemIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.answer.findMany({
+      where: { userId, context, itemId: { in: [...itemIds] } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      distinct: ['itemId'],
+      select: {
+        id: true,
+        itemId: true,
+        isCorrect: true,
+        score: true,
+        createdAt: true,
+      },
+    });
   }
 
   /**

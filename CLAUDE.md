@@ -142,6 +142,10 @@ packages/
   [workbook-pdf.ts](apps/api/src/modules/content-studio/services/workbook-pdf.ts);
   e os scripts de Jest rodam com `--experimental-vm-modules` via
   `cross-env`. Sem a flag, o Jest recusa qualquer `import()` dinâmico.
+- **`jsdom` fica na 26.x.** A 27+ é CommonJS mas depende de pacote ESM
+  puro (`@exodus/bytes`), e nem o `import()` dinâmico salva no Jest. Ele e
+  o `@mozilla/readability` são carregados sob demanda em
+  [article-extract.ts](apps/api/src/modules/generator/services/article-extract.ts).
 
 ---
 
@@ -165,7 +169,7 @@ dos que vêm antes dele.
 | 10  | `planner`                       | 8, 9       | Trilha até o nível-alvo e agenda diária — recomendação, nunca bloqueio. ✅ pronto                     |
 | 11  | `billing`                       | 2, 3       | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, créditos de IA. ✅ pronto              |
 | 12  | `tutor`                         | 2, 7, 11   | Correção de produção livre e roleplay com IA, alimentando o modelo do aluno e o SRS. ✅ pronto        |
-| 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios                  |
+| 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios. ✅ pronto       |
 | 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                          |
 | 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                     |
 | 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                             |
@@ -445,9 +449,11 @@ Os parâmetros saíram de simulação — mudar exige rodar
 ### Revisão espaçada (srs)
 
 Agendamento por **FSRS** (`ts-fsrs`), não SM-2. `ReviewCard.kind` diz o que
-o `refId` referencia — SKILL, VOCAB, CHUNK, REGISTER_NOTE ou ERROR_PATTERN —
-sem chave estrangeira, porque são três tabelas diferentes conforme o tipo
-(mesma ideia da referência dentro de JSON do módulo 4). Vocabulário e chunk
+o `refId` referencia — SKILL, VOCAB, CHUNK, REGISTER_NOTE, ERROR_PATTERN ou
+TERM — sem chave estrangeira, porque são tabelas diferentes conforme o tipo
+(mesma ideia da referência dentro de JSON do módulo 4). TERM é um termo
+solto do aluno (`StudyTerm`, dono é o SRS), que vem do vocabulário dos
+materiais do generator (13). Vocabulário e chunk
 já são `Skill` (`SkillType.VOCAB_SET` e `CHUNK`); vocabulário é por
 **conjunto**, não por palavra — é o grão que o schema hoje permite.
 
@@ -518,9 +524,9 @@ existe "marcar como feito" separado disso.
   reforço de algo cuja base o aluno nem viu ainda não ajuda.
 - **`targetLevel` não existe no perfil do aluno** — é parâmetro do rebuild,
   guardado no plano; sem informar, o padrão é C1.
-- **Plano Plus e o generator (13) não existem ainda.** O bloco de "material
-  personalizado sugerido" do pedido original fica de fora até o módulo 11
-  (billing) e o 13 existirem — não há nem campo de plano no banco hoje.
+- **Bloco de "material personalizado sugerido" ainda não entrou.** O
+  billing (11) e o generator (13) já existem; ligar o planner a eles é um
+  passo à parte.
 - **Portão do checkpoint é só sugestão de texto, nunca bloqueio** — o aluno
   sempre pode abrir qualquer lição, checkpoint feito ou não (ver seção 1:
   conteúdo é todo liberado).
@@ -674,6 +680,66 @@ as rotas de escrita respondem 202 e o cliente acompanha por polling.
 - Idempotência em rede ruim: `clientRequestId` na correção e `clientTurnId`
   no turno.
 
+### Gerador (generator)
+
+Material do Plus em dois caminhos, na fila `generator`, com o status de
+cada etapa na linha do `GenerationJob` (`GET /generator/jobs/:id`):
+
+- **Tema** — `topic/suggest` (IA fast: 3 assuntos reais) → o aluno escolhe
+  (ou "surpreenda-me") → `FETCH_SOURCE` (Wikipedia em inglês, sem IA) →
+  `PICK_TARGETS` (sem IA) → `GENERATE` (smart) → `VALIDATE` → `EXERCISES`
+  (fast, por aluno) → `DELIVER`.
+- **Conteúdo do aluno** — `INGEST_SOURCE` (texto colado, URL de artigo ou
+  link de rede social **com** a transcrição colada) → `ANALYZE` (idioma,
+  gênero, tema; nível do original sem IA) → as mesmas etapas, com o texto
+  do aluno no papel da fonte.
+
+Regras que não são óbvias:
+
+- **O material acompanha o aluno.** Nível e alvos saem do snapshot na hora
+  (fraquezas → próximas skills → uma vaga para a estrutura que combina com
+  o assunto, `domain/targets.ts`), e o que foi usado fica em
+  `snapshotUsed`. O mesmo pedido meses depois dá outra chave de cache e
+  outro nível.
+- **Fato só da fonte.** Cada frase com dado precisa de uma claim cuja
+  citação exista **literalmente** na fonte (sem IA) e que a IA confirme
+  (`generator-fact-check`). Reprovada: uma reescrita; se ainda não se
+  sustenta, a frase sai. Frase com número ou nome sem claim conta como
+  reprovada.
+- **Nível checado com a lista de palavras** (teto de
+  `CONTENT_QA_MAX_OUT_OF_LEVEL`) e tamanho por nível
+  (`domain/level-profile.ts`). Estourou: uma regeneração; de novo, o
+  pedido falha com estorno. A lista ainda é pequena — a checagem vale o
+  que a `coverage` diz.
+- **Cache do texto base** (`MaterialBase`) por página, revisão, nível e
+  alvos: outro aluno igual reaproveita sem chamar a IA, e só os exercícios
+  são dele. Conteúdo do aluno **nunca** é compartilhado nem vira base.
+- **Exercício é `Item` privado** (`source = AI_GENERATED`, PUBLISHED),
+  validado pelas regras do banco e **autocorrigido** pelo avaliador do
+  learning antes de chegar ao aluno. `findCandidates`, listagem, calibração
+  e lição excluem `AI_GENERATED`; `POST /answers` recusa. Resposta só por
+  `POST /me/materials/:id/answers` (contexto GENERATED_MATERIAL, uma por
+  item).
+- **Vocabulário vira `StudyTerm` + card TERM** (até 8 por material), e as
+  skills-alvo viram card SKILL, pelo `generator.material_delivered`.
+- **Créditos**: 5 por material, reservados no request, estornados em falha
+  ou recusa. Sugerir assunto não cobra. Material já gerado não trava por
+  plano.
+- **Direito autoral e LGPD**: o texto colado fica em `inputText` só
+  enquanto o job roda e é apagado no fim. Em letra de música, nenhuma
+  frase do material copia mais de 12 palavras seguidas (e 25 no total), e
+  as claims não são guardadas. Rede social **nunca** é baixada: sem a
+  transcrição, 422 `TRANSCRIPT_REQUIRED`.
+- **URL do aluno é buscada com cuidado**: só http/https em porta padrão,
+  IP interno recusado na própria resolução do socket (sem DNS rebinding),
+  até 3 redirecionamentos revalidados, `robots.txt` respeitado, só HTML e
+  até `ARTICLE_MAX_BYTES`.
+- **Avaliação** (`POST /me/materials/:id/feedback`): a nota vira sinal de
+  interesse (só na primeira vez); "difícil/fácil demais" repetido desloca
+  o nível dos próximos em um degrau (`domain/calibration.ts`).
+- Wikipedia e artigo têm fake (`SOURCE_PROVIDER`/`ARTICLE_FETCH_PROVIDER`
+  `auto` = fake em teste): o e2e nunca sai para a internet.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -766,6 +832,8 @@ valida a mensagem.
 | **ContentDraft**      | Um pedido de rascunho à IA e sua proveniência: qual prompt, qual versão, quanto custou, quem pediu e o que foi criado.               |
 | **QaWarning**         | Achado da revisão automática: `{code, severity, message, path}`. `BLOCKER` trava a aprovação; `WARNING` e `INFO` só informam.        |
 | **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
+| **MaterialBase**      | Texto base validado de um tema (fonte, nível, alvos). Compartilhado entre alunos; os exercícios são sempre de cada um.               |
+| **StudyTerm**         | Termo de vocabulário solto do aluno, vindo de um material gerado. É o que o card TERM do SRS revisa.                                 |
 | **TutorCorrection**   | Um pedido de correção de produção livre e o resultado validado (erros mapeados para ErrorPatterns, rubrica, dicas de registro).      |
 | **RoleplaySession**   | Conversa com um personagem, com metas, teto de turnos e o resumo do fim.                                                             |
 | **AiCredit**          | Unidade de consumo das ferramentas de IA (todo plano tem cota; o Plus, a maior). Debitada por uso e reposta no ciclo.                |

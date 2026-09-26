@@ -5,10 +5,12 @@ import { QUEUES } from 'src/infra/queue/queues';
 import { defaultWorkerOptions } from 'src/infra/queue/register-queue';
 
 import {
+  GENERATED_MATERIAL_JOB,
   LESSON_COMPLETED_JOB,
   SrsUpdateService,
   TUTOR_FEEDBACK_JOB,
   WRONG_ANSWER_JOB,
+  type ErrorSource,
   type SrsUpdateOutcome,
 } from '../services/srs-update.service';
 
@@ -25,6 +27,14 @@ type WrongAnswerJobData = {
   userId: string;
   primarySkillId: string | undefined;
   errorPatternIds: string[];
+  /** Ausente em job enfileirado antes do generator (13). */
+  source?: ErrorSource;
+};
+
+type GeneratedMaterialJobData = {
+  userId: string;
+  termIds: string[];
+  skillIds: string[];
 };
 
 /** Espera quando outro worker está com o mesmo aluno. */
@@ -38,7 +48,10 @@ export class SrsUpdatesProcessor extends WorkerHost {
 
   async process(
     job: Job<
-      LessonCompletedJobData | WrongAnswerJobData | TutorFeedbackJobData
+      | LessonCompletedJobData
+      | WrongAnswerJobData
+      | TutorFeedbackJobData
+      | GeneratedMaterialJobData
     >,
     token?: string,
   ): Promise<unknown> {
@@ -56,10 +69,14 @@ export class SrsUpdatesProcessor extends WorkerHost {
         data.userId,
         data.primarySkillId,
         data.errorPatternIds,
+        data.source ?? 'LESSON',
       );
     } else if (job.name === TUTOR_FEEDBACK_JOB) {
       const { userId, ...feedback } = job.data as TutorFeedbackJobData;
       outcome = await this.updates.onTutorFeedback(userId, feedback);
+    } else if (job.name === GENERATED_MATERIAL_JOB) {
+      const { userId, ...material } = job.data as GeneratedMaterialJobData;
+      outcome = await this.updates.onGeneratedMaterial(userId, material);
     } else {
       return { skipped: true };
     }

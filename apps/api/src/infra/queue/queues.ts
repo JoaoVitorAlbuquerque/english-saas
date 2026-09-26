@@ -10,7 +10,7 @@ export const QUEUES = {
   EXAMPLE: 'example',
   /** Export de dados (LGPD) e anonimização de conta após a carência. */
   USERS: 'users',
-  /** Chamadas de IA: correção de produção livre, geração de material. */
+  /** Reservada; a IA de cada módulo roda na fila dele (tutor, generator). */
   AI: 'ai',
   /** Geração de rascunho de lição, item e nota de registro pela IA. */
   CONTENT_DRAFTS: 'content-drafts',
@@ -37,6 +37,8 @@ export const QUEUES = {
   BILLING: 'billing',
   /** Correção de produção livre, turnos de roleplay e transcrição de voz. */
   TUTOR: 'tutor',
+  /** Material do Plus: sugestão de assunto, fonte, geração e validação. */
+  GENERATOR: 'generator',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -55,4 +57,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.PLANNER,
   QUEUES.BILLING,
   QUEUES.TUTOR,
+  QUEUES.GENERATOR,
 ];

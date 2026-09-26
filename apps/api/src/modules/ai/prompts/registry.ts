@@ -2,6 +2,12 @@ import { draftItemsPrompt } from './draft-items.prompt';
 import { draftLessonPrompt } from './draft-lesson.prompt';
 import { draftRegisterNotesPrompt } from './draft-register-notes.prompt';
 import { echoLevelPrompt } from './echo-level.prompt';
+import { generatorExercisesPrompt } from './generator-exercises.prompt';
+import { generatorFactCheckPrompt } from './generator-fact-check.prompt';
+import { generatorIngestAnalysisPrompt } from './generator-ingest-analysis.prompt';
+import { generatorMaterialPrompt } from './generator-material.prompt';
+import { generatorRewriteSentencesPrompt } from './generator-rewrite-sentences.prompt';
+import { generatorTopicSuggestPrompt } from './generator-topic-suggest.prompt';
 import type { AiPrompt } from './prompt';
 import { reviewLanguagePrompt } from './review-language.prompt';
 import { tutorCorrectionPrompt } from './tutor-correction.prompt';
@@ -21,6 +27,12 @@ export const AI_PROMPTS = {
   [reviewLanguagePrompt.id]: reviewLanguagePrompt,
   [tutorCorrectionPrompt.id]: tutorCorrectionPrompt,
   [tutorRoleplayTurnPrompt.id]: tutorRoleplayTurnPrompt,
+  [generatorTopicSuggestPrompt.id]: generatorTopicSuggestPrompt,
+  [generatorMaterialPrompt.id]: generatorMaterialPrompt,
+  [generatorFactCheckPrompt.id]: generatorFactCheckPrompt,
+  [generatorRewriteSentencesPrompt.id]: generatorRewriteSentencesPrompt,
+  [generatorExercisesPrompt.id]: generatorExercisesPrompt,
+  [generatorIngestAnalysisPrompt.id]: generatorIngestAnalysisPrompt,
 } as const satisfies Record<string, AiPrompt<never, unknown>>;
 
 export type RegisteredPromptId = keyof typeof AI_PROMPTS;

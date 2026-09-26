@@ -6,6 +6,14 @@ import {
   reviewLanguageFixture,
 } from './draft-fixtures';
 import {
+  generatorExercisesFixture,
+  generatorFactCheckFixture,
+  generatorIngestAnalysisFixture,
+  generatorMaterialFixture,
+  generatorRewriteSentencesFixture,
+  generatorTopicSuggestFixture,
+} from './generator-fixtures';
+import {
   tutorCorrectionFixture,
   tutorRoleplayTurnFixture,
 } from './tutor-fixtures';
@@ -76,5 +84,40 @@ export const AI_FIXTURES: Record<string, AiFixture> = {
     value: tutorRoleplayTurnFixture,
     inputTokens: 900,
     outputTokens: 180,
+  },
+
+  // --- módulo 13: generator ---
+  //
+  // Montam o material com frases da própria fonte e erram de propósito numa
+  // claim. Ver `generator-fixtures.ts`.
+  'generator-topic-suggest': {
+    value: generatorTopicSuggestFixture,
+    inputTokens: 400,
+    outputTokens: 300,
+  },
+  'generator-material': {
+    value: generatorMaterialFixture,
+    inputTokens: 6_000,
+    outputTokens: 2_500,
+  },
+  'generator-fact-check': {
+    value: generatorFactCheckFixture,
+    inputTokens: 1_500,
+    outputTokens: 400,
+  },
+  'generator-rewrite-sentences': {
+    value: generatorRewriteSentencesFixture,
+    inputTokens: 5_000,
+    outputTokens: 200,
+  },
+  'generator-exercises': {
+    value: generatorExercisesFixture,
+    inputTokens: 1_800,
+    outputTokens: 1_600,
+  },
+  'generator-ingest-analysis': {
+    value: generatorIngestAnalysisFixture,
+    inputTokens: 1_200,
+    outputTokens: 60,
   },
 };

@@ -274,6 +274,22 @@ export interface DomainEventPayloads {
     at: string;
   };
 
+  // --- módulo 13: generator ---
+
+  /**
+   * Material entregue ao aluno. O SRS (9) cria os cards do vocabulário
+   * (`termIds`, termos do aluno) e das skills-alvo. Só ids: o conteúdo do
+   * material fica no generator.
+   */
+  'generator.material_delivered': {
+    materialId: string;
+    kind: 'TOPIC' | 'INGEST';
+    level: string;
+    targetSkillIds: string[];
+    termIds: string[];
+    topic: string;
+  };
+
   // --- módulo 11: billing ---
   //
   // Ninguém escuta ainda: ficam prontos para notificações (15) e progresso

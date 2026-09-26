@@ -575,6 +575,48 @@ export class TaxonomyService {
     });
   }
 
+  /**
+   * Skills ativas até um nível, para o generator (13) escolher alvos. Ordem
+   * estável (nível, id): a escolha precisa ser determinística para o cache
+   * do material base acertar.
+   */
+  async activeSkillsUpTo(levels: readonly CefrLevel[]) {
+    if (levels.length === 0) {
+      return [];
+    }
+
+    return this.prisma.skill.findMany({
+      where: { deprecatedAt: null, cefrLevel: { in: [...levels] } },
+      orderBy: [{ cefrLevel: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        competency: true,
+        cefrLevel: true,
+      },
+    });
+  }
+
+  /** Notas de registro ativas destes níveis, em ordem estável. */
+  async activeRegisterNotesAt(levels: readonly CefrLevel[]) {
+    if (levels.length === 0) {
+      return [];
+    }
+
+    return this.prisma.registerNote.findMany({
+      where: { deprecatedAt: null, cefrLevel: { in: [...levels] } },
+      orderBy: [{ cefrLevel: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        spokenForm: true,
+        standardForm: true,
+        explanation: true,
+        cefrLevel: true,
+      },
+    });
+  }
+
   private async assertSkillsExist(ids: readonly string[]): Promise<void> {
     if (ids.length === 0) {
       return;

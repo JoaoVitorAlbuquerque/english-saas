@@ -13,6 +13,7 @@ import { ReviewAnswerService } from './services/review-answer.service';
 import { ReviewCardService } from './services/review-card.service';
 import { ReviewSessionService } from './services/review-session.service';
 import { SrsUpdateService } from './services/srs-update.service';
+import { StudyTermService } from './services/study-term.service';
 
 /**
  * Módulo 9 — srs.
@@ -26,7 +27,8 @@ import { SrsUpdateService } from './services/srs-update.service';
  * `answer.submitted` do learning (6) pela fila `scheduling`.
  *
  * `ReviewCardService` é exportado: o planner (10) conta cards vencidos pra
- * montar o bloco de revisão da agenda do dia.
+ * montar o bloco de revisão da agenda do dia. `StudyTermService` também: o
+ * generator (13) grava o vocabulário do material como termo do aluno.
  */
 @Module({
   imports: [
@@ -41,9 +43,10 @@ import { SrsUpdateService } from './services/srs-update.service';
     ReviewSessionService,
     ReviewAnswerService,
     SrsUpdateService,
+    StudyTermService,
     SrsListener,
     SrsUpdatesProcessor,
   ],
-  exports: [ReviewCardService],
+  exports: [ReviewCardService, StudyTermService],
 })
 export class SrsModule {}

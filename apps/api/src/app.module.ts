@@ -24,6 +24,7 @@ import { LearnerModelModule } from './modules/learner-model/learner-model.module
 import { LearningModule } from './modules/learning/learning.module';
 import { PlannerModule } from './modules/planner/planner.module';
 import { SrsModule } from './modules/srs/srs.module';
+import { GeneratorModule } from './modules/generator/generator.module';
 import { TutorModule } from './modules/tutor/tutor.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -62,6 +63,7 @@ import { UsersModule } from './modules/users/users.module';
     PlannerModule,
     BillingModule,
     TutorModule,
+    GeneratorModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

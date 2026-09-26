@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   ContentStatus,
+  ItemSource,
   type CefrLevel,
-  type ItemSource,
   type ItemType,
   type Prisma,
 } from '@prisma/client';
@@ -42,6 +42,25 @@ export type ItemInput = {
   discrimination?: number;
   skillIds: string[];
   source?: ItemSource;
+};
+
+/**
+ * Exercício de material gerado (13) é do aluno que o recebeu: nunca entra
+ * em listagem, prova, revisão, planner, calibração nem lição.
+ */
+const NOT_GENERATED = {
+  source: { not: ItemSource.AI_GENERATED },
+} satisfies Prisma.ItemWhereInput;
+
+export type GeneratedItemInput = {
+  type: ItemType;
+  prompt: string;
+  content: unknown;
+  acceptedAnswers: string[];
+  explanation: string;
+  errorPatternMap: Record<string, string>;
+  cefrLevel: CefrLevel;
+  skillIds: string[];
 };
 
 const itemSelect = {
@@ -94,6 +113,7 @@ export class ItemService {
       take,
       ...cursorArgs,
       where: {
+        ...NOT_GENERATED,
         ...(query.status === undefined ? {} : { status: query.status }),
         ...(query.level === undefined ? {} : { cefrLevel: query.level }),
         ...(query.skillId === undefined
@@ -288,6 +308,38 @@ export class ItemService {
     return this.findById(created.id);
   }
 
+  /**
+   * Exercícios de um material do generator (13): nascem PUBLISHED (o aluno
+   * responde na hora, pelo `AnswerService.record`) com `AI_GENERATED`, que
+   * os tira de todo o resto. Mesma validação do banco; recebe a transação
+   * de quem grava o material, para item e material nascerem juntos.
+   */
+  async createGeneratedItems(
+    items: readonly GeneratedItemInput[],
+    tx: Prisma.TransactionClient,
+  ): Promise<string[]> {
+    for (const item of items) {
+      await this.assertValid(item);
+    }
+
+    const ids: string[] = [];
+
+    for (const item of items) {
+      const created = await tx.item.create({
+        data: {
+          ...this.toCreateData({ ...item, source: ItemSource.AI_GENERATED }),
+          status: ContentStatus.PUBLISHED,
+        },
+        select: { id: true },
+      });
+
+      await this.syncSkills(tx, created.id, item.skillIds);
+      ids.push(created.id);
+    }
+
+    return ids;
+  }
+
   /** Move o item no fluxo editorial. */
   async transition(id: string, action: ContentAction) {
     const item = await this.findById(id);
@@ -326,7 +378,11 @@ export class ItemService {
     }
 
     const rows = await this.prisma.item.findMany({
-      where: { id: { in: [...ids] }, status: ContentStatus.PUBLISHED },
+      where: {
+        id: { in: [...ids] },
+        status: ContentStatus.PUBLISHED,
+        ...NOT_GENERATED,
+      },
       select: { id: true },
     });
 
@@ -374,6 +430,7 @@ export class ItemService {
     const rows = await this.prisma.item.findMany({
       where: {
         status: ContentStatus.PUBLISHED,
+        ...NOT_GENERATED,
         ...(filter.skillIds === undefined
           ? {}
           : { skills: { some: { skillId: { in: [...filter.skillIds] } } } }),
@@ -412,7 +469,7 @@ export class ItemService {
   /** Itens com exposição suficiente para calibrar (8), e a skill principal. */
   async findCalibratable(minExposure: number) {
     const rows = await this.prisma.item.findMany({
-      where: { exposureCount: { gte: minExposure } },
+      where: { exposureCount: { gte: minExposure }, ...NOT_GENERATED },
       orderBy: { id: 'asc' },
       select: {
         id: true,

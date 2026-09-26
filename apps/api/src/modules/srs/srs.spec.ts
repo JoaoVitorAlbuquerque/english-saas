@@ -2,6 +2,7 @@ import {
   candidatesFromLessonOutline,
   kindForSkillType,
   newCandidates,
+  normalizeTerm,
   type CardCandidate,
 } from './domain/card-creation';
 import { emptyCardState, scheduleReview } from './domain/fsrs';
@@ -143,6 +144,15 @@ describe('kindForSkillType / candidatesFromLessonOutline', () => {
         { kind: 'REGISTER_NOTE', refId: 'register.gonna' },
       ]),
     );
+  });
+});
+
+describe('normalizeTerm (card TERM)', () => {
+  it('caixa, espaço, aspas e pontuação das pontas não fazem outro termo', () => {
+    expect(normalizeTerm('  Set  sail! ')).toBe('set sail');
+    expect(normalizeTerm('"Set sail"')).toBe('set sail');
+    expect(normalizeTerm('don’t')).toBe("don't");
+    expect(normalizeTerm('...')).toBe('');
   });
 });
 

@@ -190,6 +190,58 @@ export const SEED_SKILLS: SeedSkill[] = [
     title: 'gonna no lugar de going to',
     description: 'Reconhecer e usar a forma falada de "going to".',
   },
+
+  // Leitura: o que as questões de compreensão dos materiais gerados (13)
+  // medem — entender o que um texto curto diz.
+  {
+    id: 'reading.short-texts',
+    type: 'FUNCTION',
+    competency: 'READING',
+    cefrLevel: 'A1',
+    title: 'Entender textos curtos',
+    description: 'Achar num texto curto quem, o quê, onde e quando.',
+  },
+
+  // --- A2: passado. Sem lição ainda; o generator (13) já usa como alvo,
+  // e é o passado que conta história.
+  {
+    id: 'grammar.past-simple.regular',
+    type: 'GRAMMAR',
+    competency: 'GRAMMAR',
+    cefrLevel: 'A2',
+    title: 'Passado simples: verbos regulares',
+    description: 'worked, lived, arrived — o -ed que marca o passado.',
+    prerequisites: ['grammar.subject-pronouns'],
+    commonErrors: ['past-simple.base-form'],
+  },
+  {
+    id: 'grammar.past-simple.irregular',
+    type: 'GRAMMAR',
+    competency: 'GRAMMAR',
+    cefrLevel: 'A2',
+    title: 'Passado simples: verbos irregulares',
+    description: 'went, saw, made, took — os que não seguem o -ed.',
+    prerequisites: ['grammar.past-simple.regular'],
+    commonErrors: ['past-simple.base-form'],
+  },
+  {
+    id: 'grammar.past-simple.negative-questions',
+    type: 'GRAMMAR',
+    competency: 'GRAMMAR',
+    cefrLevel: 'A2',
+    title: 'Passado simples: negativa e pergunta',
+    description: "didn't + verbo; Did you...? — o verbo volta para a base.",
+    prerequisites: ['grammar.past-simple.irregular'],
+  },
+  {
+    id: 'grammar.there-was-were',
+    type: 'GRAMMAR',
+    competency: 'GRAMMAR',
+    cefrLevel: 'A2',
+    title: 'There was / there were',
+    description: 'O "havia" do inglês: there was a king, there were ships.',
+    prerequisites: ['grammar.be.present.affirmative'],
+  },
 ];
 
 export type SeedErrorPattern = {
@@ -280,6 +332,14 @@ export const SEED_ERROR_PATTERNS: SeedErrorPattern[] = [
     correction: 'Yes, I am.',
     explanation:
       "Na resposta curta afirmativa o verbo fica no fim da frase, e aí não encurta. Na negativa pode: No, I'm not.",
+  },
+  {
+    id: 'past-simple.base-form',
+    description: 'Usa o verbo na forma base para falar do passado.',
+    example: 'Yesterday I go to the beach.',
+    correction: 'Yesterday I went to the beach.',
+    explanation:
+      'Em português o tempo aparece no verbo e no contexto; em inglês o verbo precisa ir para o passado mesmo com "yesterday" na frase.',
   },
 ];
 

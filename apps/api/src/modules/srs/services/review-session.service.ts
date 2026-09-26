@@ -7,6 +7,7 @@ import { TaxonomyService } from 'src/modules/curriculum/services/taxonomy.servic
 
 import { buildSession } from '../domain/session';
 import { ReviewCardService } from './review-card.service';
+import { StudyTermService } from './study-term.service';
 
 type StudentItem = Awaited<ReturnType<CatalogService['studentItems']>>[number];
 
@@ -30,7 +31,8 @@ const ITEM_TARGET_P = 0.7;
  *
  * SKILL usa uma questão real do banco, nivelada pelo `AdaptiveItemService`
  * (8). Os demais viram um flashcard simples — frente/verso — porque não há
- * banco calibrado de vocabulário, chunk, nota de registro ou padrão de erro.
+ * banco calibrado de vocabulário, chunk, nota de registro, padrão de erro
+ * ou termo solto de material gerado.
  */
 @Injectable()
 export class ReviewSessionService {
@@ -39,6 +41,7 @@ export class ReviewSessionService {
     private readonly catalog: CatalogService,
     private readonly taxonomy: TaxonomyService,
     private readonly adaptiveItems: AdaptiveItemService,
+    private readonly studyTerms: StudyTermService,
   ) {}
 
   async build(
@@ -57,12 +60,17 @@ export class ReviewSessionService {
       (card) => card.kind === 'REGISTER_NOTE',
     );
     const errorCards = selected.filter((card) => card.kind === 'ERROR_PATTERN');
+    const termCards = selected.filter((card) => card.kind === 'TERM');
 
-    const [itemByCardId, skills, notes, patterns] = await Promise.all([
+    const [itemByCardId, skills, notes, patterns, terms] = await Promise.all([
       this.itemsFor(userId, skillCards, now),
       this.taxonomy.skillsByIds(vocabChunkCards.map((card) => card.refId)),
       this.taxonomy.registerNotesByIds(registerCards.map((card) => card.refId)),
       this.taxonomy.errorPatternSummaries(errorCards.map((card) => card.refId)),
+      this.studyTerms.byIds(
+        userId,
+        termCards.map((card) => card.refId),
+      ),
     ]);
 
     const skillsById = new Map(skills.map((skill) => [skill.id, skill]));
@@ -70,6 +78,7 @@ export class ReviewSessionService {
     const patternsById = new Map(
       patterns.map((pattern) => [pattern.id, pattern]),
     );
+    const termsById = new Map(terms.map((term) => [term.id, term]));
 
     return selected.flatMap((card): SessionCard[] => {
       if (card.kind === 'SKILL') {
@@ -117,6 +126,24 @@ export class ReviewSessionService {
                   type: 'FLASHCARD',
                   front: note.spokenForm,
                   back: `${note.standardForm} — ${note.explanation}`,
+                },
+              },
+            ];
+      }
+
+      if (card.kind === 'TERM') {
+        const term = termsById.get(card.refId);
+        return term === undefined
+          ? []
+          : [
+              {
+                cardId: card.id,
+                kind: card.kind,
+                due: card.due,
+                exercise: {
+                  type: 'FLASHCARD',
+                  front: term.term,
+                  back: `${term.meaning} — ${term.example}`,
                 },
               },
             ];

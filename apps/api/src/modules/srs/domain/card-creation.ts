@@ -9,7 +9,7 @@
  */
 
 export type ReviewCardKind =
-  'SKILL' | 'VOCAB' | 'CHUNK' | 'REGISTER_NOTE' | 'ERROR_PATTERN';
+  'SKILL' | 'VOCAB' | 'CHUNK' | 'REGISTER_NOTE' | 'ERROR_PATTERN' | 'TERM';
 
 export type CardCandidate = { kind: ReviewCardKind; refId: string };
 
@@ -69,4 +69,19 @@ export function newCandidates(
   }
 
   return result;
+}
+
+/**
+ * Chave de dedup de um termo solto (card TERM): minúsculo, aspas e espaços
+ * normalizados, sem pontuação nas pontas. "Set sail!" e "set  sail" são o
+ * mesmo termo.
+ */
+export function normalizeTerm(term: string): string {
+  return term
+    .normalize('NFKC')
+    .replace(/[‘’]/g, "'")
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }

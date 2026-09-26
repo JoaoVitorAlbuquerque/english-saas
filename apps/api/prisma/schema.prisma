@@ -231,6 +231,10 @@ model User {
   tutorCorrections TutorCorrection[]
   roleplaySessions RoleplaySession[]
 
+  studyTerms         StudyTerm[]
+  generationJobs     GenerationJob[]
+  generatedMaterials GeneratedMaterial[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -483,6 +487,9 @@ enum ItemSource {
   /// Saiu do content-studio e ainda não passou por revisão humana.
   AI_DRAFT          @map("ai_draft")
   AI_DRAFT_REVIEWED @map("ai_draft_reviewed")
+  /// Exercício de um material do generator (13): privado do aluno, nunca
+  /// entra em prova, revisão, planner nem listagem do catálogo.
+  AI_GENERATED      @map("ai_generated")
 
   @@map("item_source")
 }
@@ -1567,6 +1574,8 @@ enum ReviewCardKind {
   CHUNK         @map("chunk")
   REGISTER_NOTE @map("register_note")
   ERROR_PATTERN @map("error_pattern")
+  /// Termo solto de um material gerado; `refId` aponta para `StudyTerm`.
+  TERM          @map("term")
 
   @@map("review_card_kind")
 }
@@ -1590,8 +1599,8 @@ enum ReviewCardState {
   @@map("review_card_state")
 }
 
-/// Card de revisão espaçada (FSRS). `refId` aponta para Skill, RegisterNote
-/// ou ErrorPattern conforme o `kind` — sem FK, porque são três tabelas
+/// Card de revisão espaçada (FSRS). `refId` aponta para Skill, RegisterNote,
+/// ErrorPattern ou StudyTerm conforme o `kind` — sem FK, porque são tabelas
 /// diferentes (mesma ideia da referência dentro de JSON do módulo 4).
 model ReviewCard {
   id String @id @default(uuid()) @db.Uuid
@@ -1621,6 +1630,29 @@ model ReviewCard {
   @@unique([userId, kind, refId])
   @@index([userId, due])
   @@map("review_cards")
+}
+
+/// Termo de vocabulário solto do aluno (vem de material gerado). É o que o
+/// card TERM revisa: frente = termo, verso = significado e exemplo.
+model StudyTerm {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId         String           @map("user_id") @db.Uuid
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  term           String
+  /// Termo normalizado (minúsculo, sem espaço extra): a chave de dedup.
+  normalizedTerm String           @map("normalized_term")
+  /// pt-BR.
+  meaning        String
+  example        String
+  cefrLevel      CefrLevel        @map("cefr_level")
+  source         ReviewCardSource
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, normalizedTerm])
+  @@map("study_terms")
 }
 
 /// Marca d'água por aluno para processar `lesson.completed` e
@@ -1994,12 +2026,12 @@ model RoleplayTurn {
   sessionId String          @map("session_id") @db.Uuid
   session   RoleplaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  index  Int
-  role   RoleplayRole
+  index    Int
+  role     RoleplayRole
   /// Fala. A do aluno é conteúdo do aluno; a do personagem nasce vazia
   /// (PENDING) e o job preenche.
-  text   String
-  status RoleplayTurnStatus @default(DONE)
+  text     String
+  status   RoleplayTurnStatus @default(DONE)
   /// Só na fala do personagem: correção inline, falado × padrão, ajuda,
   /// metas cumpridas e expressões do catálogo.
   feedback Json?
@@ -2012,4 +2044,190 @@ model RoleplayTurn {
   @@unique([sessionId, index])
   @@unique([sessionId, clientTurnId])
   @@map("roleplay_turns")
+}
+
+// ===========================================================================
+// Generator (13) — material do Plus a partir de um tema (fonte: Wikipedia)
+// ou de um conteúdo do aluno. O material é privado do aluno; só a base de um
+// tema (texto sobre fonte pública) é compartilhada entre alunos.
+// ===========================================================================
+
+enum GenerationKind {
+  SUGGEST @map("suggest")
+  TOPIC   @map("topic")
+  INGEST  @map("ingest")
+
+  @@map("generation_kind")
+}
+
+/// REFUSED = conteúdo impróprio ou fora do que dá para processar.
+enum GenerationStatus {
+  QUEUED  @map("queued")
+  RUNNING @map("running")
+  DONE    @map("done")
+  REFUSED @map("refused")
+  FAILED  @map("failed")
+
+  @@map("generation_status")
+}
+
+enum SourceProvider {
+  WIKIPEDIA @map("wikipedia")
+
+  @@map("source_provider")
+}
+
+enum MaterialKind {
+  TOPIC  @map("topic")
+  INGEST @map("ingest")
+
+  @@map("material_kind")
+}
+
+enum MaterialDifficultyFeedback {
+  TOO_EASY @map("too_easy")
+  OK       @map("ok")
+  TOO_HARD @map("too_hard")
+
+  @@map("material_difficulty_feedback")
+}
+
+/// Um pedido ao generator e o status por etapa, para o app acompanhar.
+/// Cada etapa grava o resultado aqui antes da próxima: o retry do job
+/// retoma de onde parou.
+model GenerationJob {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind        GenerationKind
+  status      GenerationStatus @default(QUEUED)
+  /// `{step, status, startedAt?, finishedAt?}[]`.
+  steps       Json
+  currentStep String?          @map("current_step")
+
+  /// SUGGEST: o que o aluno disse gostar. Conteúdo do aluno.
+  interestText String? @map("interest_text")
+  /// SUGGEST: `{id, title, whyInteresting, wikipediaSearchQuery, category}[]`.
+  suggestions  Json?
+  /// TOPIC: o assunto escolhido (`{title, searchQuery, category}`).
+  chosen       Json?
+
+  /// INGEST: o texto colado. Apagado quando o job termina, com sucesso ou não.
+  inputText String? @map("input_text")
+  inputUrl  String? @map("input_url")
+
+  /// Checkpoints das etapas.
+  sourceDocumentId String? @map("source_document_id") @db.Uuid
+  /// Resultado da análise (INGEST), alvos escolhidos e nível usado.
+  analysis         Json?
+  targets          Json?
+  baseId           String? @map("base_id") @db.Uuid
+  /// Conteúdo validado do material de INGEST antes da entrega.
+  draft            Json?
+  exercises        Json?
+  materialId       String? @map("material_id") @db.Uuid
+
+  creditReservationId String? @map("credit_reservation_id") @db.Uuid
+  clientRequestId     String? @map("client_request_id")
+  errorCode           String? @map("error_code")
+
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([userId, clientRequestId])
+  @@index([userId, createdAt])
+  @@map("generation_jobs")
+}
+
+/// Fonte pública já buscada, por revisão. Compartilhada entre alunos.
+model SourceDocument {
+  id String @id @default(uuid()) @db.Uuid
+
+  provider   SourceProvider
+  pageId     Int            @map("page_id")
+  title      String
+  url        String
+  revisionId BigInt         @map("revision_id")
+  license    String
+  licenseUrl String         @map("license_url")
+  /// Texto puro da página, cortado no teto de entrada.
+  extract    String
+  summary    String
+
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  bases MaterialBase[]
+
+  @@unique([provider, pageId, revisionId])
+  @@map("source_documents")
+}
+
+/// Texto base de um tema, já validado. Outro aluno do mesmo nível e com os
+/// mesmos alvos reaproveita; só os exercícios são por aluno.
+model MaterialBase {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// hash(página, revisão, nível, alvos, notas de registro).
+  cacheKey         String         @unique @map("cache_key")
+  sourceDocumentId String         @map("source_document_id") @db.Uuid
+  sourceDocument   SourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  level            CefrLevel
+  targetSkillIds   String[]       @map("target_skill_ids")
+  registerNoteIds  String[]       @map("register_note_ids")
+  /// title, text, spans, claims, grammarSpotlight, spokenVersion,
+  /// registerNotes, vocabulary.
+  content          Json
+  /// Relatório da checagem de fatos e de nível.
+  validation       Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  materials GeneratedMaterial[]
+
+  @@map("material_bases")
+}
+
+/// Material entregue a um aluno. Privado dele.
+model GeneratedMaterial {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind    MaterialKind
+  baseId  String?       @map("base_id") @db.Uuid
+  base    MaterialBase? @relation(fields: [baseId], references: [id], onDelete: Restrict)
+  /// Só INGEST: o conteúdo é do aluno e não é compartilhado.
+  content Json?
+
+  title           String
+  level           CefrLevel
+  /// Interesse que o material alimenta (sinal para o learner-model).
+  topic           String
+  targetSkillIds  String[]  @map("target_skill_ids")
+  registerNoteIds String[]  @map("register_note_ids")
+  /// O que o snapshot dizia na hora: nível, alvos, fraquezas, ajuste.
+  snapshotUsed    Json      @map("snapshot_used")
+  /// Wikipedia: título, URL, revisão e licença.
+  attribution     Json?
+  /// Link que o aluno mandou só como referência (rede social, artigo).
+  referenceUrl    String?   @map("reference_url")
+  itemIds         String[]  @map("item_ids")
+  termIds         String[]  @map("term_ids")
+
+  rating     Int?
+  difficulty MaterialDifficultyFeedback?
+  feedbackAt DateTime?                   @map("feedback_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt])
+  @@map("generated_materials")
 }

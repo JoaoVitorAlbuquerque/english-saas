@@ -241,10 +241,21 @@ export const envSchema = z.object({
   ASAAS_BASE_URL: z.url().default('https://sandbox.asaas.com/api/v3'),
   ASAAS_WEBHOOK_TOKEN: optional,
 
+  /**
+   * Fontes do generator (13). 'auto' = fake em NODE_ENV=test, real no resto
+   * — o e2e nunca sai para a internet.
+   */
+  SOURCE_PROVIDER: z.enum(['auto', 'wikipedia', 'fake']).default('auto'),
+  ARTICLE_FETCH_PROVIDER: z.enum(['auto', 'http', 'fake']).default('auto'),
+  /** A Wikimedia exige um User-Agent identificável, com contato. */
   WIKIPEDIA_USER_AGENT: z.string().min(1).default('english-saas/0.1'),
-  WIKIPEDIA_API_URL: z.url().default('https://pt.wikipedia.org/w/api.php'),
+  /** Wikipedia em inglês: o material é de inglês. */
+  WIKIPEDIA_API_URL: z.url().default('https://en.wikipedia.org/w/api.php'),
+  WIKIPEDIA_REST_URL: z.url().default('https://en.wikipedia.org/api/rest_v1'),
   CONTENT_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   CONTENT_MAX_CHARS: z.coerce.number().int().positive().default(40_000),
+  /** Teto do HTML baixado de uma URL de artigo, antes de extrair o texto. */
+  ARTICLE_MAX_BYTES: z.coerce.number().int().positive().default(2_000_000),
 
   THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
   THROTTLE_LIMIT: z.coerce.number().int().positive().default(120),

@@ -9,6 +9,7 @@ import {
   LlmProvider,
   type GenerateStructuredInput,
   type GenerateTextInput,
+  type LlmMessage,
   type LlmResult,
   type LlmTier,
 } from './llm.provider';
@@ -26,6 +27,14 @@ export class FakeLlmProvider extends LlmProvider {
   private readonly overrides = new Map<string, AiFixture>();
   /** Quantas chamadas cada feature recebeu. Útil para provar cache hit. */
   readonly callCounts = new Map<string, number>();
+  /**
+   * A última entrada de cada feature, como chegaria ao provedor. Serve para
+   * o teste provar onde o conteúdo do aluno foi parar (prompt injection).
+   */
+  readonly lastInputs = new Map<
+    string,
+    { system: string; messages: LlmMessage[] }
+  >();
 
   constructor(private readonly envService: EnvService) {
     super();
@@ -48,6 +57,7 @@ export class FakeLlmProvider extends LlmProvider {
   reset(): void {
     this.overrides.clear();
     this.callCounts.clear();
+    this.lastInputs.clear();
   }
 
   async generateStructured<TOutput>(
@@ -55,6 +65,10 @@ export class FakeLlmProvider extends LlmProvider {
   ): Promise<LlmResult<TOutput>> {
     const startedAt = Date.now();
     this.countCall(input.feature);
+    this.lastInputs.set(input.feature, {
+      system: input.system,
+      messages: input.messages,
+    });
 
     const fixture =
       this.overrides.get(input.feature) ?? AI_FIXTURES[input.feature];
@@ -95,6 +109,10 @@ export class FakeLlmProvider extends LlmProvider {
   async generateText(input: GenerateTextInput): Promise<LlmResult<string>> {
     const startedAt = Date.now();
     this.countCall(input.feature);
+    this.lastInputs.set(input.feature, {
+      system: input.system,
+      messages: input.messages,
+    });
 
     const fixture = this.overrides.get(input.feature);
     const text =

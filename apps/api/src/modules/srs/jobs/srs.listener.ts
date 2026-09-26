@@ -7,9 +7,11 @@ import type { DomainEvent } from 'src/common/events';
 import { QUEUES } from 'src/infra/queue/queues';
 
 import {
+  GENERATED_MATERIAL_JOB,
   LESSON_COMPLETED_JOB,
   TUTOR_FEEDBACK_JOB,
   WRONG_ANSWER_JOB,
+  type ErrorSource,
 } from '../services/srs-update.service';
 
 /**
@@ -17,7 +19,9 @@ import {
  * `answer.submitted` errado de primeira tentativa registra o lapse — acerto
  * não mexe em nada aqui, só a revisão de verdade (`POST /reviews/:id/answer`)
  * agenda o próximo `due` de um card existente. `tutor.feedback` (12) faz o
- * mesmo com os erros que a correção ou o roleplay acharam.
+ * mesmo com os erros que a correção ou o roleplay acharam, e
+ * `generator.material_delivered` (13) cria os cards do vocabulário e das
+ * skills-alvo de um material.
  */
 @Injectable()
 export class SrsListener {
@@ -79,8 +83,35 @@ export class SrsListener {
         userId,
         primarySkillId: payload.skillIds[0],
         errorPatternIds: payload.errorPatterns,
+        source: errorSourceFor(payload.context),
       },
       { jobId: `wrong-${payload.answerId}` },
     );
   }
+
+  @OnEvent('generator.material_delivered')
+  async onMaterialDelivered(
+    event: DomainEvent<'generator.material_delivered'>,
+  ): Promise<void> {
+    const { userId, payload } = event;
+
+    if (userId === undefined) {
+      return;
+    }
+
+    await this.queue.add(
+      GENERATED_MATERIAL_JOB,
+      {
+        userId,
+        termIds: payload.termIds,
+        skillIds: payload.targetSkillIds,
+      },
+      { jobId: `material-${payload.materialId}` },
+    );
+  }
+}
+
+/** Resposta de exercício de material gerado lapsa o card com a origem dela. */
+function errorSourceFor(context: string): ErrorSource {
+  return context === 'GENERATED_MATERIAL' ? 'GENERATED_MATERIAL' : 'LESSON';
 }

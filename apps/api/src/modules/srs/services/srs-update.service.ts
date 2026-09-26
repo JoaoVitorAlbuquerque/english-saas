@@ -11,10 +11,15 @@ import {
   newCandidates,
 } from '../domain/card-creation';
 import { ReviewCardService } from './review-card.service';
+import { StudyTermService } from './study-term.service';
 
 export const LESSON_COMPLETED_JOB = 'srs-lesson-completed';
 export const WRONG_ANSWER_JOB = 'srs-wrong-answer';
 export const TUTOR_FEEDBACK_JOB = 'srs-tutor-feedback';
+export const GENERATED_MATERIAL_JOB = 'srs-generated-material';
+
+/** De onde veio o erro que lapsa o card. */
+export type ErrorSource = 'LESSON' | 'TUTOR_FEEDBACK' | 'GENERATED_MATERIAL';
 
 /** A trava expira sozinha se o worker morrer segurando. */
 const LOCK_TTL_MS = 60_000;
@@ -38,6 +43,7 @@ export class SrsUpdateService {
     private readonly cards: ReviewCardService,
     private readonly catalog: CatalogService,
     private readonly taxonomy: TaxonomyService,
+    private readonly terms: StudyTermService,
   ) {}
 
   static lockKey(userId: string): string {
@@ -85,6 +91,7 @@ export class SrsUpdateService {
     userId: string,
     primarySkillId: string | undefined,
     errorPatternIds: readonly string[],
+    source: ErrorSource = 'LESSON',
     now = new Date(),
   ): Promise<SrsUpdateOutcome> {
     return this.withLock(userId, async () => {
@@ -92,7 +99,38 @@ export class SrsUpdateService {
         userId,
         primarySkillId === undefined ? [] : [primarySkillId],
         errorPatternIds,
-        'LESSON',
+        source,
+        now,
+      );
+    });
+  }
+
+  /**
+   * Material entregue pelo generator (13): um card TERM por termo do
+   * vocabulário e um por skill-alvo. Só cria o que falta — receber um
+   * material não é errar nada.
+   */
+  async onGeneratedMaterial(
+    userId: string,
+    material: { termIds: readonly string[]; skillIds: readonly string[] },
+    now = new Date(),
+  ): Promise<SrsUpdateOutcome> {
+    return this.withLock(userId, async () => {
+      const [terms, skills] = await Promise.all([
+        this.terms.byIds(userId, material.termIds),
+        this.taxonomy.skillsByIds(material.skillIds),
+      ]);
+
+      await this.cards.createMany(
+        userId,
+        'GENERATED_MATERIAL',
+        [
+          ...terms.map((term) => ({ kind: 'TERM' as const, refId: term.id })),
+          ...skills.map((skill) => ({
+            kind: kindForSkillType(skill.type),
+            refId: skill.id,
+          })),
+        ],
         now,
       );
     });
@@ -141,7 +179,7 @@ export class SrsUpdateService {
     userId: string,
     skillIds: readonly string[],
     errorPatternIds: readonly string[],
-    source: 'LESSON' | 'TUTOR_FEEDBACK',
+    source: ErrorSource,
     now: Date,
   ): Promise<void> {
     const skills = await this.taxonomy.skillsByIds(skillIds);
