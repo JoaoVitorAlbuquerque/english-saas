@@ -351,6 +351,16 @@ describe('Srs (e2e)', () => {
     );
 
     expect(named('review.answered')).toHaveLength(2);
+
+    // Cada revisão fica no histórico (o progresso conta daqui).
+    const logs = await context.prisma.reviewLog.findMany({
+      orderBy: { reviewedAt: 'asc' },
+    });
+    expect(logs.map((log) => [log.cardId, log.kind, log.rating])).toEqual([
+      [errorCard.id, 'ERROR_PATTERN', 'EASY'],
+      [vocabCard.id, 'VOCAB', 'GOOD'],
+    ]);
+
     expect(named('review.answered').map((event) => event.payload)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: 'ERROR_PATTERN', rating: 'EASY' }),

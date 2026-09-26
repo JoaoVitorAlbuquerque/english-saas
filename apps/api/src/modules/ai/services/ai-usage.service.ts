@@ -162,6 +162,53 @@ export class AiUsageService {
       .sort((a, b) => b.costUsdMicros - a.costUsdMicros);
   }
 
+  /**
+   * Chamadas e custo por aluno e feature em `[from, to)` — o intervalo é
+   * semiaberto, diferente dos totais acima: o progresso (14) agrega dia a
+   * dia e a mesma chamada não pode cair em dois dias. `userId` nulo é
+   * chamada de sistema.
+   */
+  async costByUserAndFeature(
+    from: Date,
+    to: Date,
+  ): Promise<
+    {
+      userId: string | null;
+      feature: string;
+      calls: number;
+      cacheHits: number;
+      costUsdMicros: number;
+    }[]
+  > {
+    const [all, hits] = await Promise.all([
+      this.prisma.aiUsage.groupBy({
+        by: ['userId', 'feature'],
+        where: { createdAt: { gte: from, lt: to } },
+        _count: { _all: true },
+        _sum: { costUsdMicros: true },
+      }),
+      this.prisma.aiUsage.groupBy({
+        by: ['userId', 'feature'],
+        where: { createdAt: { gte: from, lt: to }, cacheHit: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const hitKey = (userId: string | null, feature: string) =>
+      `${userId ?? ''}|${feature}`;
+    const hitCounts = new Map(
+      hits.map((row) => [hitKey(row.userId, row.feature), row._count._all]),
+    );
+
+    return all.map((row) => ({
+      userId: row.userId,
+      feature: row.feature,
+      calls: row._count._all,
+      cacheHits: hitCounts.get(hitKey(row.userId, row.feature)) ?? 0,
+      costUsdMicros: row._sum.costUsdMicros ?? 0,
+    }));
+  }
+
   private buildWhere(
     filter: { userId?: string; feature?: string } & UsagePeriod,
   ): Prisma.AiUsageWhereInput {

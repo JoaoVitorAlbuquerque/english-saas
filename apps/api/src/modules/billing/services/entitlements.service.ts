@@ -18,6 +18,7 @@ import {
   type LessonAccessContext,
 } from '../domain/entitlements';
 import {
+  grantedAccessAt,
   grantsAccess,
   planCacheTtlSeconds,
 } from '../domain/subscription-state';
@@ -87,6 +88,78 @@ export class EntitlementsService {
     await this.redis.client.set(key, JSON.stringify(plan), 'EX', ttlSeconds);
 
     return plan;
+  }
+
+  /**
+   * O plano de cada aluno num instante passado, em lote, sem cache — o
+   * progresso (14) marca o plano de cada dia agregado. Aluno fora do mapa
+   * era FREE.
+   */
+  async tiersAt(
+    userIds: readonly string[],
+    at: Date,
+  ): Promise<Map<string, PlanTier>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+
+    const subs = await this.prisma.subscription.findMany({
+      where: { userId: { in: [...userIds] }, createdAt: { lte: at } },
+    });
+
+    return bestTierByUser(subs.filter((sub) => grantedAccessAt(sub, at)));
+  }
+
+  /**
+   * Assinantes e MRR por plano pago num instante (anual ÷ 12). Um aluno no
+   * meio de um upgrade conta só no plano maior.
+   */
+  async revenueByTier(
+    at: Date,
+  ): Promise<{ tier: PlanTier; subscribers: number; mrrCents: number }[]> {
+    const subs = (
+      await this.prisma.subscription.findMany({
+        where: {
+          createdAt: { lte: at },
+          status: {
+            in: [
+              SubscriptionStatus.ACTIVE,
+              SubscriptionStatus.PAST_DUE,
+              SubscriptionStatus.CANCELED,
+            ],
+          },
+        },
+      })
+    ).filter((sub) => grantedAccessAt(sub, at));
+
+    const best = new Map<string, (typeof subs)[number]>();
+    for (const sub of subs) {
+      const current = best.get(sub.userId);
+      if (
+        current === undefined ||
+        TIER_RANK[sub.tier] > TIER_RANK[current.tier]
+      ) {
+        best.set(sub.userId, sub);
+      }
+    }
+
+    const totals = new Map<
+      PlanTier,
+      { subscribers: number; mrrCents: number }
+    >();
+    for (const sub of best.values()) {
+      const current = totals.get(sub.tier) ?? { subscribers: 0, mrrCents: 0 };
+      totals.set(sub.tier, {
+        subscribers: current.subscribers + 1,
+        mrrCents:
+          current.mrrCents +
+          (sub.billingPeriod === 'YEARLY'
+            ? Math.round(sub.priceCents / 12)
+            : sub.priceCents),
+      });
+    }
+
+    return [...totals.entries()].map(([tier, value]) => ({ tier, ...value }));
   }
 
   async invalidate(userId: string): Promise<void> {
@@ -168,4 +241,19 @@ export class EntitlementsService {
       remainingUses: credit ? remainingUses(balance, feature) : null,
     };
   }
+}
+
+function bestTierByUser(
+  subs: readonly { userId: string; tier: PlanTier }[],
+): Map<string, PlanTier> {
+  const best = new Map<string, PlanTier>();
+
+  for (const sub of subs) {
+    const current = best.get(sub.userId);
+    if (current === undefined || TIER_RANK[sub.tier] > TIER_RANK[current]) {
+      best.set(sub.userId, sub.tier);
+    }
+  }
+
+  return best;
 }

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Competency, Prisma } from '@prisma/client';
+import type { CefrLevel, Competency, Prisma } from '@prisma/client';
 import type { Paginated } from '@english-saas/shared';
 
 import { buildPage, toPrismaCursorArgs } from 'src/common/pagination/cursor';
@@ -156,6 +156,92 @@ export class LearnerProfileService {
         ];
       }),
     };
+  }
+
+  /**
+   * As fotos semanais de nível a partir de `fromWeek` (segunda-feira,
+   * `YYYY-MM-DD`), mais a última anterior a ela — quem monta a série
+   * repete o último valor nas semanas sem foto e precisa saber de onde
+   * partir.
+   */
+  async levelHistory(
+    userId: string,
+    fromWeek: string,
+  ): Promise<
+    {
+      weekStart: string;
+      overallLevel: CefrLevel | null;
+      levels: Partial<Record<Competency, { level: CefrLevel | null }>>;
+    }[]
+  > {
+    const from = new Date(`${fromWeek}T00:00:00.000Z`);
+    const [before, rows] = await Promise.all([
+      this.prisma.learnerLevelSnapshot.findFirst({
+        where: { userId, weekStart: { lt: from } },
+        orderBy: { weekStart: 'desc' },
+      }),
+      this.prisma.learnerLevelSnapshot.findMany({
+        where: { userId, weekStart: { gte: from } },
+        orderBy: { weekStart: 'asc' },
+      }),
+    ]);
+
+    return [...(before === null ? [] : [before]), ...rows].map((row) => ({
+      weekStart: row.weekStart.toISOString().slice(0, 10),
+      overallLevel: row.overallLevel,
+      levels: (row.levels ?? {}) as Partial<
+        Record<Competency, { level: CefrLevel | null }>
+      >,
+    }));
+  }
+
+  /**
+   * A janela de oportunidades de cada erro do aluno (da mais antiga para a
+   * mais nova), com o texto do catálogo. É o que diz se o erro está
+   * diminuindo. Sem os exemplos: são frases do aluno e não precisam sair.
+   */
+  async errorHistory(userId: string): Promise<
+    {
+      errorPatternId: string;
+      description: string;
+      correction: string;
+      recentOutcomes: boolean[];
+      totalOccurrences: number;
+      lastOccurredAt: Date | null;
+    }[]
+  > {
+    const rows = await this.prisma.learnerErrorPattern.findMany({
+      where: { userId, totalOccurrences: { gt: 0 } },
+      select: {
+        errorPatternId: true,
+        recentOutcomes: true,
+        totalOccurrences: true,
+        lastOccurredAt: true,
+      },
+    });
+    const summaries = new Map(
+      (
+        await this.taxonomy.errorPatternSummaries(
+          rows.map((row) => row.errorPatternId),
+        )
+      ).map((summary) => [summary.id, summary]),
+    );
+
+    return rows.flatMap((row) => {
+      const summary = summaries.get(row.errorPatternId);
+      if (summary === undefined) return [];
+
+      return [
+        {
+          errorPatternId: row.errorPatternId,
+          description: summary.description,
+          correction: summary.correction,
+          recentOutcomes: row.recentOutcomes,
+          totalOccurrences: row.totalOccurrences,
+          lastOccurredAt: row.lastOccurredAt,
+        },
+      ];
+    });
   }
 
   async invalidate(userId: string): Promise<void> {

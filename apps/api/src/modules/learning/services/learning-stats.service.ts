@@ -41,6 +41,27 @@ export class LearningStatsService {
     return this.apply(userId, 0, now);
   }
 
+  /** Só leitura: XP e a sequência como o aluno a vê hoje, sem registrar estudo. */
+  async get(
+    userId: string,
+    now: Date = new Date(),
+  ): Promise<LearningStatsView> {
+    const [row, timezone] = await Promise.all([
+      this.prisma.learningStats.findUnique({ where: { userId } }),
+      this.users.timezoneOf(userId),
+    ]);
+
+    return view(
+      row?.totalXp ?? 0,
+      {
+        currentStreak: row?.currentStreak ?? 0,
+        longestStreak: row?.longestStreak ?? 0,
+        lastStudyDate: toDateString(row?.lastStudyDate ?? null),
+      },
+      localDate(now, timezone),
+    );
+  }
+
   /** Soma XP e registra o estudo, numa escrita só. */
   async award(
     userId: string,

@@ -44,5 +44,6 @@ import { PlanService } from './services/plan.service';
     PlannerProcessor,
     DailyAgendaScheduler,
   ],
+  exports: [PlanService],
 })
 export class PlannerModule {}

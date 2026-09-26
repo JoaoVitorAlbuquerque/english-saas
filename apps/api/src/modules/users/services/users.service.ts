@@ -107,6 +107,105 @@ export class UsersService {
     return rows.map((row) => row.id);
   }
 
+  /**
+   * Fuso, disponibilidade e data de cadastro de cada conta ativa, em lotes
+   * por cursor (id crescente). O progresso (14) agrega a noite inteira por
+   * aqui. Sem perfil ainda, o fuso padrão e disponibilidade zero.
+   */
+  async studyContexts(input: {
+    afterId?: string | undefined;
+    take: number;
+  }): Promise<
+    {
+      userId: string;
+      timezone: string;
+      availabilityMinutes: AvailabilityMinutes;
+      createdAt: Date;
+    }[]
+  > {
+    const rows = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        ...(input.afterId === undefined ? {} : { id: { gt: input.afterId } }),
+      },
+      orderBy: { id: 'asc' },
+      take: input.take,
+      select: {
+        id: true,
+        createdAt: true,
+        profile: { select: { timezone: true, availabilityMinutes: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      userId: row.id,
+      timezone: row.profile?.timezone ?? 'America/Sao_Paulo',
+      availabilityMinutes: normalizeAvailability(
+        (row.profile?.availabilityMinutes ??
+          {}) as Partial<AvailabilityMinutes>,
+      ),
+      createdAt: row.createdAt,
+    }));
+  }
+
+  /** O mesmo contexto de `studyContexts`, de um aluno só. */
+  async studyContextOf(userId: string): Promise<{
+    userId: string;
+    timezone: string;
+    availabilityMinutes: AvailabilityMinutes;
+    createdAt: Date;
+  }> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        createdAt: true,
+        profile: { select: { timezone: true, availabilityMinutes: true } },
+      },
+    });
+
+    if (user === null) {
+      throw new NotFoundError('Não encontramos a sua conta.');
+    }
+
+    return {
+      userId: user.id,
+      timezone: user.profile?.timezone ?? 'America/Sao_Paulo',
+      availabilityMinutes: normalizeAvailability(
+        (user.profile?.availabilityMinutes ??
+          {}) as Partial<AvailabilityMinutes>,
+      ),
+      createdAt: user.createdAt,
+    };
+  }
+
+  /** Contas criadas em `[from, to)` — as coortes de retenção. */
+  async signupsBetween(
+    from: Date,
+    to: Date,
+  ): Promise<{ userId: string; createdAt: Date }[]> {
+    const rows = await this.prisma.user.findMany({
+      where: { deletedAt: null, createdAt: { gte: from, lt: to } },
+      select: { id: true, createdAt: true },
+    });
+
+    return rows.map((row) => ({ userId: row.id, createdAt: row.createdAt }));
+  }
+
+  /** E-mail de cada conta pedida (painel interno). Conta apagada fica de fora. */
+  async emailsFor(userIds: readonly string[]): Promise<Map<string, string>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await this.prisma.user.findMany({
+      where: { id: { in: [...userIds] }, deletedAt: null },
+      select: { id: true, email: true },
+    });
+
+    return new Map(rows.map((row) => [row.id, row.email]));
+  }
+
   async updateAccount(
     userId: string,
     input: { name?: string },

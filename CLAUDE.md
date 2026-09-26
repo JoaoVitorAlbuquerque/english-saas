@@ -170,7 +170,7 @@ dos que vêm antes dele.
 | 11  | `billing`                       | 2, 3       | Asaas atrás de `PaymentGateway`, planos, assinatura, webhooks, créditos de IA. ✅ pronto              |
 | 12  | `tutor`                         | 2, 7, 11   | Correção de produção livre e roleplay com IA, alimentando o modelo do aluno e o SRS. ✅ pronto        |
 | 13  | `generator`                     | 2, 7, 11   | Plus (a) tema → fato real com fonte; (b) conteúdo colado/URL → material e exercícios. ✅ pronto       |
-| 14  | `progress`                      | 7, 9, 10   | Painel do aluno, streak, histórico, evolução por competência                                          |
+| 14  | `progress`                      | 7, 9, 10   | Painel do aluno, métricas do admin, agregação diária noturna. ✅ pronto                               |
 | 15  | `notifications`                 | 10         | E-mail, push, lembrete de revisão e de cronograma                                                     |
 | 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                             |
 | 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas                                               |
@@ -491,6 +491,9 @@ já são `Skill` (`SkillType.VOCAB_SET` e `CHUNK`); vocabulário é por
   _primeira_ revisão de verdade: Easy num card novo já pula direto pra
   REVIEW com o due dias à frente; Good passa primeiro pelos passos curtos
   (minutos) do aprendizado.
+- **Toda revisão vira uma linha em `ReviewLog`**, na mesma transação do
+  reagendamento. O card guarda só o estado atual; "quantas revisões você
+  fez" (progress, 14) sai do log.
 - Mesma trava por aluno do learner-model, agora num helper comum
   (`infra/redis/user-lock.ts`) que os dois módulos usam — sem marca d'água
   aqui, porque criar card é idempotente por `[userId, kind, refId]`.
@@ -740,6 +743,45 @@ Regras que não são óbvias:
 - Wikipedia e artigo têm fake (`SOURCE_PROVIDER`/`ARTICLE_FETCH_PROVIDER`
   `auto` = fake em teste): o e2e nunca sai para a internet.
 
+### Progresso (progress)
+
+Painel do aluno (`GET /me/progress`) e métricas do admin
+(`GET /admin/metrics`), os dois **lendo tabelas diárias**, nunca as tabelas
+cruas dos outros módulos.
+
+- **Job noturno** (fila `progress`, 04:00 UTC) reprocessa anteontem e
+  ontem: aluno → lição → custo e plano → plataforma → coortes. Cada passo
+  apaga e regrava o dia, então rodar de novo dá o mesmo resultado; backfill
+  é `POST /admin/metrics/rebuild {from, to}` (202, até 180 dias).
+- **O dia do aluno é o do fuso dele** (`UserDailyActivity`); o dia das
+  tabelas de plataforma é o de `METRICS_TIMEZONE`. DAU/WAU/MAU contam pelo
+  dia local de cada aluno — quase todos estão no mesmo fuso.
+- O job lê **pelos serviços dos donos**, por fuso e em lotes de 500:
+  `LearningActivityService` (6), `ReviewLogService` (9), `AiUsageService`
+  (2), `EntitlementsService.tiersAt`/`revenueByTier` (11) e
+  `UsersService.studyContexts` (3). Nada de SQL cruzando módulos.
+- **Só o "hoje" do aluno é calculado no request** — um aluno, um dia, a
+  mesma função do job —, para a lição que ele acabou de fazer aparecer.
+- Tempo estudado = etapas de lição + tempo de resposta fora de lição +
+  flashcards × 25 s (a constante da sessão do SRS). Tutor e roleplay não
+  têm tempo medido: contam só como atividade.
+- **Abandono** = tentativa IN_PROGRESS sem atividade há 7 dias, contada uma
+  vez, no dia em que completa o prazo, na etapa em que parou.
+- **Erro diminuindo** compara a taxa da metade antiga com a da recente da
+  janela de oportunidades do learner-model (mínimo 6) — taxa, não contagem.
+- **Previsão pelo ritmo**: o forecast do planner escalado por planejado ÷
+  realizado das últimas 4 semanas completas desde o cadastro. Com menos de
+  2 semanas, "ainda cedo".
+- Ação de cada fraqueza, nessa ordem: a lição que ensina (se não foi
+  feita) → a revisão (se há card) → material do generator (só Plus) →
+  refazer a lição → a prática da agenda.
+- **Receita é MRR** (anual ÷ 12) das assinaturas com acesso no dia, não
+  caixa — não existe tabela de pagamento recebido. Custo de IA em US$ vira
+  R$ pelo câmbio fixo `USD_BRL_RATE`, que o relatório mostra.
+- O plano de um dia passado é reconstruído do estado atual da assinatura
+  (`grantedAccessAt`): cancelada depois daquele dia ainda valia; EXPIRED
+  não entra.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -833,6 +875,8 @@ valida a mensagem.
 | **QaWarning**         | Achado da revisão automática: `{code, severity, message, path}`. `BLOCKER` trava a aprovação; `WARNING` e `INFO` só informam.        |
 | **GeneratedMaterial** | Material criado pela IA para um aluno (Plus): a partir de um tema de interesse ou de um conteúdo que ele enviou.                     |
 | **MaterialBase**      | Texto base validado de um tema (fonte, nível, alvos). Compartilhado entre alunos; os exercícios são sempre de cada um.               |
+| **UserDailyActivity** | O dia de estudo de um aluno no fuso dele: tempo, lições, respostas, revisões, acerto por competência, custo de IA e plano.           |
+| **ReviewLog**         | Uma revisão feita (card, tipo, rating, quando). Append-only; é o histórico que o progresso conta.                                    |
 | **StudyTerm**         | Termo de vocabulário solto do aluno, vindo de um material gerado. É o que o card TERM do SRS revisa.                                 |
 | **TutorCorrection**   | Um pedido de correção de produção livre e o resultado validado (erros mapeados para ErrorPatterns, rubrica, dicas de registro).      |
 | **RoleplaySession**   | Conversa com um personagem, com metas, teto de turnos e o resumo do fim.                                                             |

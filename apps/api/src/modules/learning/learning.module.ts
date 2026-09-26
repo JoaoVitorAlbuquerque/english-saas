@@ -12,6 +12,7 @@ import { LearningProcessor } from './jobs/learning.processor';
 import { AnswerService } from './services/answer.service';
 import { AttemptService } from './services/attempt.service';
 import { ItemStatsService } from './services/item-stats.service';
+import { LearningActivityService } from './services/learning-activity.service';
 import { LearningStatsService } from './services/learning-stats.service';
 
 /**
@@ -33,9 +34,15 @@ import { LearningStatsService } from './services/learning-stats.service';
     AnswerService,
     LearningStatsService,
     ItemStatsService,
+    LearningActivityService,
     LearningProcessor,
     LearningListener,
   ],
-  exports: [AnswerService, AttemptService, LearningStatsService],
+  exports: [
+    AnswerService,
+    AttemptService,
+    LearningStatsService,
+    LearningActivityService,
+  ],
 })
 export class LearningModule {}

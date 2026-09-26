@@ -53,6 +53,6 @@ import { PlacementService } from './services/placement.service';
     AssessmentProcessor,
     CalibrationScheduler,
   ],
-  exports: [AdaptiveItemService, PlacementService],
+  exports: [AdaptiveItemService, PlacementService, CalibrationService],
 })
 export class AssessmentModule {}

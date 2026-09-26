@@ -39,6 +39,8 @@ export const QUEUES = {
   TUTOR: 'tutor',
   /** Material do Plus: sugestão de assunto, fonte, geração e validação. */
   GENERATOR: 'generator',
+  /** Agregação noturna do progresso do aluno e das métricas do admin. */
+  PROGRESS: 'progress',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -58,4 +60,5 @@ export const REGISTERED_QUEUES: QueueName[] = [
   QUEUES.BILLING,
   QUEUES.TUTOR,
   QUEUES.GENERATOR,
+  QUEUES.PROGRESS,
 ];

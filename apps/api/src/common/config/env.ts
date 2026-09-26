@@ -222,6 +222,17 @@ export const envSchema = z.object({
     .default(2_000_000),
 
   /**
+   * Progresso (14): fuso do "dia" das métricas de plataforma (lição, custo,
+   * plano). O dia do aluno continua sendo o do fuso dele.
+   */
+  METRICS_TIMEZONE: z.string().min(1).default('America/Sao_Paulo'),
+  /**
+   * Câmbio fixo para comparar custo de IA (US$) com receita (R$) no painel
+   * do admin. Não buscamos cotação: o número aparece no próprio relatório.
+   */
+  USD_BRL_RATE: z.coerce.number().positive().default(5.5),
+
+  /**
    * Voz no tutor (12): o áudio vai para o storage, é transcrito em job e
    * segue o caminho do texto. Desligado até existir um STT de verdade — só o
    * fake está implementado.

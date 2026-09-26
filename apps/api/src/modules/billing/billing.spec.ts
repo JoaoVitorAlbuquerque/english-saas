@@ -23,6 +23,7 @@ import {
   addPeriod,
   applyPaymentEvent,
   effectiveTier,
+  grantedAccessAt,
   grantsAccess,
   planCacheTtlSeconds,
   subscriptionMessage,
@@ -90,6 +91,29 @@ describe('billing — acesso pela assinatura', () => {
     expect(
       effectiveTier([sub({ status: 'CANCELED', currentPeriodEnd: null })], NOW),
     ).toBe('FREE');
+  });
+
+  it('reconstrói o acesso num instante passado', () => {
+    const before = new Date(NOW.getTime() - 10 * 86_400_000);
+    const created = new Date(NOW.getTime() - 20 * 86_400_000);
+    const canceled = {
+      ...sub({ status: 'CANCELED' }),
+      createdAt: created,
+      canceledAt: new Date(NOW.getTime() - 86_400_000),
+    };
+
+    // Cancelada ontem: há 10 dias ainda valia.
+    expect(grantedAccessAt(canceled, before)).toBe(true);
+    // Ainda não existia.
+    expect(grantedAccessAt(canceled, new Date(created.getTime() - 1000))).toBe(
+      false,
+    );
+    expect(
+      grantedAccessAt(
+        { ...sub({ status: 'EXPIRED' }), createdAt: created, canceledAt: null },
+        before,
+      ),
+    ).toBe(false);
   });
 
   it('sem assinatura é FREE; com várias, vale a maior que ainda dá acesso', () => {

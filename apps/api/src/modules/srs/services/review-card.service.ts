@@ -130,16 +130,56 @@ export class ReviewCardService {
     });
   }
 
+  /**
+   * Reagenda o card e grava a revisão no `ReviewLog`, na mesma transação:
+   * o log é o histórico que o progresso (14) conta, e não pode divergir do
+   * que o card diz.
+   */
   async applyRating(
     card: ReviewCard,
     rating: FsrsRating,
     now: Date,
   ): Promise<ReviewCard> {
     const next = scheduleReview(fromRow(card), rating, now);
-    return this.prisma.reviewCard.update({
-      where: { id: card.id },
-      data: toRow(next),
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.reviewCard.update({
+        where: { id: card.id },
+        data: toRow(next),
+      }),
+      this.prisma.reviewLog.create({
+        data: {
+          userId: card.userId,
+          cardId: card.id,
+          kind: card.kind,
+          rating,
+          reviewedAt: now,
+        },
+      }),
+    ]);
+
+    return updated;
+  }
+
+  /** Ids dos cards do aluno por skill — a ação "revisar" do progresso. */
+  async cardIdsForSkills(
+    userId: string,
+    skillIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (skillIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await this.prisma.reviewCard.findMany({
+      where: {
+        userId,
+        kind: 'SKILL',
+        refId: { in: [...skillIds] },
+        suspended: false,
+      },
+      select: { id: true, refId: true },
     });
+
+    return new Map(rows.map((row) => [row.refId, row.id]));
   }
 }
 

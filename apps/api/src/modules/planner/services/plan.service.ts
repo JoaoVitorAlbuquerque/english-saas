@@ -54,6 +54,11 @@ export class PlanService {
     return `planner:lock:${userId}`;
   }
 
+  /** O plano, ou `null` se o aluno ainda não tem um. */
+  async findPlan(userId: string): Promise<StudyPlan | null> {
+    return this.prisma.studyPlan.findUnique({ where: { userId } });
+  }
+
   async getPlan(userId: string): Promise<StudyPlan> {
     const plan = await this.prisma.studyPlan.findUnique({ where: { userId } });
 

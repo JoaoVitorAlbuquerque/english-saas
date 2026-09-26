@@ -41,6 +41,37 @@ export function grantsAccess(sub: SubscriptionView, now: Date): boolean {
   );
 }
 
+/**
+ * A assinatura dava acesso no instante `at` (passado)? Reconstrução a
+ * partir do estado atual — não guardamos o histórico de status:
+ *
+ * - criada depois de `at`: não existia;
+ * - cancelada depois de `at`, com período pago: ainda estava valendo;
+ * - o resto segue `grantsAccess` naquele instante.
+ *
+ * EXPIRED fica de fora: não se sabe quando parou de valer. Para a noite de
+ * ontem (o uso real, no progresso) o estado atual quase sempre é o de então.
+ */
+export function grantedAccessAt(
+  sub: SubscriptionView & { createdAt: Date; canceledAt: Date | null },
+  at: Date,
+): boolean {
+  if (sub.createdAt.getTime() > at.getTime()) {
+    return false;
+  }
+
+  if (
+    sub.status === 'CANCELED' &&
+    sub.canceledAt !== null &&
+    sub.canceledAt.getTime() > at.getTime() &&
+    sub.currentPeriodEnd !== null
+  ) {
+    return true;
+  }
+
+  return grantsAccess(sub, at);
+}
+
 /** O maior tier entre as assinaturas que ainda dão acesso; nenhuma → FREE. */
 export function effectiveTier(
   subs: readonly SubscriptionView[],

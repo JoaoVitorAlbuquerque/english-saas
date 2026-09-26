@@ -235,6 +235,9 @@ model User {
   generationJobs     GenerationJob[]
   generatedMaterials GeneratedMaterial[]
 
+  reviewLogs      ReviewLog[]
+  dailyActivities UserDailyActivity[]
+
   @@index([deletedAt])
   @@map("users")
 }
@@ -1655,6 +1658,29 @@ model StudyTerm {
   @@map("study_terms")
 }
 
+/// Uma revisão feita: o que o aluno respondeu e quando. Append-only — o
+/// `ReviewCard` guarda só o estado atual; é daqui que sai "quantas revisões
+/// você fez" no progresso (14).
+model ReviewLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId     String         @map("user_id") @db.Uuid
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Sem FK: card suspenso ou apagado não apaga o histórico.
+  cardId     String         @map("card_id") @db.Uuid
+  kind       ReviewCardKind
+  /// AGAIN, HARD, GOOD ou EASY.
+  rating     String
+  reviewedAt DateTime       @map("reviewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, reviewedAt])
+  @@index([reviewedAt])
+  @@map("review_logs")
+}
+
 /// Marca d'água por aluno para processar `lesson.completed` e
 /// `answer.submitted` em ordem, sob a mesma trava (padrão do módulo 7).
 model SrsUpdateCursor {
@@ -2230,4 +2256,149 @@ model GeneratedMaterial {
 
   @@index([userId, createdAt])
   @@map("generated_materials")
+}
+
+// ===========================================================================
+// Módulo 14 — progress
+//
+// Tabelas diárias derivadas, preenchidas pelo job noturno. Nada aqui é fonte
+// de verdade: apagar e reprocessar o intervalo refaz tudo a partir das
+// tabelas dos outros módulos.
+// ===========================================================================
+
+/// O dia de estudo de um aluno, no **fuso dele**.
+model UserDailyActivity {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String   @map("user_id") @db.Uuid
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dia local do aluno.
+  date   DateTime @db.Date
+
+  /// Tempo em segundos: etapas de lição, questões fora de lição e flashcards.
+  lessonSeconds    Int      @default(0) @map("lesson_seconds")
+  practiceSeconds  Int      @default(0) @map("practice_seconds")
+  reviewSeconds    Int      @default(0) @map("review_seconds")
+  studySeconds     Int      @default(0) @map("study_seconds")
+  lessonsStarted   Int      @default(0) @map("lessons_started")
+  lessonsCompleted Int      @default(0) @map("lessons_completed")
+  answers          Int      @default(0)
+  firstTryAnswers  Int      @default(0) @map("first_try_answers")
+  firstTryCorrect  Int      @default(0) @map("first_try_correct")
+  /// Competency → { answered, correct }, só primeira tentativa.
+  byCompetency     Json     @default("{}") @map("by_competency")
+  reviewsDone      Int      @default(0) @map("reviews_done")
+  /// Disponibilidade declarada para aquele dia da semana, congelada no dia.
+  plannedMinutes   Int      @default(0) @map("planned_minutes")
+  aiCalls          Int      @default(0) @map("ai_calls")
+  aiCostUsdMicros  Int      @default(0) @map("ai_cost_usd_micros")
+  /// O plano que valia no dia.
+  tier             PlanTier @default(FREE)
+  active           Boolean  @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, date])
+  @@index([date, active])
+  @@map("user_daily_activities")
+}
+
+/// Números da plataforma num dia (fuso `METRICS_TIMEZONE`).
+model DailyPlatformMetric {
+  id String @id @default(uuid()) @db.Uuid
+
+  date             DateTime @unique @db.Date
+  dau              Int      @default(0)
+  wau              Int      @default(0)
+  mau              Int      @default(0)
+  newUsers         Int      @default(0) @map("new_users")
+  lessonsStarted   Int      @default(0) @map("lessons_started")
+  lessonsCompleted Int      @default(0) @map("lessons_completed")
+  aiCostUsdMicros  Int      @default(0) @map("ai_cost_usd_micros")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("daily_platform_metrics")
+}
+
+/// Uma lição num dia: quem começou, quem concluiu, acerto e abandono.
+model LessonDailyMetric {
+  id String @id @default(uuid()) @db.Uuid
+
+  date            DateTime @db.Date
+  /// Sem FK: lição arquivada não apaga a métrica.
+  lessonId        String   @map("lesson_id") @db.Uuid
+  started         Int      @default(0)
+  completed       Int      @default(0)
+  firstTryAnswers Int      @default(0) @map("first_try_answers")
+  firstTryCorrect Int      @default(0) @map("first_try_correct")
+  /// Tentativas que completaram `STALL_DAYS` paradas neste dia.
+  abandoned       Int      @default(0)
+  /// `{stepIndex, stepType, count}[]`.
+  abandonedByStep Json     @default("[]") @map("abandoned_by_step")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([date, lessonId])
+  @@map("lesson_daily_metrics")
+}
+
+/// Custo de IA num dia, por feature e por plano de quem chamou.
+model AiCostDailyMetric {
+  id String @id @default(uuid()) @db.Uuid
+
+  date          DateTime  @db.Date
+  feature       String
+  /// Nulo em chamada de sistema (sem aluno).
+  tier          PlanTier?
+  calls         Int       @default(0)
+  cacheHits     Int       @default(0) @map("cache_hits")
+  costUsdMicros Int       @default(0) @map("cost_usd_micros")
+  users         Int       @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@map("ai_cost_daily_metrics")
+}
+
+/// Um plano num dia: assinantes, MRR, alunos ativos e custo de IA.
+model PlanDailyMetric {
+  id String @id @default(uuid()) @db.Uuid
+
+  date              DateTime @db.Date
+  tier              PlanTier
+  activeSubscribers Int      @default(0) @map("active_subscribers")
+  /// MRR das assinaturas com acesso no dia (anual ÷ 12). FREE = 0.
+  mrrCents          Int      @default(0) @map("mrr_cents")
+  activeUsers       Int      @default(0) @map("active_users")
+  aiCostUsdMicros   Int      @default(0) @map("ai_cost_usd_micros")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([date, tier])
+  @@map("plan_daily_metrics")
+}
+
+/// Retenção por coorte semanal: dos que entraram na semana X, quantos
+/// estiveram ativos na semana X + `weekOffset`.
+model CohortRetention {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Segunda-feira da semana do cadastro.
+  cohortWeek DateTime @map("cohort_week") @db.Date
+  weekOffset Int      @map("week_offset")
+  cohortSize Int      @map("cohort_size")
+  retained   Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([cohortWeek, weekOffset])
+  @@map("cohort_retention")
 }
