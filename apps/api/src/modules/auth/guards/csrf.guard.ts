@@ -5,7 +5,7 @@ import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { CsrfTokenMismatchError } from '../auth.errors';
-import { CSRF_COOKIE, CSRF_HEADER } from '../auth.cookies';
+import { CSRF_HEADER, readCsrfCookieValues } from '../auth.cookies';
 
 /**
  * Double-submit cookie.
@@ -16,6 +16,10 @@ import { CSRF_COOKIE, CSRF_HEADER } from '../auth.cookies';
  * `x-csrf-token`. Um site de terceiros consegue disparar a requisição com o
  * cookie, mas não consegue ler o valor para montar o header.
  *
+ * Pode chegar mais de um `csrf_token` (o legado de `Path=/auth` junto do
+ * atual): basta o header bater com um deles — todos são legíveis só pelo
+ * nosso front.
+ *
  * Use nas rotas que dependem do cookie: `/auth/refresh` e `/auth/logout`.
  */
 @Injectable()
@@ -23,26 +27,24 @@ export class CsrfGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
 
-    const cookieValue = (
-      request.cookies as Record<string, string> | undefined
-    )?.[CSRF_COOKIE];
+    const cookieValues = readCsrfCookieValues(request.headers.cookie);
     const headerValue = request.headers[CSRF_HEADER];
 
-    if (
-      typeof cookieValue !== 'string' ||
-      typeof headerValue !== 'string' ||
-      cookieValue.length === 0
-    ) {
+    if (typeof headerValue !== 'string' || headerValue.length === 0) {
       throw new CsrfTokenMismatchError();
     }
 
-    const cookieBuffer = Buffer.from(cookieValue);
     const headerBuffer = Buffer.from(headerValue);
+    const matches = cookieValues.some((value) => {
+      const cookieBuffer = Buffer.from(value);
 
-    if (
-      cookieBuffer.length !== headerBuffer.length ||
-      !timingSafeEqual(cookieBuffer, headerBuffer)
-    ) {
+      return (
+        cookieBuffer.length === headerBuffer.length &&
+        timingSafeEqual(cookieBuffer, headerBuffer)
+      );
+    });
+
+    if (!matches) {
       throw new CsrfTokenMismatchError();
     }
 

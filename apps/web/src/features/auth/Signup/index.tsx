@@ -3,11 +3,20 @@ import { Controller } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 
 import { t } from '../../../messages/pt-BR';
+import { PasswordStrengthMeter } from '../shared/PasswordStrengthMeter';
 import { useSignupController } from './useSignupController';
 
 export function Signup() {
-  const { register, control, errors, handleSubmit, isLoading, errorMessage } =
-    useSignupController();
+  const {
+    register,
+    control,
+    errors,
+    handleSubmit,
+    password,
+    isLoading,
+    errorCode,
+    errorMessage,
+  } = useSignupController();
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-ground p-4">
@@ -35,13 +44,16 @@ export function Signup() {
             error={errors.email?.message}
             {...register('email')}
           />
-          <Input
-            type="password"
-            autoComplete="new-password"
-            label={t('auth.signup.password')}
-            error={errors.password?.message}
-            {...register('password')}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              label={t('auth.signup.password')}
+              error={errors.password?.message}
+              {...register('password')}
+            />
+            <PasswordStrengthMeter password={password} />
+          </div>
           <Controller
             control={control}
             name="acceptedTerms"
@@ -69,7 +81,12 @@ export function Signup() {
 
           {errorMessage ? (
             <p role="alert" className="text-sm text-error">
-              {errorMessage}
+              {errorMessage}{' '}
+              {errorCode === 'EMAIL_ALREADY_IN_USE' ? (
+                <Link to="/login" className="font-medium underline">
+                  {t('auth.signup.goToLogin')}
+                </Link>
+              ) : null}
             </p>
           ) : null}
 

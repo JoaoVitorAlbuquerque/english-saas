@@ -68,8 +68,11 @@ describe('Auth (e2e)', () => {
     expect(cookies.raw.refresh_token).toContain('HttpOnly');
     expect(cookies.raw.refresh_token).toContain('SameSite=Lax');
     expect(cookies.raw.refresh_token).toContain('Path=/auth');
-    // O CSRF precisa ser legível pelo front.
+    // O CSRF precisa ser legível pelo front em qualquer rota do SPA, não só
+    // em /auth/*: Path restringe `document.cookie` pelo path do documento
+    // atual, não pelo destino da requisição.
     expect(cookies.raw.csrf_token).not.toContain('HttpOnly');
+    expect(cookies.raw.csrf_token).toMatch(/(?:^|; )Path=\/(?:;|$)/);
     expect(response.body.csrfToken).toBe(cookies.csrfToken);
   });
 
@@ -211,6 +214,31 @@ describe('Auth (e2e)', () => {
     // O token novo tem que ser diferente do apresentado.
     const rotated = extractCookies(response);
     expect(rotated.refreshToken).not.toBe(cookies.refreshToken);
+  });
+
+  it('aceita o refresh com o csrf_token legado (Path=/auth) chegando antes do atual, e apaga o legado', async () => {
+    const created = await signup('legado@exemplo.com').expect(201);
+    const cookies = extractCookies(created);
+
+    // Ordem que o browser usa em /auth/*: path mais específico primeiro.
+    const response = await http()
+      .post('/auth/refresh')
+      .set(
+        'Cookie',
+        `csrf_token=valor-antigo; refresh_token=${cookies.refreshToken}; csrf_token=${cookies.csrfToken}`,
+      )
+      .set('x-csrf-token', cookies.csrfToken)
+      .expect(200);
+
+    const setCookies = ([] as string[]).concat(
+      response.headers['set-cookie'] ?? [],
+    );
+    expect(
+      setCookies.some(
+        (cookie) =>
+          cookie.startsWith('csrf_token=;') && cookie.includes('Path=/auth'),
+      ),
+    ).toBe(true);
   });
 
   it('recusa o refresh sem o header de CSRF', async () => {

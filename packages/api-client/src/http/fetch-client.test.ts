@@ -54,7 +54,13 @@ describe('apiFetch', () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          user: { id: '1', name: 'Aluno', email: 'a@a.com', role: 'STUDENT' },
+          user: {
+            id: '1',
+            name: 'Aluno',
+            email: 'a@a.com',
+            role: 'STUDENT',
+            emailVerifiedAt: null,
+          },
           accessToken: 'refreshed-token',
           csrfToken: 'csrf',
         }),

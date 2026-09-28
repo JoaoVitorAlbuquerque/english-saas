@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  authService,
   signinRequestSchema,
   useSignIn,
   type SigninRequest,
@@ -8,11 +9,11 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 import { hasAdminAccess, useAuthStore } from '../../../stores/auth-store';
-import { t } from '../../../messages/pt-BR';
 
 export function useLoginController() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const signIn = useSignIn();
 
   const {
@@ -26,10 +27,19 @@ export function useLoginController() {
   const handleSubmit = hookFormSubmit(async (data) => {
     try {
       const session = await signIn.mutateAsync(data);
+
+      if (!hasAdminAccess(session.user)) {
+        // Conta válida, mas sem papel de editor/admin: não fica logada aqui.
+        await authService.logout();
+        clearSession();
+        navigate('/403', { replace: true });
+        return;
+      }
+
       setSession(session.user);
-      navigate(hasAdminAccess(session.user) ? '/' : '/403', { replace: true });
+      navigate('/', { replace: true });
     } catch {
-      // erro exibido abaixo via signIn.isError
+      // erro exibido abaixo via signIn.error
     }
   });
 
@@ -38,6 +48,6 @@ export function useLoginController() {
     errors,
     handleSubmit,
     isLoading: signIn.isPending,
-    errorMessage: signIn.isError ? t('auth.login.genericError') : undefined,
+    errorMessage: signIn.error?.message,
   };
 }

@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   signinRequestSchema,
+  useGoogleUrl,
   useSignIn,
   type SigninRequest,
 } from '@english-saas/api-client';
@@ -8,12 +9,12 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../../../stores/auth-store';
-import { t } from '../../../messages/pt-BR';
 
 export function useLoginController() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
   const signIn = useSignIn();
+  const googleUrl = useGoogleUrl();
 
   const {
     register,
@@ -27,17 +28,29 @@ export function useLoginController() {
     try {
       const session = await signIn.mutateAsync(data);
       setSession(session.user);
-      navigate('/hoje', { replace: true });
+      navigate('/', { replace: true });
     } catch {
-      // erro exibido abaixo via signIn.isError / signIn.error
+      // erro exibido abaixo via signIn.error
     }
   });
+
+  const handleGoogleClick = async () => {
+    try {
+      const { url } = await googleUrl.mutateAsync();
+      window.location.href = url;
+    } catch {
+      // erro exibido abaixo via googleUrl.error
+    }
+  };
 
   return {
     register,
     errors,
     handleSubmit,
     isLoading: signIn.isPending,
-    errorMessage: signIn.isError ? t('auth.login.genericError') : undefined,
+    errorMessage: signIn.error?.message,
+    handleGoogleClick,
+    isGoogleLoading: googleUrl.isPending,
+    googleErrorMessage: googleUrl.error?.message,
   };
 }

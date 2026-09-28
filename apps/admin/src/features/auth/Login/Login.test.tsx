@@ -16,6 +16,7 @@ function renderLogin() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<p>Painel</p>} />
+          <Route path="/403" element={<p>Sem acesso</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -34,5 +35,15 @@ describe('Login (admin)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
     expect(await screen.findByText('Painel')).toBeInTheDocument();
+  });
+
+  it('desloga e manda para /403 quando a conta não é editor nem admin', async () => {
+    renderLogin();
+
+    await userEvent.type(screen.getByLabelText('E-mail'), 'aluno@exemplo.com');
+    await userEvent.type(screen.getByLabelText('Senha'), 'senha-aluno');
+    await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    expect(await screen.findByText('Sem acesso')).toBeInTheDocument();
   });
 });

@@ -11,7 +11,24 @@ export const CSRF_HEADER = 'x-csrf-token';
 /** Só o refresh chega nestas rotas — o cookie não viaja no resto da API. */
 export const REFRESH_COOKIE_PATH = '/auth';
 
-function baseOptions(envService: EnvService): CookieOptions {
+/**
+ * O CSRF precisa ser lido por `document.cookie` de qualquer rota do front
+ * (o SPA quase nunca está em `/auth/*`) — `Path` de cookie restringe tanto o
+ * envio automático quanto a leitura por JS ao path *do documento atual*, não
+ * ao da rota de destino. Preso a `/auth`, o front nunca conseguia ler o
+ * cookie fora da tela de callback do Google, e todo refresh (inclusive o do
+ * reload de página) caía no `CsrfTokenMismatchError`.
+ */
+export const CSRF_COOKIE_PATH = '/';
+
+/**
+ * Path em que o CSRF nascia antes. Um cookie com path diferente é outro
+ * cookie: o antigo continua no browser e, em `/auth/*`, é enviado antes do
+ * novo. Toda gravação/limpeza apaga ele até o último expirar (30 dias).
+ */
+const LEGACY_CSRF_COOKIE_PATH = '/auth';
+
+function baseOptions(envService: EnvService, path: string): CookieOptions {
   const domain = envService.get('AUTH_COOKIE_DOMAIN');
 
   return {
@@ -20,7 +37,7 @@ function baseOptions(envService: EnvService): CookieOptions {
     ...(domain === undefined ? {} : { domain }),
     secure: envService.get('AUTH_COOKIE_SECURE'),
     sameSite: envService.get('AUTH_COOKIE_SAME_SITE'),
-    path: REFRESH_COOKIE_PATH,
+    path,
   };
 }
 
@@ -35,18 +52,18 @@ export function setAuthCookies(
   envService: EnvService,
   input: { refreshToken: string; expiresAt: Date },
 ): string {
-  const options = baseOptions(envService);
   const csrfToken = randomBytes(24).toString('base64url');
 
+  clearLegacyCsrfCookie(response, envService);
   response.cookie(REFRESH_COOKIE, input.refreshToken, {
-    ...options,
+    ...baseOptions(envService, REFRESH_COOKIE_PATH),
     httpOnly: true,
     expires: input.expiresAt,
   });
 
   // Legível de propósito: o front precisa copiar para o header.
   response.cookie(CSRF_COOKIE, csrfToken, {
-    ...options,
+    ...baseOptions(envService, CSRF_COOKIE_PATH),
     httpOnly: false,
     expires: input.expiresAt,
   });
@@ -58,10 +75,48 @@ export function clearAuthCookies(
   response: Response,
   envService: EnvService,
 ): void {
-  const options = baseOptions(envService);
+  response.clearCookie(REFRESH_COOKIE, {
+    ...baseOptions(envService, REFRESH_COOKIE_PATH),
+    httpOnly: true,
+  });
+  response.clearCookie(CSRF_COOKIE, {
+    ...baseOptions(envService, CSRF_COOKIE_PATH),
+    httpOnly: false,
+  });
+  clearLegacyCsrfCookie(response, envService);
+}
 
-  response.clearCookie(REFRESH_COOKIE, { ...options, httpOnly: true });
-  response.clearCookie(CSRF_COOKIE, { ...options, httpOnly: false });
+function clearLegacyCsrfCookie(
+  response: Response,
+  envService: EnvService,
+): void {
+  response.clearCookie(CSRF_COOKIE, {
+    ...baseOptions(envService, LEGACY_CSRF_COOKIE_PATH),
+    httpOnly: false,
+  });
+}
+
+/**
+ * Todos os valores de `csrf_token` do header `Cookie` cru. O `cookie-parser`
+ * fica só com o primeiro, e com o cookie legado ainda no browser o primeiro é
+ * justamente o velho.
+ */
+export function readCsrfCookieValues(rawCookieHeader: unknown): string[] {
+  if (typeof rawCookieHeader !== 'string') {
+    return [];
+  }
+
+  const prefix = `${CSRF_COOKIE}=`;
+
+  return (
+    rawCookieHeader
+      .split(';')
+      .map((part) => part.trim())
+      .filter((part) => part.startsWith(prefix))
+      // base64url: nunca vem codificado, e decodificar lixo lançaria.
+      .map((part) => part.slice(prefix.length))
+      .filter((value) => value.length > 0)
+  );
 }
 
 export function readRefreshCookie(cookies: unknown): string | undefined {

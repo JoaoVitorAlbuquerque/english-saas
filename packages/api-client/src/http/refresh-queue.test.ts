@@ -24,7 +24,13 @@ afterEach(() => {
 });
 
 const session = {
-  user: { id: '1', name: 'Aluno', email: 'aluno@exemplo.com', role: 'STUDENT' },
+  user: {
+    id: '1',
+    name: 'Aluno',
+    email: 'aluno@exemplo.com',
+    role: 'STUDENT',
+    emailVerifiedAt: null,
+  },
   accessToken: 'new-access-token',
   csrfToken: 'csrf-abc',
 };

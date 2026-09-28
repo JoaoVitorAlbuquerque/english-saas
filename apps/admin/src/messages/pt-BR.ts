@@ -11,8 +11,6 @@ export const messages = {
   'auth.login.email': 'E-mail',
   'auth.login.password': 'Senha',
   'auth.login.submit': 'Entrar',
-  'auth.login.genericError':
-    'Não foi possível entrar. Confira seus dados e tente de novo.',
 
   'forbidden.title': 'Sem acesso a este painel',
   'forbidden.description':

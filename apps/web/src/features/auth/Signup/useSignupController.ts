@@ -17,13 +17,14 @@ export function useSignupController() {
   const {
     register,
     control,
+    watch,
     handleSubmit: hookFormSubmit,
     formState: { errors },
   } = useForm<SignupRequest>({
     resolver: zodResolver(signupRequestSchema),
     defaultValues: {
-      acceptedTerms: undefined,
-      acceptedPrivacyPolicy: undefined,
+      acceptedTerms: false,
+      acceptedPrivacyPolicy: false,
       acceptedDataPersonalization: false,
       acceptedMarketing: false,
     },
@@ -33,9 +34,9 @@ export function useSignupController() {
     try {
       const session = await signUp.mutateAsync(data);
       setSession(session.user);
-      navigate('/hoje', { replace: true });
+      navigate('/', { replace: true });
     } catch {
-      // erro exibido via signUp.isError
+      // erro exibido via signUp.error
     }
   });
 
@@ -44,8 +45,9 @@ export function useSignupController() {
     control,
     errors,
     handleSubmit,
+    password: watch('password') ?? '',
     isLoading: signUp.isPending,
-    isError: signUp.isError,
+    errorCode: signUp.error?.code,
     errorMessage: signUp.error?.message,
   };
 }

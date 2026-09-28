@@ -15,7 +15,7 @@ function renderLogin() {
       <MemoryRouter initialEntries={['/login']}>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/hoje" element={<p>Página Hoje</p>} />
+          <Route path="/" element={<p>Página Hoje</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -23,7 +23,7 @@ function renderLogin() {
 }
 
 describe('Login', () => {
-  it('navega para /hoje após um login bem-sucedido', async () => {
+  it('navega para a raiz após um login bem-sucedido', async () => {
     renderLogin();
 
     await userEvent.type(screen.getByLabelText('E-mail'), 'aluno@exemplo.com');
@@ -33,7 +33,7 @@ describe('Login', () => {
     expect(await screen.findByText('Página Hoje')).toBeInTheDocument();
   });
 
-  it('mostra mensagem de erro pt-BR em credenciais inválidas', async () => {
+  it('mostra a mensagem de erro pt-BR vinda da API em credenciais inválidas', async () => {
     renderLogin();
 
     await userEvent.type(screen.getByLabelText('E-mail'), 'aluno@exemplo.com');
@@ -41,9 +41,7 @@ describe('Login', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
     expect(
-      await screen.findByText(
-        'Não foi possível entrar. Confira seus dados e tente de novo.',
-      ),
+      await screen.findByText('E-mail ou senha incorretos.'),
     ).toBeInTheDocument();
   });
 });

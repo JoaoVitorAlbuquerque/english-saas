@@ -5,8 +5,16 @@ import { t } from '../../../messages/pt-BR';
 import { useLoginController } from './useLoginController';
 
 export function Login() {
-  const { register, errors, handleSubmit, isLoading, errorMessage } =
-    useLoginController();
+  const {
+    register,
+    errors,
+    handleSubmit,
+    isLoading,
+    errorMessage,
+    handleGoogleClick,
+    isGoogleLoading,
+    googleErrorMessage,
+  } = useLoginController();
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-ground p-4">
@@ -28,13 +36,21 @@ export function Login() {
             error={errors.email?.message}
             {...register('email')}
           />
-          <Input
-            type="password"
-            autoComplete="current-password"
-            label={t('auth.login.password')}
-            error={errors.password?.message}
-            {...register('password')}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Input
+              type="password"
+              autoComplete="current-password"
+              label={t('auth.login.password')}
+              error={errors.password?.message}
+              {...register('password')}
+            />
+            <Link
+              to="/esqueci-senha"
+              className="self-end text-sm font-medium text-accent"
+            >
+              {t('auth.login.forgotPassword')}
+            </Link>
+          </div>
 
           {errorMessage ? (
             <p role="alert" className="text-sm text-error">
@@ -45,11 +61,28 @@ export function Login() {
           <Button type="submit" isLoading={isLoading}>
             {t('auth.login.submit')}
           </Button>
-
-          <Button type="button" variant="ghost" disabled>
-            {t('auth.login.googleSoon')}
-          </Button>
         </form>
+
+        <div className="my-4 flex items-center gap-3 text-xs text-muted">
+          <span className="h-px flex-1 bg-line" aria-hidden="true" />
+          {t('auth.login.or')}
+          <span className="h-px flex-1 bg-line" aria-hidden="true" />
+        </div>
+
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full"
+          isLoading={isGoogleLoading}
+          onClick={() => void handleGoogleClick()}
+        >
+          {t('auth.login.googleButton')}
+        </Button>
+        {googleErrorMessage ? (
+          <p role="alert" className="mt-2 text-center text-sm text-error">
+            {googleErrorMessage}
+          </p>
+        ) : null}
 
         <p className="mt-6 text-center text-sm text-muted">
           {t('auth.login.noAccount')}{' '}
