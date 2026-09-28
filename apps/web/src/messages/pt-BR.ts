@@ -170,6 +170,56 @@ export const messages = {
   'error.boundary.title': 'Algo deu errado nesta tela',
   'error.boundary.description': 'Tente recarregar a página.',
   'error.network.retry': 'Tentar de novo',
+
+  'lesson.loading': 'Carregando a lição…',
+  'lesson.error.loadTitle': 'Não conseguimos carregar esta lição',
+  'lesson.common.continue': 'Continuar',
+  'lesson.common.send': 'Enviar',
+  'lesson.rubric.met': 'Cumpriu',
+  'lesson.rubric.notMet': 'Não cumpriu',
+
+  'lesson.topBar.exit': 'Sair da lição',
+
+  'lesson.exit.title': 'Sair da lição?',
+  'lesson.exit.description': 'Você continua de onde parou na próxima vez.',
+  'lesson.exit.stay': 'Continuar na lição',
+  'lesson.exit.confirm': 'Sair',
+
+  'lesson.scene.playAll': 'Ouvir a cena inteira',
+  'lesson.scene.playLine': 'Ouvir',
+  'lesson.scene.showTranslation': 'Ver tradução',
+  'lesson.scene.hideTranslation': 'Esconder tradução',
+
+  'lesson.cards.previous': 'Card anterior',
+  'lesson.cards.next': 'Próximo card',
+  'lesson.cards.nextButton': 'Próximo',
+
+  'lesson.production.submit': 'Enviar',
+  'lesson.production.responseLabel': 'Sua resposta',
+  'lesson.production.correcting': 'Corrigindo a sua resposta…',
+  'lesson.production.insufficientCredits':
+    'Você não tem créditos de IA agora. Sua resposta foi salva, mas não deu para corrigir desta vez.',
+  'lesson.production.noErrors': 'Nenhum erro encontrado.',
+  'lesson.production.correctedVersion': 'Versão corrigida',
+
+  'lesson.roleplay.preparing': 'Preparando a conversa…',
+  'lesson.roleplay.helpPrefix': 'Ajuda',
+  'lesson.roleplay.placeholder': 'Escreva sua resposta',
+  'lesson.roleplay.finish': 'Encerrar conversa',
+  'lesson.roleplay.summaryTitle': 'Como foi a conversa',
+
+  'lesson.summary.takeawaysTitle': 'O que você aprendeu',
+  'lesson.summary.finish': 'Concluir lição',
+  'lesson.summary.accuracySuffix': '% de acerto',
+  'lesson.summary.reviewNote':
+    'O que você praticou aqui entra na sua revisão espaçada nos próximos dias.',
+  'lesson.summary.nextLessonLabel': 'Próxima lição do seu plano',
+  'lesson.summary.goToPlan': 'Ver meu plano',
+  'lesson.summary.retake': 'Refazer',
+
+  'paywall.titlePrefix': 'Isso é do plano',
+  'paywall.titleGeneric': 'Isso é de um plano pago',
+  'paywall.dismiss': 'Entendi',
 } as const;
 
 type MessageKey = keyof typeof messages;

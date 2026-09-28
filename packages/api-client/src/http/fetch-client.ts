@@ -104,7 +104,7 @@ function handleGlobalErrorCodes(error: ApiError): void {
     return;
   }
 
-  if (error.code === 'INSUFFICIENT_CREDITS') {
+  if (error.code === 'INSUFFICIENT_AI_CREDITS') {
     emitApiClientEvent({ type: 'insufficient-credits', error });
   }
 }

@@ -17,6 +17,7 @@ import { OnboardingLayout } from '../features/onboarding/OnboardingLayout';
 import { Profile } from '../features/profile/Profile';
 import { Progress } from '../features/progress/Progress';
 import { Today } from '../features/today/Today';
+import { Lesson } from '../features/lesson/Lesson';
 import { Placement } from '../features/placement/Placement';
 import { NotFound } from '../pages/NotFound';
 import { AppShell } from '../components/layout/AppShell';
@@ -51,6 +52,7 @@ export function AppRouter() {
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="/nivelamento" element={<Placement />} />
+            <Route path="/licoes/:slug" element={<Lesson />} />
             <Route path="/onboarding/final" element={<Finish />} />
           </Route>
 

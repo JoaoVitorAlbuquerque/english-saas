@@ -28,6 +28,7 @@ export * from './components/MarkedText/MarkedText';
 export * from './components/SpokenStandardToggle/SpokenStandardToggle';
 
 export * from './items/types';
+export * from './items/to-item-view';
 export * from './items/ItemRenderer';
 export * from './items/ItemFeedbackPanel';
 export * from './items/MultipleChoiceItem';

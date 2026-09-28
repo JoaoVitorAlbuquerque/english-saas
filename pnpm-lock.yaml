@@ -552,6 +552,9 @@ importers:
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.1
+      zod:
+        specifier: ^4.0.0
+        version: 4.6.5
     devDependencies:
       '@english-saas/eslint-config':
         specifier: workspace:*
