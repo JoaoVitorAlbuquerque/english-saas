@@ -1,8 +1,10 @@
+import { SPAN_KIND_LABELS } from '@english-saas/shared';
+import type { SpanKind } from '@english-saas/shared';
 import type { ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 
-export type MarkKind = 'CHUNK' | 'GRAMMAR' | 'REGISTER' | 'VOCAB';
+export type MarkKind = SpanKind;
 
 export type MarkProps = {
   kind: MarkKind;
@@ -18,18 +20,11 @@ const KIND_CLASSES: Record<MarkKind, string> = {
   VOCAB: 'bg-accent/10 text-accent rounded px-1 py-0.5',
 };
 
-const KIND_LABELS: Record<MarkKind, string> = {
-  CHUNK: 'expressão',
-  GRAMMAR: 'estrutura gramatical',
-  REGISTER: 'registro falado',
-  VOCAB: 'vocabulário',
-};
-
 export function Mark({ kind, children, className }: MarkProps) {
   return (
     <mark
       className={cn('bg-transparent', KIND_CLASSES[kind], className)}
-      aria-label={`${KIND_LABELS[kind]}: ${typeof children === 'string' ? children : ''}`}
+      aria-label={`${SPAN_KIND_LABELS[kind]}: ${typeof children === 'string' ? children : ''}`}
     >
       {children}
     </mark>

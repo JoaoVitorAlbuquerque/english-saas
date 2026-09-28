@@ -24,3 +24,18 @@ export * from './components/EmptyState/EmptyState';
 export * from './components/ErrorState/ErrorState';
 export * from './components/AudioButton/AudioButton';
 export * from './components/Mark/Mark';
+export * from './components/MarkedText/MarkedText';
+export * from './components/SpokenStandardToggle/SpokenStandardToggle';
+
+export * from './items/types';
+export * from './items/ItemRenderer';
+export * from './items/ItemFeedbackPanel';
+export * from './items/MultipleChoiceItem';
+export * from './items/ListenChooseItem';
+export * from './items/OrderWordsItem';
+export * from './items/FillBlankItem';
+export * from './items/TypeAnswerItem';
+export * from './items/MatchItem';
+export * from './items/DictationItem';
+export * from './items/ReadingComprehensionItem';
+export * from './items/RegisterSwapItem';

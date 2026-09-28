@@ -8,7 +8,7 @@ describe('Mark', () => {
     render(<Mark kind="CHUNK">catch you later</Mark>);
 
     expect(
-      screen.getByLabelText('expressão: catch you later'),
+      screen.getByLabelText('Expressão pronta: catch you later'),
     ).toBeInTheDocument();
   });
 });

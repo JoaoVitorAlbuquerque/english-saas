@@ -24,7 +24,7 @@ async function bootstrap(): Promise<void> {
   // `credentials: true` é o que deixa o browser mandar o cookie entre
   // app.exemplo.com.br e api.exemplo.com.br.
   app.enableCors({
-    origin: [envService.get('WEB_URL')],
+    origin: [envService.get('WEB_URL'), 'http://localhost:5174'],
     credentials: true,
   });
   // Confia no proxy para `request.ip` valer o IP real do aluno.
