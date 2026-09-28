@@ -16,3 +16,7 @@ export * from './modules/auth/schemas';
 export * as usersService from './modules/users/service';
 export * from './modules/users/hooks';
 export * from './modules/users/schemas';
+
+export * as placementService from './modules/placement/service';
+export * from './modules/placement/hooks';
+export * from './modules/placement/schemas';

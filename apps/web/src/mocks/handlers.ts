@@ -51,6 +51,66 @@ export const completedProfileFixture = {
   onboardingCompletedAt: new Date().toISOString(),
 };
 
+export const placementFirstItemFixture = {
+  id: 'item-1',
+  type: 'MULTIPLE_CHOICE',
+  prompt: 'Complete: I ___ Maya.',
+  content: {
+    options: [
+      { id: 'am', text: 'am' },
+      { id: 'is', text: 'is' },
+      { id: 'are', text: 'are' },
+    ],
+    shuffle: false,
+  },
+  cefrLevel: 'A1',
+  skillIds: ['grammar.be.present.affirmative'],
+  assets: {},
+};
+
+export const placementInProgressFixture = {
+  id: 'placement-1',
+  status: 'IN_PROGRESS',
+  answered: 0,
+  maxItems: 30,
+  next: placementFirstItemFixture,
+  result: null,
+};
+
+export const placementResultFixture = {
+  id: 'placement-1',
+  status: 'COMPLETED',
+  answered: 12,
+  maxItems: 30,
+  next: null,
+  result: {
+    overallLevel: 'B1',
+    label: 'Intermediário',
+    competencies: [
+      { competency: 'GRAMMAR', label: 'Gramática', level: 'B1', items: 3 },
+      {
+        competency: 'VOCABULARY',
+        label: 'Vocabulário',
+        level: 'B1',
+        items: 3,
+      },
+      { competency: 'READING', label: 'Leitura', level: 'A2', items: 3 },
+      {
+        competency: 'LISTENING',
+        label: 'Compreensão oral',
+        level: 'B1',
+        items: 3,
+      },
+    ],
+    masteredSkillIds: ['grammar.be.present.affirmative'],
+    note: null,
+    writingStatus: 'NOT_OFFERED',
+    completedAt: new Date().toISOString(),
+    // No passado: dá para refazer.
+    nextAvailableAt: new Date(Date.now() - 1_000).toISOString(),
+  },
+};
+
 export const handlers = [
   http.post(`${API_URL}/auth/signin`, async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
@@ -113,4 +173,24 @@ export const handlers = [
       interests: body.interests ?? [],
     });
   }),
+
+  http.get(`${API_URL}/placement/latest`, () =>
+    HttpResponse.json(
+      {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Você ainda não fez o teste de nível.',
+        },
+      },
+      { status: 404 },
+    ),
+  ),
+
+  http.post(`${API_URL}/placement/start`, () =>
+    HttpResponse.json(placementInProgressFixture),
+  ),
+
+  http.post(`${API_URL}/placement/:id/answer`, () =>
+    HttpResponse.json(placementResultFixture),
+  ),
 ];

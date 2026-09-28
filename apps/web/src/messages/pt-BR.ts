@@ -132,10 +132,23 @@ export const messages = {
   'onboarding.finish.startAtA1': 'Começar no nível A1',
   'onboarding.finish.goToPlacement': 'Fazer o nivelamento',
 
-  'placement.title': 'Nivelamento em construção',
-  'placement.description':
-    'Esta é a prova adaptativa que descobre seu nível em cada competência. Ainda não está pronta nesta versão do app.',
-  'placement.skipForNow': 'Ir para Hoje por enquanto',
+  'placement.intro.title': 'Vamos descobrir seu nível',
+  'placement.intro.description':
+    'São 12 a 30 perguntas, dependendo das suas respostas — o teste se ajusta ao longo do caminho. Leva até 30 minutos.',
+  'placement.intro.dontKnowHint':
+    'Não sabe a resposta? Toque em "Não sei" em vez de chutar — isso ajuda a medir seu nível com mais precisão.',
+  'placement.intro.begin': 'Começar',
+
+  'placement.question.dontKnow': 'Não sei',
+
+  'placement.result.title': 'Seu nível',
+  'placement.result.canDoTitle': 'O que você já consegue fazer',
+  'placement.result.goToToday': 'Ver meu plano',
+  'placement.result.retake': 'Refazer o nivelamento',
+  'placement.result.retakeAvailableFrom': 'Você poderá refazer a partir de',
+
+  'placement.error.loadTitle': 'Não conseguimos carregar o nivelamento',
+  'placement.error.retry': 'Tentar de novo',
 
   'placeholder.today.title': 'Sua lição de hoje ainda não chegou aqui',
   'placeholder.today.description':

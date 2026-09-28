@@ -63,7 +63,7 @@ export function TypeAnswerItem({
         spellCheck={false}
       />
 
-      {item.content.hint ? (
+      {item.content.hint && mode !== 'assessment' ? (
         <div>
           {hint.revealed ? (
             <p className="text-sm text-muted">{item.content.hint}</p>

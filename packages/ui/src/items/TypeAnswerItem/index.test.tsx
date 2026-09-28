@@ -37,4 +37,12 @@ describe('TypeAnswerItem', () => {
 
     expect(onAnswer).not.toHaveBeenCalled();
   });
+
+  it('em assessment, não mostra o botão de dica — prova não tem dica', () => {
+    render(<TypeAnswerItem item={item} mode="assessment" />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Dica' }),
+    ).not.toBeInTheDocument();
+  });
 });

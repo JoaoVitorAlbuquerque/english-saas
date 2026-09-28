@@ -74,4 +74,12 @@ describe('FillBlankItem', () => {
       expect.objectContaining({ hintsUsed: 1 }),
     );
   });
+
+  it('em assessment, não mostra o botão de dica — prova não tem dica', () => {
+    render(<FillBlankItem item={freeTextItem} mode="assessment" />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Dica' }),
+    ).not.toBeInTheDocument();
+  });
 });
