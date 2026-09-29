@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -13,7 +14,11 @@ import { ActiveUserId } from 'src/common/decorators/active-user-id.decorator';
 import { localDate } from 'src/modules/learning/domain/streak';
 import { UsersService } from 'src/modules/users/services/users.service';
 
-import { AgendaQueryDto } from '../dto/planner.dto';
+import {
+  AgendaQueryDto,
+  CompleteBlockDto,
+  SkipBlockDto,
+} from '../dto/planner.dto';
 import { AgendaDateMustBeTodayError } from '../planner.errors';
 import { AgendaService } from '../services/agenda.service';
 
@@ -43,7 +48,25 @@ export class AgendaController {
   @Post('blocks/:id/skip')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Marca um bloco da agenda de hoje como pulado' })
-  async skip(@ActiveUserId() userId: string, @Param('id') blockId: string) {
-    return this.agenda.skip(userId, blockId);
+  async skip(
+    @ActiveUserId() userId: string,
+    @Param('id') blockId: string,
+    @Body() body: SkipBlockDto,
+  ) {
+    return this.agenda.skip(userId, blockId, body);
+  }
+
+  @Post('blocks/:id/complete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Marca um bloco da agenda de hoje como concluído. Repetir é inofensivo.',
+  })
+  async complete(
+    @ActiveUserId() userId: string,
+    @Param('id') blockId: string,
+    @Body() body: CompleteBlockDto,
+  ) {
+    return this.agenda.complete(userId, blockId, body);
   }
 }

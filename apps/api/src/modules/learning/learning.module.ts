@@ -7,6 +7,7 @@ import { UsersModule } from 'src/modules/users/users.module';
 
 import { HistoryController } from './controllers/history.controller';
 import { LessonPlayerController } from './controllers/lesson-player.controller';
+import { StatsController } from './controllers/stats.controller';
 import { LearningListener } from './jobs/learning.listener';
 import { LearningProcessor } from './jobs/learning.processor';
 import { AnswerService } from './services/answer.service';
@@ -28,7 +29,7 @@ import { LearningStatsService } from './services/learning-stats.service';
  */
 @Module({
   imports: [CurriculumModule, UsersModule, registerQueue(QUEUES.LEARNING)],
-  controllers: [LessonPlayerController, HistoryController],
+  controllers: [LessonPlayerController, HistoryController, StatsController],
   providers: [
     AttemptService,
     AnswerService,

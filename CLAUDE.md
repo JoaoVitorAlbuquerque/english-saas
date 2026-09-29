@@ -378,12 +378,19 @@ Refazer até acertar não infla `correctRate` nem rende XP. A estatística é
 recalculada a partir das respostas, em lote, na fila `learning` — nunca
 dentro do request.
 
-A rota `POST /answers` aceita só os contextos LESSON e REVIEW. PLACEMENT,
-CHECKPOINT e GENERATED_MATERIAL são gravados pelo módulo dono, chamando
+A rota `POST /answers` aceita os contextos LESSON, REVIEW e
+**TARGETED_PRACTICE** (prática de ponto fraco da agenda, planner/10 — item
+escolhido pelo `AdaptiveItemService` fora de lição ou de card de revisão,
+sem `attemptId`, mesma regra do REVIEW). PLACEMENT, CHECKPOINT e
+GENERATED_MATERIAL são gravados pelo módulo dono, chamando
 `AnswerService.record` do lado do servidor.
 
 Sequência conta o dia **no fuso do aluno**, e perder um dia só faz ela
 recomeçar do um. Nada de vidas ou punição.
+
+**`GET /me/stats`** devolve XP total e sequência (`LearningStatsService.get`,
+só leitura — não registra estudo). É o que a tela Hoje do front usa; antes só
+existia embutido na resposta de `POST /attempts/:id/complete`.
 
 ### Modelo do aluno (learner-model)
 
@@ -480,6 +487,10 @@ já são `Skill` (`SkillType.VOCAB_SET` e `CHUNK`); vocabulário é por
   (contexto REVIEW) — ganha `answer.submitted` de graça, e o learner-model
   (7) processa como qualquer resposta. O rating vem de acerto, dica e tempo
   (`domain/rating.ts`); o de flashcard é o `selfRating` que o aluno mandou.
+  **`POST /reviews/:cardId/answer` devolve `{cardId, rating, nextDueAt,
+state, answer?}`** — `answer` é o `AnswerResult` completo (gabarito,
+  explicação, erros típicos) só em card de SKILL, pro cliente mostrar o
+  mesmo feedback de `POST /answers` sem precisar de uma segunda chamada.
 - **`review.answered` também alimenta o learner-model**, só para
   VOCAB/CHUNK (evidência de mastery com peso baixo — não é questão
   calibrada) e ERROR_PATTERN (mais uma oportunidade na janela de
@@ -510,9 +521,29 @@ existe "marcar como feito" separado disso.
   escritas incrementais são tirar uma lição concluída do path e somar
   `reinforceSkillIds` de um checkpoint; nenhuma das duas remonta a trilha.
 - **A agenda é gerada uma vez por dia local e guardada.** Não é o cálculo
-  que é caro — é o `skip` que precisa persistir dentro do mesmo dia sem
-  recalcular tudo de novo a cada leitura. `GET /me/agenda?date=` só aceita o
-  dia de hoje: não existe agenda do passado.
+  que é caro — é o estado de cada bloco que precisa persistir dentro do
+  mesmo dia sem recalcular tudo de novo a cada leitura. `GET /me/agenda?date=`
+  só aceita o dia de hoje: não existe agenda do passado. Cada bloco tem
+  `status: 'PENDING' | 'COMPLETED' | 'SKIPPED'`, e `GET /me/agenda` devolve
+  `minutesCompleted` (soma de `minutesSpent` dos concluídos) — é "minutos do
+  dia feitos" pro front.
+  - **`POST .../blocks/:id/skip`** aceita `{reason?: 'NO_TIME' |
+'ALREADY_KNOW' | 'TOO_HARD' | 'OTHER', note?}`, guardado no bloco
+    (`skipReason`/`skipNote`). Não desfaz um bloco já `COMPLETED`. TODO:
+    `ALREADY_KNOW` num bloco de prática é candidato a virar uma checagem
+    rápida, e `TOO_HARD` a puxar reforço do pré-requisito — nenhuma lógica
+    nova roda em cima disso ainda, é só o motivo guardado.
+  - **`POST .../blocks/:id/complete`** aceita `{minutesSpent?}` (padrão: o
+    `estimatedMinutes` do bloco), idempotente — repetir mantém o
+    `completedAt`/`minutesSpent` da primeira vez, e pode sobrescrever um
+    `SKIPPED` (o aluno pulou e decidiu fazer depois). Bloco de REVIEW e de
+    TARGETED_PRACTICE são marcados pelo front ao terminar o fluxo; bloco de
+    LESSON é marcado pelo próprio backend (ver abaixo).
+  - **`lesson.completed` marca o bloco em vez de invalidar a agenda
+    inteira** (`AgendaService.completeLessonBlock`) — antes, terminar a
+    lição sugerida apagava a agenda do dia inteira (`invalidateToday`) e
+    perdia o que já tinha sido marcado como feito ou pulado nos outros
+    blocos. `removeFromPath` continua rodando do mesmo jeito.
 - **A ordem dos blocos é fixa e o corte é sempre pelo orçamento do dia:**
   revisão vencida (até ~30%, usando o que existir), a próxima lição do path
   se couber inteira, prática das fraquezas preenchendo o resto. O

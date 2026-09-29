@@ -4,6 +4,7 @@ import type { DailyAgenda, Prisma } from '@prisma/client';
 import { NotFoundError } from 'src/common/errors/app.exception';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 import { AdaptiveItemService } from 'src/modules/assessment/services/adaptive-item.service';
+import { CatalogService } from 'src/modules/curriculum/services/catalog.service';
 import { TaxonomyService } from 'src/modules/curriculum/services/taxonomy.service';
 import { localDate } from 'src/modules/learning/domain/streak';
 import { MASTERY_THRESHOLD } from 'src/modules/planner/domain/build-path';
@@ -21,6 +22,8 @@ import {
   DEFAULT_PRACTICE_ITEM_MINUTES,
   REVIEW_SHARE,
   type AgendaBlock,
+  type AgendaBlockStatus,
+  type AgendaSkipReason,
   type NextLessonCandidate,
   type PracticeCandidate,
   type ReviewCandidate,
@@ -39,12 +42,21 @@ const WEEKDAY_INDEX = [
   'sat',
 ] as const;
 
-export type AgendaBlockView = AgendaBlock & { skipped: boolean };
+export type AgendaBlockView = AgendaBlock & {
+  status: AgendaBlockStatus;
+  skipReason?: AgendaSkipReason;
+  skipNote?: string;
+  /** ISO. Só em `status: 'COMPLETED'`. */
+  completedAt?: string;
+  minutesSpent?: number;
+};
 
 export type DailyAgendaView = {
   localDate: string;
   generatedAt: Date;
   blocks: AgendaBlockView[];
+  /** Soma de `minutesSpent` dos blocos concluídos — "minutos feitos hoje". */
+  minutesCompleted: number;
 };
 
 /**
@@ -61,6 +73,7 @@ export class AgendaService {
     private readonly adaptiveItems: AdaptiveItemService,
     private readonly taxonomy: TaxonomyService,
     private readonly profiles: LearnerProfileService,
+    private readonly catalog: CatalogService,
   ) {}
 
   async today(userId: string, now = new Date()): Promise<DailyAgendaView> {
@@ -76,10 +89,102 @@ export class AgendaService {
     return this.toView(row);
   }
 
+  /** Pular um bloco não desfaz um já concluído — repetir é inofensivo. */
   async skip(
     userId: string,
     blockId: string,
+    input: { reason?: AgendaSkipReason; note?: string },
     now = new Date(),
+  ): Promise<DailyAgendaView> {
+    return this.updateBlock(userId, blockId, now, (block) =>
+      block.status === 'COMPLETED'
+        ? block
+        : {
+            ...block,
+            status: 'SKIPPED',
+            skipReason: input.reason,
+            skipNote: input.note,
+          },
+    );
+  }
+
+  /**
+   * Concluir sempre pode sobrescrever um bloco pulado — o aluno pulou e
+   * decidiu fazer depois, no mesmo dia. Repetir é inofensivo: fica com o
+   * `completedAt`/`minutesSpent` da primeira vez.
+   */
+  async complete(
+    userId: string,
+    blockId: string,
+    input: { minutesSpent?: number },
+    now = new Date(),
+  ): Promise<DailyAgendaView> {
+    return this.updateBlock(userId, blockId, now, (block) =>
+      block.status === 'COMPLETED'
+        ? block
+        : {
+            ...block,
+            status: 'COMPLETED',
+            completedAt: now.toISOString(),
+            minutesSpent: input.minutesSpent ?? block.estimatedMinutes,
+          },
+    );
+  }
+
+  /**
+   * `lesson.completed` (6) chama isto em vez de invalidar a agenda inteira —
+   * assim o resto do dia (revisão feita, prática pulada) não some junto.
+   * Sem agenda hoje, ou sem bloco dessa lição (ela não veio do plano), não
+   * faz nada.
+   */
+  async completeLessonBlock(
+    userId: string,
+    lessonId: string,
+    now = new Date(),
+  ): Promise<void> {
+    const timezone = await this.users.timezoneOf(userId);
+    const localDateStr = localDate(now, timezone);
+
+    const existing = await this.prisma.dailyAgenda.findUnique({
+      where: { userId_localDate: { userId, localDate: localDateStr } },
+    });
+
+    if (existing === null) {
+      return;
+    }
+
+    const blocks = existing.blocks as unknown as AgendaBlockView[];
+    const block = blocks.find(
+      (candidate) =>
+        candidate.type === 'LESSON' && candidate.refId === lessonId,
+    );
+
+    if (block === undefined || block.status === 'COMPLETED') {
+      return;
+    }
+
+    await this.prisma.dailyAgenda.update({
+      where: { id: existing.id },
+      data: {
+        blocks: blocks.map((candidate) =>
+          candidate.id === block.id
+            ? {
+                ...candidate,
+                status: 'COMPLETED',
+                completedAt: now.toISOString(),
+                minutesSpent: candidate.estimatedMinutes,
+              }
+            : candidate,
+        ) as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private async updateBlock(
+    userId: string,
+    blockId: string,
+    now: Date,
+    apply: (block: AgendaBlockView) => AgendaBlockView,
   ): Promise<DailyAgendaView> {
     const timezone = await this.users.timezoneOf(userId);
     const localDateStr = localDate(now, timezone);
@@ -102,7 +207,7 @@ export class AgendaService {
       where: { id: existing.id },
       data: {
         blocks: blocks.map((block) =>
-          block.id === blockId ? { ...block, skipped: true } : block,
+          block.id === blockId ? apply(block) : block,
         ) as unknown as Prisma.InputJsonValue,
       },
     });
@@ -145,6 +250,7 @@ export class AgendaService {
         ? null
         : {
             lessonId: nextEntry.lessonId,
+            slug: nextEntry.slug,
             title: nextEntry.title,
             estimatedMinutes: nextEntry.estimatedMinutes,
             reason: nextEntry.reason,
@@ -159,9 +265,9 @@ export class AgendaService {
     const blocks = buildAgenda({ budgetMinutes, review, nextLesson, practice });
 
     const data = {
-      blocks: blocks.map((block) => ({
+      blocks: blocks.map((block): AgendaBlockView => ({
         ...block,
-        skipped: false,
+        status: 'PENDING',
       })) as unknown as Prisma.InputJsonValue,
       generatedAt: now,
     };
@@ -244,6 +350,13 @@ export class AgendaService {
       this.profiles.getSnapshot(userId),
     ]);
 
+    // O item completo (sem gabarito) vai junto — o bloco de prática é
+    // autossuficiente, do mesmo jeito que o card de SKILL da revisão (9).
+    const items = await this.catalog.studentItems(
+      selected.map((entry) => entry.itemId),
+    );
+    const itemById = new Map(items.map((item) => [item.id, item]));
+
     const titleById = new Map(skills.map((skill) => [skill.id, skill.title]));
     const errorPatternIdsBySkill = new Map(
       graph.map((node) => [node.id, node.errorPatternIds]),
@@ -255,26 +368,40 @@ export class AgendaService {
       ]),
     );
 
-    return selected.map((entry) => {
+    return selected.flatMap((entry) => {
+      const item = itemById.get(entry.itemId);
+
+      if (item === undefined) {
+        return [];
+      }
+
       const occurrences = (errorPatternIdsBySkill.get(entry.skillId) ?? [])
         .map((id) => occurrencesByPattern.get(id))
         .find((value) => value !== undefined);
 
-      return {
-        itemId: entry.itemId,
-        skillId: entry.skillId,
-        skillTitle: titleById.get(entry.skillId) ?? entry.skillId,
-        estimatedMinutes: DEFAULT_PRACTICE_ITEM_MINUTES,
-        recentOccurrences: occurrences ?? null,
-      };
+      return [
+        {
+          itemId: entry.itemId,
+          skillId: entry.skillId,
+          skillTitle: titleById.get(entry.skillId) ?? entry.skillId,
+          estimatedMinutes: DEFAULT_PRACTICE_ITEM_MINUTES,
+          recentOccurrences: occurrences ?? null,
+          item,
+        },
+      ];
     });
   }
 
   private toView(row: DailyAgenda): DailyAgendaView {
+    const blocks = row.blocks as unknown as AgendaBlockView[];
+
     return {
       localDate: row.localDate,
       generatedAt: row.generatedAt,
-      blocks: row.blocks as unknown as AgendaBlockView[],
+      blocks,
+      minutesCompleted: blocks
+        .filter((block) => block.status === 'COMPLETED')
+        .reduce((sum, block) => sum + (block.minutesSpent ?? 0), 0),
     };
   }
 }

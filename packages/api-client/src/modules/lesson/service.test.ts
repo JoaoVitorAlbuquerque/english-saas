@@ -7,7 +7,6 @@ import {
   completeStep,
   getLesson,
   startAttempt,
-  submitAnswer,
 } from './service';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
@@ -164,40 +163,6 @@ describe('completeAttempt', () => {
     expect(result.xp.total).toBe(30);
     expect(fetchMock).toHaveBeenCalledWith(
       'http://api.local/attempts/attempt-1/complete',
-      expect.objectContaining({ method: 'POST' }),
-    );
-  });
-});
-
-describe('submitAnswer', () => {
-  it('envia a resposta e devolve o feedback', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({
-        answerId: 'answer-1',
-        isCorrect: true,
-        score: 1,
-        verdict: 'CORRECT',
-        feedback: 'Boa!',
-        explanation: 'Explicação.',
-        correctAnswer: { optionIds: ['am'], texts: ['am'] },
-        errorPatterns: [],
-        isFirstTry: true,
-      }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await submitAnswer({
-      itemId: 'item-1',
-      attemptId: 'attempt-1',
-      context: 'LESSON',
-      response: { optionIds: ['am'] },
-      responseTimeMs: 2_000,
-      hintsUsed: 0,
-    });
-
-    expect(result.isCorrect).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://api.local/answers',
       expect.objectContaining({ method: 'POST' }),
     );
   });

@@ -1,19 +1,15 @@
 import { apiFetch } from '../../http/fetch-client';
 import {
-  answerResultSchema,
   attemptViewSchema,
   catalogLessonSchema,
   completeStepRequestSchema,
   completionResultSchema,
   startAttemptResponseSchema,
-  submitAnswerRequestSchema,
-  type AnswerResult,
   type AttemptView,
   type CatalogLesson,
   type CompleteStepRequest,
   type CompletionResult,
   type StartAttemptResponse,
-  type SubmitAnswerRequest,
 } from './schemas';
 
 export async function getLesson(slug: string): Promise<CatalogLesson> {
@@ -52,17 +48,5 @@ export async function completeAttempt(
   return apiFetch(`/attempts/${attemptId}/complete`, {
     method: 'POST',
     schema: completionResultSchema,
-  });
-}
-
-export async function submitAnswer(
-  input: SubmitAnswerRequest,
-): Promise<AnswerResult> {
-  const body = submitAnswerRequestSchema.parse(input);
-
-  return apiFetch('/answers', {
-    method: 'POST',
-    body,
-    schema: answerResultSchema,
   });
 }

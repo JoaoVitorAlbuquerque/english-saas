@@ -35,6 +35,7 @@ function lesson(
   overrides: Partial<CourseLesson> & Pick<CourseLesson, 'lessonId' | 'unitId'>,
 ): CourseLesson {
   return {
+    slug: overrides.lessonId,
     title: overrides.lessonId,
     cefrLevel: 'A1',
     estimatedMinutes: 15,
@@ -288,10 +289,22 @@ describe('buildAgenda', () => {
   };
   const nextLesson: NextLessonCandidate = {
     lessonId: 'l1',
+    slug: 'l1',
     title: 'Lição 1',
     estimatedMinutes: 15,
     reason: 'Próxima da sua trilha.',
   };
+  function practiceItem(id: string): PracticeCandidate['item'] {
+    return {
+      id,
+      type: 'MULTIPLE_CHOICE',
+      prompt: 'prompt',
+      content: {},
+      cefrLevel: 'A1',
+      skillIds: [],
+      assets: {},
+    };
+  }
   const practice: PracticeCandidate[] = [
     {
       itemId: 'i1',
@@ -299,6 +312,7 @@ describe('buildAgenda', () => {
       skillTitle: 'Skill 1',
       estimatedMinutes: 1.5,
       recentOccurrences: 3,
+      item: practiceItem('i1'),
     },
     {
       itemId: 'i2',
@@ -306,6 +320,7 @@ describe('buildAgenda', () => {
       skillTitle: 'Skill 2',
       estimatedMinutes: 1.5,
       recentOccurrences: null,
+      item: practiceItem('i2'),
     },
   ];
 

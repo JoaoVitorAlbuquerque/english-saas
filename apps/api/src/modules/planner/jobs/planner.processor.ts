@@ -56,7 +56,9 @@ export class PlannerProcessor extends WorkerHost {
     if (job.name === REMOVE_FROM_PATH_JOB) {
       const { userId, lessonId } = job.data as RemoveFromPathJobData;
       await this.plans.removeFromPath(userId, lessonId);
-      await this.agenda.invalidateToday(userId);
+      // Marca o bloco em vez de invalidar a agenda inteira: senão a revisão
+      // e a prática já feitas hoje voltariam a aparecer como pendentes.
+      await this.agenda.completeLessonBlock(userId, lessonId);
       return { done: true };
     }
 

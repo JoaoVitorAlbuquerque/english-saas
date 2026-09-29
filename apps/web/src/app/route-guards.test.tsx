@@ -56,7 +56,7 @@ describe('guardas de rota', () => {
     renderAppAt('/onboarding/objetivo');
 
     expect(
-      await screen.findByText('Sua lição de hoje ainda não chegou aqui'),
+      await screen.findByRole('heading', { name: 'Nice to meet you' }),
     ).toBeInTheDocument();
   });
 });
@@ -73,7 +73,7 @@ describe('refresh de sessão ao recarregar', () => {
     renderAppAt('/hoje');
 
     expect(
-      await screen.findByText('Sua lição de hoje ainda não chegou aqui'),
+      await screen.findByRole('heading', { name: 'Nice to meet you' }),
     ).toBeInTheDocument();
     expect(screen.queryByText('Entre na sua conta')).not.toBeInTheDocument();
   });

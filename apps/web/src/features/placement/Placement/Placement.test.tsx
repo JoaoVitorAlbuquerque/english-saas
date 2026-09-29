@@ -60,9 +60,7 @@ describe('nivelamento', () => {
       screen.getByRole('button', { name: 'Ver meu plano' }),
     );
 
-    expect(
-      await screen.findByText('Sua lição de hoje ainda não chegou aqui'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Nice to meet you')).toBeInTheDocument();
   });
 
   it('retoma direto na questão quando já existe um teste em andamento', async () => {

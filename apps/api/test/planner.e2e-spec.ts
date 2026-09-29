@@ -418,7 +418,7 @@ describe('Planner (e2e)', () => {
     expect(blocks.some((block) => block.type === 'REVIEW')).toBe(true);
   });
 
-  it('pular um bloco persiste dentro do mesmo dia', async () => {
+  it('pular um bloco com motivo persiste dentro do mesmo dia', async () => {
     const { auth } = await studentWithPlan();
     await http().post('/me/plan/rebuild').set(auth).send({}).expect(200);
 
@@ -428,18 +428,239 @@ describe('Planner (e2e)', () => {
     const skipped = await http()
       .post(`/me/agenda/blocks/${blockId}/skip`)
       .set(auth)
+      .send({ reason: 'TOO_HARD' })
       .expect(200);
-    expect(
-      (skipped.body.blocks as { id: string; skipped: boolean }[]).find(
-        (block) => block.id === blockId,
-      )?.skipped,
-    ).toBe(true);
+    const skippedBlock = (
+      skipped.body.blocks as {
+        id: string;
+        status: string;
+        skipReason: string;
+      }[]
+    ).find((block) => block.id === blockId);
+    expect(skippedBlock).toMatchObject({
+      status: 'SKIPPED',
+      skipReason: 'TOO_HARD',
+    });
 
     const again = await http().get('/me/agenda').set(auth).expect(200);
     expect(
-      (again.body.blocks as { id: string; skipped: boolean }[]).find(
+      (again.body.blocks as { id: string; status: string }[]).find(
         (block) => block.id === blockId,
-      )?.skipped,
-    ).toBe(true);
+      )?.status,
+    ).toBe('SKIPPED');
+
+    // `OTHER` com nota livre — pular de novo troca o motivo (mudou de ideia).
+    const withNote = await http()
+      .post(`/me/agenda/blocks/${blockId}/skip`)
+      .set(auth)
+      .send({ reason: 'OTHER', note: 'Já revisei isso ontem à noite' })
+      .expect(200);
+    expect(
+      (
+        withNote.body.blocks as {
+          id: string;
+          skipReason: string;
+          skipNote: string;
+        }[]
+      ).find((block) => block.id === blockId),
+    ).toMatchObject({
+      skipReason: 'OTHER',
+      skipNote: 'Já revisei isso ontem à noite',
+    });
+  });
+
+  it('concluir um bloco soma nos minutos do dia; repetir não soma de novo', async () => {
+    const { auth } = await studentWithPlan();
+    await http().post('/me/plan/rebuild').set(auth).send({}).expect(200);
+
+    const agenda = await http().get('/me/agenda').set(auth).expect(200);
+    expect(agenda.body.minutesCompleted).toBe(0);
+    const block = (
+      agenda.body.blocks as { id: string; estimatedMinutes: number }[]
+    )[0];
+    const blockId = block?.id as string;
+
+    const completed = await http()
+      .post(`/me/agenda/blocks/${blockId}/complete`)
+      .set(auth)
+      .send({ minutesSpent: 7 })
+      .expect(200);
+    expect(
+      (
+        completed.body.blocks as {
+          id: string;
+          status: string;
+          minutesSpent: number;
+        }[]
+      ).find((entry) => entry.id === blockId),
+    ).toMatchObject({ status: 'COMPLETED', minutesSpent: 7 });
+    expect(completed.body.minutesCompleted).toBe(7);
+
+    // Repetir não soma de nova — fica com os 7 minutos da primeira vez.
+    const again = await http()
+      .post(`/me/agenda/blocks/${blockId}/complete`)
+      .set(auth)
+      .send({ minutesSpent: 99 })
+      .expect(200);
+    expect(again.body.minutesCompleted).toBe(7);
+
+    // Pular depois de concluído não desfaz.
+    const skipAfter = await http()
+      .post(`/me/agenda/blocks/${blockId}/skip`)
+      .set(auth)
+      .send({ reason: 'NO_TIME' })
+      .expect(200);
+    expect(
+      (skipAfter.body.blocks as { id: string; status: string }[]).find(
+        (entry) => entry.id === blockId,
+      )?.status,
+    ).toBe('COMPLETED');
+  });
+
+  it('concluir a lição sugerida marca o bloco na mesma agenda, sem apagar o resto do dia', async () => {
+    const { userId, auth } = await studentWithPlan();
+    await http().post('/me/plan/rebuild').set(auth).send({}).expect(200);
+
+    const lessonRow = await context.prisma.lesson.findUniqueOrThrow({
+      where: { slug: 'nice-to-meet-you' },
+      select: { id: true },
+    });
+
+    const agenda = await http().get('/me/agenda').set(auth).expect(200);
+    const blocks = agenda.body.blocks as {
+      id: string;
+      type: string;
+      refId: string;
+    }[];
+    const lessonBlock = blocks.find(
+      (block) => block.type === 'LESSON' && block.refId === lessonRow.id,
+    );
+    expect(lessonBlock).toBeDefined();
+
+    // Pula um outro bloco pra provar que ele sobrevive ao término da lição.
+    const otherBlock = blocks.find((block) => block.id !== lessonBlock?.id);
+    if (otherBlock !== undefined) {
+      await http()
+        .post(`/me/agenda/blocks/${otherBlock.id}/skip`)
+        .set(auth)
+        .send({ reason: 'NO_TIME' })
+        .expect(200);
+    }
+
+    const items = await context.prisma.item.findMany({
+      where: { slug: { not: null } },
+      select: { id: true, slug: true },
+    });
+    const itemBySlug = Object.fromEntries(
+      items.map((row) => [row.slug ?? '', row.id]),
+    );
+
+    const started = await http()
+      .post(`/lessons/${lessonRow.id}/attempts`)
+      .set(auth)
+      .send({ source: 'PLAN' })
+      .expect(201);
+    const attemptId = started.body.id as string;
+
+    const step = (index: number, body: object = { timeSpentMs: 20_000 }) =>
+      http()
+        .post(`/attempts/${attemptId}/steps/${String(index)}/complete`)
+        .set(auth)
+        .send(body)
+        .expect(200);
+
+    const answer = (slug: string, response: object) =>
+      http()
+        .post('/answers')
+        .set(auth)
+        .send({
+          itemId: itemBySlug[slug],
+          attemptId,
+          context: 'LESSON',
+          response,
+          responseTimeMs: 3_000,
+        })
+        .expect(201);
+
+    await step(0);
+    await step(1);
+    await answer('a1-be-i-am-maya', { optionIds: ['am'] });
+    await answer('a1-listen-hes-friendly', { optionIds: ['contracted'] });
+    await answer('a1-order-im-from-brazil', {
+      tokens: ["I'm", 'from', 'Brazil'],
+    });
+    await answer('a1-fill-biscuit-is-a-dog', { text: 'is' });
+    await answer('a1-reply-nice-to-meet-you', { optionIds: ['too'] });
+    await answer('a1-order-nice-to-meet-you', {
+      tokens: ['Nice', 'to', 'meet', 'you'],
+    });
+    await answer('a1-type-shes-from-austin', { text: 'she is from austin' });
+    await answer('a1-type-im-20-years-old', { text: "I'm 20" });
+    await step(2);
+    await step(3, {
+      timeSpentMs: 90_000,
+      response: { text: "Hi! I'm Ana. I'm from Recife. Nice to meet you." },
+    });
+    await step(4);
+    await step(5);
+    await http().post(`/attempts/${attemptId}/complete`).set(auth).expect(200);
+
+    await waitFor(async () => {
+      const row = await context.prisma.studyPlan.findUnique({
+        where: { userId },
+      });
+      const currentPath = (row?.path ?? []) as unknown as {
+        lessonId: string;
+      }[];
+      return currentPath.some((entry) => entry.lessonId === lessonRow.id)
+        ? null
+        : row;
+    }, 'a lição sair do path');
+
+    const after = await waitFor(async () => {
+      const view = await http().get('/me/agenda').set(auth).expect(200);
+      const updatedLessonBlock = (
+        view.body.blocks as { id: string; type: string; status: string }[]
+      ).find((block) => block.id === lessonBlock?.id);
+      return updatedLessonBlock?.status === 'COMPLETED' ? view : null;
+    }, 'o bloco da lição marcar concluído');
+
+    // O bloco pulado antes continua pulado — a agenda não foi refeita.
+    if (otherBlock !== undefined) {
+      const survivedBlock = (
+        after.body.blocks as { id: string; status: string }[]
+      ).find((block) => block.id === otherBlock.id);
+      expect(survivedBlock?.status).toBe('SKIPPED');
+    }
+  });
+
+  it('bloco de prática vem com o item completo, sem gabarito', async () => {
+    // Reforço setado direto no banco (como "perder vários dias de revisão"
+    // faz com cards vencidos) — mastery nova começa em 0.5, abaixo dos 0.8
+    // do threshold, então a skill já entra fraca sem precisar de checkpoint.
+    const { userId, auth } = await studentWithPlan('aluno@exemplo.com', 120);
+    await http().post('/me/plan/rebuild').set(auth).send({}).expect(200);
+
+    await context.prisma.studyPlan.update({
+      where: { userId },
+      data: { reinforceSkillIds: ['grammar.be.present.affirmative'] },
+    });
+
+    const agenda = await http().get('/me/agenda').set(auth).expect(200);
+    const blocks = agenda.body.blocks as {
+      type: string;
+      item?: { id: string; type: string; prompt: string; content: unknown };
+    }[];
+    const practiceBlock = blocks.find((block) => block.type === 'PRACTICE');
+
+    expect(practiceBlock?.item).toMatchObject({
+      id: expect.any(String),
+      type: expect.any(String),
+      prompt: expect.any(String),
+      content: expect.any(Object),
+    });
+    expect(JSON.stringify(practiceBlock?.item).toLowerCase()).not.toContain(
+      'correctoptionids',
+    );
   });
 });

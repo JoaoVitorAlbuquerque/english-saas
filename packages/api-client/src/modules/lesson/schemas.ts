@@ -8,16 +8,16 @@ import {
   roleplayContentSchema,
   sceneContentSchema,
   summaryContentSchema,
-  answerResponseSchema,
 } from '@english-saas/shared';
 import { z } from 'zod';
+
+import { learningStatsSchema } from '../learning/schemas';
 
 const LESSON_ATTEMPT_STATUSES = [
   'IN_PROGRESS',
   'COMPLETED',
   'ABANDONED',
 ] as const;
-const ANSWER_VERDICTS = ['CORRECT', 'PARTIAL', 'INCORRECT'] as const;
 
 export const resolvedAssetSchema = z.object({
   id: z.string(),
@@ -36,6 +36,17 @@ export const lessonItemSchema = z.object({
   skillIds: z.array(z.string()),
 });
 export type LessonItem = z.infer<typeof lessonItemSchema>;
+
+/**
+ * `StudentItem` (curriculum) + os assets resolvidos — a mesma forma que o
+ * catálogo entrega em qualquer lugar que sirva item de banco fora de uma
+ * lição inteira: card de SKILL da revisão (9) e bloco de prática da agenda
+ * (10).
+ */
+export const studentItemViewSchema = lessonItemSchema.extend({
+  assets: z.record(z.string(), resolvedAssetSchema),
+});
+export type StudentItemView = z.infer<typeof studentItemViewSchema>;
 
 /** Mesma forma de `LessonStepInput` (`packages/shared`), com o `order` da lição. */
 export const lessonStepViewSchema = z.discriminatedUnion('type', [
@@ -159,59 +170,12 @@ export const completeStepRequestSchema = z.object({
 });
 export type CompleteStepRequest = z.infer<typeof completeStepRequestSchema>;
 
-export const correctAnswerViewSchema = z.union([
-  z.object({ optionIds: z.array(z.string()), texts: z.array(z.string()) }),
-  z.object({ text: z.string() }),
-  z.object({
-    pairs: z.array(z.object({ left: z.string(), right: z.string() })),
-  }),
-]);
-export type CorrectAnswerView = z.infer<typeof correctAnswerViewSchema>;
-
-export const itemErrorPatternSchema = z.object({
-  id: z.string(),
-  description: z.string(),
-  correction: z.string(),
-  explanation: z.string(),
-});
-
-export const answerResultSchema = z.object({
-  answerId: z.string(),
-  isCorrect: z.boolean(),
-  score: z.number(),
-  verdict: z.enum(ANSWER_VERDICTS),
-  feedback: z.string(),
-  explanation: z.string(),
-  correctAnswer: correctAnswerViewSchema,
-  errorPatterns: z.array(itemErrorPatternSchema),
-  isFirstTry: z.boolean(),
-});
-export type AnswerResult = z.infer<typeof answerResultSchema>;
-
-export const submitAnswerRequestSchema = z.object({
-  itemId: z.string(),
-  attemptId: z.string(),
-  context: z.literal('LESSON'),
-  response: answerResponseSchema,
-  responseTimeMs: z.number().int().min(0),
-  hintsUsed: z.number().int().min(0).default(0),
-  clientAnswerId: z.string().min(8).max(64).optional(),
-});
-export type SubmitAnswerRequest = z.infer<typeof submitAnswerRequestSchema>;
-
 export const lessonXpSchema = z.object({
   fromAnswers: z.number(),
   completionBonus: z.number(),
   total: z.number(),
 });
 export type LessonXp = z.infer<typeof lessonXpSchema>;
-
-export const learningStatsSchema = z.object({
-  totalXp: z.number(),
-  currentStreak: z.number(),
-  longestStreak: z.number(),
-  lastStudyDate: z.string().nullable(),
-});
 
 export const completionResultSchema = z.object({
   attempt: attemptViewSchema,

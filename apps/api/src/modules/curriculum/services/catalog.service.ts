@@ -594,6 +594,7 @@ export class CatalogService {
   async publishedCoursePath(): Promise<
     {
       lessonId: string;
+      slug: string;
       lessonVersionId: string;
       unitId: string;
       title: string;
@@ -612,6 +613,7 @@ export class CatalogService {
           orderBy: { order: 'asc' },
           select: {
             id: true,
+            slug: true,
             publishedVersion: {
               select: {
                 id: true,
@@ -640,6 +642,7 @@ export class CatalogService {
         return [
           {
             lessonId: lesson.id,
+            slug: lesson.slug,
             lessonVersionId: version.id,
             unitId: unit.id,
             title: version.title,

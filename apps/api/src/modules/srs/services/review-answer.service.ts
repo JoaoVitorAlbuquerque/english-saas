@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import type { ReviewCard } from '@prisma/client';
 
 import { EventBusService } from 'src/infra/events/event-bus.service';
-import { AnswerService } from 'src/modules/learning/services/answer.service';
+import {
+  AnswerService,
+  type AnswerResult,
+} from 'src/modules/learning/services/answer.service';
 
 import type { FsrsRating } from '../domain/fsrs';
 import { ratingFromAnswer } from '../domain/rating';
@@ -13,14 +16,24 @@ import { ReviewCardService } from './review-card.service';
 export type ReviewAnswerResult = {
   cardId: string;
   rating: FsrsRating;
-  due: Date;
+  /** Quando o card volta a vencer, depois do FSRS reagendar. */
+  nextDueAt: Date;
   state: ReviewCard['state'];
+  /**
+   * Só em card de SKILL: a correção completa da questão (gabarito,
+   * explicação, erros típicos), pro cliente mostrar o mesmo feedback que
+   * `POST /answers` daria — sem precisar chamar as duas rotas.
+   */
+  answer?: AnswerResult;
 };
+
+type Rated = { rating: FsrsRating; answer?: AnswerResult };
 
 /**
  * Responde um card. SKILL passa pelo `AnswerService.record` do learning
  * (contexto REVIEW) — a correção e o `answer.submitted` de sempre cuidam do
- * resto. Os demais são auto-avaliados: o rating é o que o aluno mandou.
+ * resto, e o resultado completo volta pro cliente junto do reagendamento.
+ * Os demais são auto-avaliados: o rating é o que o aluno mandou.
  */
 @Injectable()
 export class ReviewAnswerService {
@@ -37,7 +50,7 @@ export class ReviewAnswerService {
     now = new Date(),
   ): Promise<ReviewAnswerResult> {
     const card = await this.cards.findOwned(userId, cardId);
-    const rating = await this.rate(userId, card, body);
+    const { rating, answer } = await this.rate(userId, card, body);
     const updated = await this.cards.applyRating(card, rating, now);
 
     this.events.emit(
@@ -60,8 +73,9 @@ export class ReviewAnswerService {
     return {
       cardId: updated.id,
       rating,
-      due: updated.due,
+      nextDueAt: updated.due,
       state: updated.state,
+      ...(answer === undefined ? {} : { answer }),
     };
   }
 
@@ -69,7 +83,7 @@ export class ReviewAnswerService {
     userId: string,
     card: ReviewCard,
     body: ReviewAnswerDto,
-  ): Promise<FsrsRating> {
+  ): Promise<Rated> {
     if (card.kind === 'SKILL') {
       if (
         body.kind !== 'ITEM' ||
@@ -90,7 +104,7 @@ export class ReviewAnswerService {
         clientAnswerId: body.clientAnswerId,
       });
 
-      return ratingFromAnswer({
+      const rating = ratingFromAnswer({
         isCorrect: result.isCorrect,
         hintsUsed: body.hintsUsed ?? 0,
         responseTimeMs: body.responseTimeMs,
@@ -98,12 +112,14 @@ export class ReviewAnswerService {
         // "correctStreak" da mastery (7), que não existe aqui no FSRS.
         correctStreak: card.lapses === 0 ? card.reps : 0,
       });
+
+      return { rating, answer: result };
     }
 
     if (body.kind !== 'SELF_RATING' || body.selfRating === undefined) {
       throw new ReviewCardKindMismatchError(card.kind);
     }
 
-    return body.selfRating;
+    return { rating: body.selfRating };
   }
 }

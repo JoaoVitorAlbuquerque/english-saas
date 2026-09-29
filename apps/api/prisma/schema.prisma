@@ -1186,6 +1186,7 @@ enum AnswerContext {
   PLACEMENT          @map("placement")
   CHECKPOINT         @map("checkpoint")
   GENERATED_MATERIAL @map("generated_material")
+  TARGETED_PRACTICE  @map("targeted_practice")
 
   @@map("answer_context")
 }
@@ -1742,7 +1743,9 @@ model DailyAgenda {
   /// `YYYY-MM-DD` no fuso do aluno — não é o `created_at` em UTC.
   localDate String @map("local_date")
 
-  /// `{id, type, refId, estimatedMinutes, reason, skipped}[]`.
+  /// `{id, type, refId, estimatedMinutes, reason, status, skipReason?,
+  /// skipNote?, completedAt?, minutesSpent?}[]` — `status` é
+  /// `PENDING`/`COMPLETED`/`SKIPPED` (ver `AgendaBlockView`, planner).
   blocks      Json
   generatedAt DateTime @default(now()) @map("generated_at")
 

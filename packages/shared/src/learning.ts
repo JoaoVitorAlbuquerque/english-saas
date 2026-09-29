@@ -36,6 +36,7 @@ export const ANSWER_CONTEXTS = [
   'PLACEMENT',
   'CHECKPOINT',
   'GENERATED_MATERIAL',
+  'TARGETED_PRACTICE',
 ] as const;
 export const answerContextSchema = z.enum(ANSWER_CONTEXTS);
 export type AnswerContext = z.infer<typeof answerContextSchema>;
@@ -44,8 +45,16 @@ export type AnswerContext = z.infer<typeof answerContextSchema>;
  * Contextos que o aluno pode declarar pela rota HTTP. Os outros são
  * gravados pelo módulo dono (nivelamento, checkpoint, material gerado) —
  * o aluno não pode dizer "isto foi nivelamento".
+ *
+ * `TARGETED_PRACTICE` é o item de prática de ponto fraco da agenda (planner,
+ * 10): escolhido pelo `AdaptiveItemService` (8) fora de uma lição ou de um
+ * card de revisão, sem `attemptId`, igual a `REVIEW`.
  */
-export const STUDENT_ANSWER_CONTEXTS = ['LESSON', 'REVIEW'] as const;
+export const STUDENT_ANSWER_CONTEXTS = [
+  'LESSON',
+  'REVIEW',
+  'TARGETED_PRACTICE',
+] as const;
 
 export const choiceResponseSchema = z
   .object({ optionIds: z.array(z.string().min(1).max(40)).min(1).max(6) })

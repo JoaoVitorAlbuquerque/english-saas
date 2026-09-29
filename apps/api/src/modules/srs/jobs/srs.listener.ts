@@ -111,7 +111,11 @@ export class SrsListener {
   }
 }
 
-/** Resposta de exercício de material gerado lapsa o card com a origem dela. */
+/**
+ * Resposta de exercício de material gerado lapsa o card com a origem dela.
+ * `REVIEW` e `TARGETED_PRACTICE` (prática de ponto fraco da agenda, 10) não
+ * têm `ReviewCardSource` própria — entram no mesmo balde de `LESSON`.
+ */
 function errorSourceFor(context: string): ErrorSource {
   return context === 'GENERATED_MATERIAL' ? 'GENERATED_MATERIAL' : 'LESSON';
 }

@@ -384,7 +384,192 @@ const ANSWER_RESULT_BY_ITEM: Record<string, Record<string, unknown>> = {
     errorPatterns: [],
     isFirstTry: true,
   },
+  'f1b2c3d4-e5f6-4a1b-8c2d-1234567890ab': {
+    isCorrect: true,
+    score: 1,
+    verdict: 'CORRECT',
+    feedback: 'Boa!',
+    explanation: '"is" concorda com "she".',
+    correctAnswer: { optionIds: ['is'], texts: ['is'] },
+    errorPatterns: [],
+    isFirstTry: true,
+  },
 };
+
+// ---------------------------------------------------------------------------
+// Hoje (agenda) e Revisão — módulos 9 e 10.
+// ---------------------------------------------------------------------------
+
+const PRACTICE_ITEM_ID = 'f1b2c3d4-e5f6-4a1b-8c2d-1234567890ab';
+const REVIEW_SKILL_ITEM_ID = 'd1b2c3d4-e5f6-4a1b-8c2d-1234567890ab';
+
+export const statsFixture = {
+  totalXp: 88,
+  currentStreak: 3,
+  longestStreak: 5,
+  lastStudyDate: new Date().toISOString().slice(0, 10),
+};
+
+export const studyPlanFixture = {
+  targetLevel: 'C1',
+  targetDate: null as string | null,
+  path: [
+    {
+      lessonId: lessonFixture.id,
+      slug: lessonFixture.slug,
+      unitId: lessonFixture.unit.id,
+      title: lessonFixture.title,
+      cefrLevel: 'A1',
+      estimatedMinutes: lessonFixture.estimatedMinutes,
+      order: 0,
+      reason: 'Próxima da sua trilha.',
+    },
+  ],
+  reinforceSkillIds: [] as string[],
+  forecast: {
+    estimatedArrival: '2027-06-01',
+    weeksNeeded: 36,
+    realistic: true,
+    message: null as string | null,
+  },
+  version: 1,
+};
+
+export const forecastStatusFixture = {
+  forecast: studyPlanFixture.forecast,
+  weeksBehind: 0,
+  message: null as string | null,
+};
+
+type AgendaBlockOverride = {
+  status: 'PENDING' | 'COMPLETED' | 'SKIPPED';
+  skipReason?: string;
+  skipNote?: string;
+  minutesSpent?: number;
+};
+
+let todayMockBlocks: Record<string, AgendaBlockOverride> = {};
+
+function baseAgendaBlocks() {
+  return [
+    {
+      id: 'review',
+      type: 'REVIEW' as const,
+      refId: 'review',
+      estimatedMinutes: 5,
+      reason: '3 cards de revisão vencidos.',
+      count: 3,
+    },
+    {
+      id: `lesson:${lessonFixture.id}`,
+      type: 'LESSON' as const,
+      refId: lessonFixture.id,
+      slug: lessonFixture.slug,
+      title: lessonFixture.title,
+      estimatedMinutes: lessonFixture.estimatedMinutes,
+      reason: 'Próxima da sua trilha.',
+    },
+    {
+      id: `practice:${PRACTICE_ITEM_ID}`,
+      type: 'PRACTICE' as const,
+      refId: PRACTICE_ITEM_ID,
+      estimatedMinutes: 1.5,
+      reason: 'Ainda vale praticar "Presente do verbo to be".',
+      item: {
+        id: PRACTICE_ITEM_ID,
+        type: 'MULTIPLE_CHOICE',
+        prompt: 'Complete: She ___ from Brazil.',
+        content: {
+          options: [
+            { id: 'is', text: 'is' },
+            { id: 'am', text: 'am' },
+            { id: 'are', text: 'are' },
+          ],
+          shuffle: false,
+        },
+        cefrLevel: 'A1',
+        skillIds: ['skill-intro'],
+        assets: {},
+      },
+    },
+  ];
+}
+
+function agendaFixtureView() {
+  const blocks = baseAgendaBlocks().map((block) => ({
+    ...block,
+    status: 'PENDING' as const,
+    ...todayMockBlocks[block.id],
+  }));
+
+  return {
+    localDate: new Date().toISOString().slice(0, 10),
+    generatedAt: new Date().toISOString(),
+    blocks,
+    minutesCompleted: blocks
+      .filter((block) => block.status === 'COMPLETED')
+      .reduce(
+        (sum, block) => sum + (block.minutesSpent ?? block.estimatedMinutes),
+        0,
+      ),
+  };
+}
+
+type ReviewMockState = { answeredCardIds: string[] };
+let reviewMockState: ReviewMockState = { answeredCardIds: [] };
+
+function reviewSessionCards() {
+  const all = [
+    {
+      cardId: 'review-card-skill',
+      kind: 'SKILL' as const,
+      due: new Date().toISOString(),
+      exercise: {
+        type: 'ITEM' as const,
+        item: {
+          id: REVIEW_SKILL_ITEM_ID,
+          type: 'MULTIPLE_CHOICE',
+          prompt: 'Complete: I ___ Lucas.',
+          content: {
+            options: [
+              { id: 'am', text: 'am' },
+              { id: 'is', text: 'is' },
+              { id: 'are', text: 'are' },
+            ],
+            shuffle: false,
+          },
+          cefrLevel: 'A1',
+          skillIds: ['skill-intro'],
+          assets: {},
+        },
+      },
+    },
+    {
+      cardId: 'review-card-vocab',
+      kind: 'VOCAB' as const,
+      due: new Date().toISOString(),
+      exercise: {
+        type: 'FLASHCARD' as const,
+        front: 'friendly',
+        back: 'amigável',
+      },
+    },
+  ];
+
+  return all.filter(
+    (card) => !reviewMockState.answeredCardIds.includes(card.cardId),
+  );
+}
+
+function isoDaysFromNow(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1_000).toISOString();
+}
+
+/** Chame no `beforeEach` dos testes de Hoje/Revisão. */
+export function resetTodayMockState(): void {
+  todayMockBlocks = {};
+  reviewMockState = { answeredCardIds: [] };
+}
 
 // ---------------------------------------------------------------------------
 // Roleplay da lição — estado próprio, mais simples que o da lição em si.
@@ -559,11 +744,114 @@ export const handlers = [
     HttpResponse.json(placementResultFixture),
   ),
 
-  http.get(`${API_URL}/me/plan`, () =>
-    HttpResponse.json(
-      { error: { code: 'NOT_FOUND', message: 'Você ainda não tem um plano.' } },
-      { status: 404 },
-    ),
+  http.get(`${API_URL}/me/plan`, () => HttpResponse.json(studyPlanFixture)),
+
+  http.post(`${API_URL}/me/plan/rebuild`, () =>
+    HttpResponse.json({
+      ...studyPlanFixture,
+      version: studyPlanFixture.version + 1,
+    }),
+  ),
+
+  http.get(`${API_URL}/me/plan/forecast`, () =>
+    HttpResponse.json(forecastStatusFixture),
+  ),
+
+  http.get(`${API_URL}/me/stats`, () => HttpResponse.json(statsFixture)),
+
+  http.get(`${API_URL}/me/agenda`, () =>
+    HttpResponse.json(agendaFixtureView()),
+  ),
+
+  http.post(
+    `${API_URL}/me/agenda/blocks/:id/skip`,
+    async ({ params, request }) => {
+      const blockId = params.id as string;
+      const body = (await request.json()) as { reason?: string; note?: string };
+      const current = todayMockBlocks[blockId];
+
+      if (current?.status !== 'COMPLETED') {
+        todayMockBlocks[blockId] = {
+          status: 'SKIPPED',
+          skipReason: body.reason,
+          skipNote: body.note,
+        };
+      }
+
+      return HttpResponse.json(agendaFixtureView());
+    },
+  ),
+
+  http.post(
+    `${API_URL}/me/agenda/blocks/:id/complete`,
+    async ({ params, request }) => {
+      const blockId = params.id as string;
+      const body = (await request.json()) as { minutesSpent?: number };
+      const current = todayMockBlocks[blockId];
+
+      if (current?.status !== 'COMPLETED') {
+        const block = baseAgendaBlocks().find((entry) => entry.id === blockId);
+        todayMockBlocks[blockId] = {
+          status: 'COMPLETED',
+          minutesSpent: body.minutesSpent ?? block?.estimatedMinutes,
+        };
+      }
+
+      return HttpResponse.json(agendaFixtureView());
+    },
+  ),
+
+  http.get(`${API_URL}/reviews/session`, () =>
+    HttpResponse.json(reviewSessionCards()),
+  ),
+
+  http.post(
+    `${API_URL}/reviews/:cardId/answer`,
+    async ({ params, request }) => {
+      const cardId = params.cardId as string;
+      const body = (await request.json()) as {
+        kind: 'ITEM' | 'SELF_RATING';
+        selfRating?: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
+      };
+
+      if (!reviewMockState.answeredCardIds.includes(cardId)) {
+        reviewMockState.answeredCardIds.push(cardId);
+      }
+
+      if (body.kind === 'ITEM') {
+        return HttpResponse.json({
+          cardId,
+          rating: 'GOOD',
+          nextDueAt: isoDaysFromNow(3),
+          state: 'REVIEW',
+          answer: {
+            answerId: `answer-${cardId}`,
+            isCorrect: true,
+            score: 1,
+            verdict: 'CORRECT',
+            feedback: 'Boa!',
+            explanation: '"I am" concorda com "I".',
+            correctAnswer: { optionIds: ['am'], texts: ['am'] },
+            errorPatterns: [],
+            isFirstTry: true,
+          },
+        });
+      }
+
+      const daysByRating: Record<string, number> = {
+        AGAIN: 0,
+        HARD: 1,
+        GOOD: 3,
+        EASY: 7,
+      };
+
+      return HttpResponse.json({
+        cardId,
+        rating: body.selfRating,
+        nextDueAt: isoDaysFromNow(daysByRating[body.selfRating ?? 'GOOD'] ?? 3),
+        state: 'REVIEW',
+      });
+    },
   ),
 
   http.get(`${API_URL}/catalog/lessons/:slug`, ({ params }) => {

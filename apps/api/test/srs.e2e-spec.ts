@@ -334,9 +334,11 @@ describe('Srs (e2e)', () => {
       .expect(200);
 
     expect(easy.body.rating).toBe('EASY');
-    expect(new Date(easy.body.due as string).getTime()).toBeGreaterThan(
+    expect(new Date(easy.body.nextDueAt as string).getTime()).toBeGreaterThan(
       Date.now() + DAY_MS,
     );
+    // Flashcard auto-avaliado não tem correção por trás.
+    expect(easy.body.answer).toBeUndefined();
 
     // GOOD só passos curtos (minutos) na primeira vez — confere que o due
     // avançou de "agora" mesmo sem virar dia.
@@ -346,7 +348,7 @@ describe('Srs (e2e)', () => {
       .send({ kind: 'SELF_RATING', selfRating: 'GOOD' })
       .expect(200);
 
-    expect(new Date(good.body.due as string).getTime()).toBeGreaterThan(
+    expect(new Date(good.body.nextDueAt as string).getTime()).toBeGreaterThan(
       Date.now(),
     );
 
@@ -420,6 +422,14 @@ describe('Srs (e2e)', () => {
       .expect(200);
 
     expect(wrong.body.rating).toBe('AGAIN');
+    // A correção completa vem junto — o cliente não precisa de uma segunda
+    // chamada pra saber o gabarito e a explicação.
+    expect(wrong.body.answer).toMatchObject({
+      isCorrect: false,
+      verdict: 'INCORRECT',
+      correctAnswer: { optionIds: ['am'], texts: expect.any(Array) },
+    });
+    expect(wrong.body.answer.explanation).toEqual(expect.any(String));
 
     const updated = await context.prisma.reviewCard.findUniqueOrThrow({
       where: { id: skillCard.id },

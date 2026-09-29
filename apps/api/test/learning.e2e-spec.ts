@@ -299,6 +299,14 @@ describe('Learning (e2e)', () => {
     expect(twice.body.xp.total).toBe(88);
     expect(twice.body.stats.totalXp).toBe(88);
 
+    // --- GET /me/stats: mesma coisa, sem registrar estudo de novo ---
+
+    const stats = await http().get('/me/stats').set(auth).expect(200);
+    expect(stats.body).toEqual(done.body.stats);
+
+    const statsAgain = await http().get('/me/stats').set(auth).expect(200);
+    expect(statsAgain.body).toEqual(stats.body);
+
     // --- o que ficou salvo ---
 
     const saved = await context.prisma.answer.findMany({
@@ -523,6 +531,64 @@ describe('Learning (e2e)', () => {
       .expect(404);
 
     expect(await context.prisma.answer.count()).toBe(0);
+  });
+
+  it('responde prática de ponto fraco (TARGETED_PRACTICE) sem tentativa', async () => {
+    const auth = { Authorization: `Bearer ${await studentToken()}` };
+    const items = await itemIds();
+
+    // Sem `attemptId` nenhum — é o planner (10) mandando um item avulso.
+    const result = await http()
+      .post('/answers')
+      .set(auth)
+      .send({
+        itemId: items['a1-be-i-am-maya'],
+        context: 'TARGETED_PRACTICE',
+        response: { optionIds: ['am'] },
+        responseTimeMs: 1_000,
+      })
+      .expect(201);
+
+    expect(result.body).toMatchObject({
+      isCorrect: true,
+      verdict: 'CORRECT',
+      isFirstTry: true,
+    });
+
+    const saved = await context.prisma.answer.findFirstOrThrow({
+      where: { itemId: items['a1-be-i-am-maya'] ?? '' },
+    });
+    expect(saved).toMatchObject({
+      context: 'TARGETED_PRACTICE',
+      attemptId: null,
+      isCorrect: true,
+    });
+
+    // Alimenta o modelo do aluno (7) igual a qualquer outra resposta.
+    expect(named('answer.submitted')).toHaveLength(1);
+    expect(named('answer.submitted')[0]?.payload).toMatchObject({
+      context: 'TARGETED_PRACTICE',
+      isFirstTry: true,
+    });
+
+    // `attemptId` é exclusivo de LESSON.
+    const attempt = await http()
+      .post(`/lessons/${await lessonId()}/attempts`)
+      .set(auth)
+      .send({})
+      .expect(201);
+
+    await http()
+      .post('/answers')
+      .set(auth)
+      .send({
+        itemId: items['a1-listen-hes-friendly'],
+        attemptId: attempt.body.id as string,
+        context: 'TARGETED_PRACTICE',
+        response: { optionIds: ['contracted'] },
+        responseTimeMs: 1_000,
+      })
+      .expect(400);
   });
 
   it('lição republicada no meio do caminho: larga a tentativa antiga e começa na nova', async () => {

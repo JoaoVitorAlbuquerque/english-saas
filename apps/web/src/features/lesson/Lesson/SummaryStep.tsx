@@ -6,6 +6,7 @@ import type {
 } from '@english-saas/api-client';
 import { Badge, Button, Card } from '@english-saas/ui';
 import type { SummaryContent } from '@english-saas/shared';
+import { useNavigate } from 'react-router-dom';
 
 import { t } from '../../../messages/pt-BR';
 
@@ -34,8 +35,9 @@ export function SummaryStep({
   isRestarting,
   goToToday,
 }: SummaryStepProps) {
+  const navigate = useNavigate();
   const plan = usePlan();
-  const nextLessonTitle = plan.data?.path[0]?.title ?? null;
+  const nextLesson = plan.data?.path[0] ?? null;
 
   const answerList = Object.values(answers);
   const accuracy =
@@ -83,19 +85,27 @@ export function SummaryStep({
             </p>
           </Card>
 
-          {nextLessonTitle ? (
+          {nextLesson !== null ? (
             <Card className="flex flex-col gap-2">
               <p className="text-sm text-muted">
                 {t('lesson.summary.nextLessonLabel')}
               </p>
-              <p className="text-ink">{nextLessonTitle}</p>
-              <Button
-                variant="ghost"
-                onClick={goToToday}
-                className="self-start"
-              >
-                {t('lesson.summary.goToPlan')}
-              </Button>
+              <p className="text-ink">{nextLesson.title}</p>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => navigate(`/licoes/${nextLesson.slug}`)}
+                  className="self-start"
+                >
+                  {t('lesson.summary.startNextLesson')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={goToToday}
+                  className="self-start"
+                >
+                  {t('lesson.summary.goToPlan')}
+                </Button>
+              </div>
             </Card>
           ) : null}
 

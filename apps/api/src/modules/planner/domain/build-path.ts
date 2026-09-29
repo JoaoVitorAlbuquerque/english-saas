@@ -19,6 +19,8 @@ export const MASTERY_THRESHOLD = 0.8;
 
 export type CourseLesson = {
   lessonId: string;
+  /** Pro front abrir a lição em `/licoes/:slug` sem outra chamada. */
+  slug: string;
   unitId: string;
   title: string;
   cefrLevel: CefrLevel;
@@ -40,6 +42,7 @@ export type MasteryBySkill = ReadonlyMap<
 
 export type PathEntry = {
   lessonId: string;
+  slug: string;
   unitId: string;
   title: string;
   cefrLevel: CefrLevel;
@@ -264,6 +267,7 @@ export function buildPath(input: {
 
   const path: PathEntry[] = ordered.map((lesson, index) => ({
     lessonId: lesson.lessonId,
+    slug: lesson.slug,
     unitId: lesson.unitId,
     title: lesson.title,
     cefrLevel: lesson.cefrLevel,

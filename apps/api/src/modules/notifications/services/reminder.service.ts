@@ -260,7 +260,7 @@ export class ReminderService {
     try {
       const agenda = await this.agenda.today(userId, now);
       return agenda.blocks
-        .filter((block) => !block.skipped)
+        .filter((block) => block.status === 'PENDING')
         .map((block) => ({
           type: block.type,
           estimatedMinutes: block.estimatedMinutes,

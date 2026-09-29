@@ -109,7 +109,7 @@ describe('Notifications (e2e)', () => {
             estimatedMinutes: 2,
             count: 1,
             reason: '1 cards de revisão vencidos.',
-            skipped: false,
+            status: 'PENDING',
           },
           {
             id: 'lesson:x',
@@ -118,7 +118,7 @@ describe('Notifications (e2e)', () => {
             estimatedMinutes: 10,
             title: 'At the airport',
             reason: 'Próxima do plano.',
-            skipped: false,
+            status: 'PENDING',
           },
         ],
       },

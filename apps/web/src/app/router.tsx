@@ -17,6 +17,7 @@ import { OnboardingLayout } from '../features/onboarding/OnboardingLayout';
 import { Profile } from '../features/profile/Profile';
 import { Progress } from '../features/progress/Progress';
 import { Today } from '../features/today/Today';
+import { Review } from '../features/review/Review';
 import { Lesson } from '../features/lesson/Lesson';
 import { Placement } from '../features/placement/Placement';
 import { NotFound } from '../pages/NotFound';
@@ -47,6 +48,7 @@ export function AppRouter() {
           <Route element={<RequireOnboarded />}>
             <Route element={<AppShell />}>
               <Route path="/hoje" element={<Today />} />
+              <Route path="/revisao" element={<Review />} />
               <Route path="/catalogo" element={<Catalog />} />
               <Route path="/progresso" element={<Progress />} />
               <Route path="/perfil" element={<Profile />} />

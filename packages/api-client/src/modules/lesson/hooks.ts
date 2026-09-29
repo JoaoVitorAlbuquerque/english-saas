@@ -1,16 +1,14 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { ApiError } from '../../http/api-error';
 import { queryKeys } from '../../query/query-keys';
 import * as lessonService from './service';
 import type {
-  AnswerResult,
   AttemptView,
   CatalogLesson,
   CompleteStepRequest,
   CompletionResult,
   StartAttemptResponse,
-  SubmitAnswerRequest,
 } from './schemas';
 
 export function useLesson(slug: string, enabled = true) {
@@ -38,14 +36,19 @@ export function useCompleteStep() {
   });
 }
 
+/**
+ * Concluir a lição soma XP e sequência, e o backend marca sozinho o bloco
+ * LESSON da agenda de hoje (ver `AgendaService.completeLessonBlock`) — por
+ * isso invalida os dois em vez de só devolver o resultado da mutation.
+ */
 export function useCompleteAttempt() {
+  const queryClient = useQueryClient();
+
   return useMutation<CompletionResult, ApiError, string>({
     mutationFn: (attemptId) => lessonService.completeAttempt(attemptId),
-  });
-}
-
-export function useSubmitAnswer() {
-  return useMutation<AnswerResult, ApiError, SubmitAnswerRequest>({
-    mutationFn: (input) => lessonService.submitAnswer(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.meStats });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.meAgenda });
+    },
   });
 }
