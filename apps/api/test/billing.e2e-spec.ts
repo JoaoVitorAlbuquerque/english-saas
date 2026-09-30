@@ -243,6 +243,37 @@ describe('Billing (e2e)', () => {
     ).rejects.toThrow('IA fora do ar');
     expect(await credits.balanceFor(userId)).toBe(495);
 
+    // Extrato: mais recente primeiro — estorno, os dois consumos, os grants.
+    const history = await http()
+      .get('/me/credits/history')
+      .set(auth)
+      .expect(200);
+    expect(
+      history.body.data.map((entry: { kind: string; amount: number }) => [
+        entry.kind,
+        entry.amount,
+      ]),
+    ).toEqual([
+      ['REFUND', 3],
+      ['CONSUME', -3],
+      ['CONSUME', -5],
+      ['GRANT', 490],
+      ['GRANT', 10],
+    ]);
+
+    // Paginação por cursor, igual a qualquer outra listagem.
+    const firstPage = await http()
+      .get('/me/credits/history?limit=2')
+      .set(auth)
+      .expect(200);
+    expect(firstPage.body.data).toHaveLength(2);
+    expect(firstPage.body.hasMore).toBe(true);
+    const secondPage = await http()
+      .get(`/me/credits/history?limit=2&cursor=${firstPage.body.nextCursor}`)
+      .set(auth)
+      .expect(200);
+    expect(secondPage.body.data[0]).toMatchObject({ kind: 'CONSUME' });
+
     // Cancela em um clique.
     const canceled = await http().post('/billing/cancel').set(auth).expect(200);
     expect(canceled.body).toMatchObject({

@@ -96,7 +96,6 @@ describe('Hoje', () => {
       await screen.findByText('Complete: She ___ from Brazil.'),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: '1. is' }));
-    await userEvent.keyboard('{Enter}');
 
     await userEvent.click(
       await screen.findByRole('button', { name: 'Continuar' }),

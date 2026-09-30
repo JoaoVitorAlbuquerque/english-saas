@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { AuthProvider } from './app/providers/AuthProvider';
 import { AppRouter } from './app/router';
 import { RouteErrorBoundary } from './app/RouteErrorBoundary';
-import { Paywall } from './components/Paywall/Paywall';
 
 export function App() {
   const [queryClient] = useState(createQueryClient);
@@ -18,7 +17,6 @@ export function App() {
           <AppRouter />
         </AuthProvider>
         <Toaster />
-        <Paywall />
       </QueryClientProvider>
     </RouteErrorBoundary>
   );

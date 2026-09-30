@@ -50,4 +50,22 @@ describe('MatchItem', () => {
       hintsUsed: 0,
     });
   });
+
+  it('Enviar só habilita com todos os pares ligados', async () => {
+    const onAnswer = vi.fn();
+    render(<MatchItem item={item} mode="practice" onAnswer={onAnswer} />);
+
+    const send = screen.getByRole('button', { name: 'Enviar' });
+    await userEvent.click(screen.getByRole('button', { name: 'I' }));
+    await userEvent.click(screen.getByRole('button', { name: 'am' }));
+    expect(send).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'he' }));
+    await userEvent.click(screen.getByRole('button', { name: 'is' }));
+    await userEvent.click(screen.getByRole('button', { name: 'they' }));
+    await userEvent.click(screen.getByRole('button', { name: 'are' }));
+    await userEvent.click(send);
+
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+  });
 });

@@ -7,6 +7,7 @@ import { Input } from '../../components/Input/Input';
 import { useAnswerTimer } from '../hooks/use-answer-timer';
 import { useAudioPlayer } from '../hooks/use-audio-player';
 import { ItemFeedbackPanel } from '../ItemFeedbackPanel';
+import { SubmitAnswerButton } from '../SubmitAnswerButton';
 import type { DictationItemView, ItemTypeProps } from '../types';
 
 export function DictationItem({
@@ -82,6 +83,13 @@ export function DictationItem({
         autoComplete="off"
         spellCheck={false}
       />
+
+      {!answered ? (
+        <SubmitAnswerButton
+          onClick={submit}
+          disabled={!isInteractive || text.trim().length === 0}
+        />
+      ) : null}
 
       {feedback ? <ItemFeedbackPanel feedback={feedback} /> : null}
     </div>

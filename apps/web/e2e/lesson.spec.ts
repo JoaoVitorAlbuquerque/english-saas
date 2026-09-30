@@ -33,8 +33,8 @@ test('faz a lição inteira: cena, cards, prática, produção livre, roleplay e
 
   // --- Prática -----------------------------------------------------------
   await expect(page.getByText('Complete: I ___ Lucas.')).toBeVisible();
+  // Tocar a alternativa já responde — sem confirmar.
   await page.getByRole('radio', { name: '1. am' }).click();
-  await page.keyboard.press('Enter');
   await expect(page.getByText('Certo', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continuar' }).click();
 
@@ -44,7 +44,7 @@ test('faz a lição inteira: cena, cards, prática, produção livre, roleplay e
   await page
     .getByRole('textbox', { name: 'Sua resposta' })
     .fill("I'm from Brazil.");
-  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Enviar' }).click();
   await expect(page.getByText('Certo', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continuar' }).click();
 

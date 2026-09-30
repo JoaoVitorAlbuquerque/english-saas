@@ -7,6 +7,10 @@ import { ResetPassword } from '../features/auth/ResetPassword';
 import { Signup } from '../features/auth/Signup';
 import { VerifyEmail } from '../features/auth/VerifyEmail';
 import { Catalog } from '../features/catalog/Catalog';
+import { Unit } from '../features/catalog/Unit';
+import { Checkout } from '../features/billing/Checkout';
+import { Plans } from '../features/billing/Plans';
+import { Subscription } from '../features/billing/Subscription';
 import { Availability } from '../features/onboarding/Availability';
 import { Consents } from '../features/onboarding/Consents';
 import { Finish } from '../features/onboarding/Finish';
@@ -22,6 +26,7 @@ import { Lesson } from '../features/lesson/Lesson';
 import { Placement } from '../features/placement/Placement';
 import { NotFound } from '../pages/NotFound';
 import { AppShell } from '../components/layout/AppShell';
+import { Paywall } from '../components/Paywall/Paywall';
 import { AuthGuard } from './AuthGuard';
 import { RequireNotOnboarded } from './RequireNotOnboarded';
 import { RequireOnboarded } from './RequireOnboarded';
@@ -29,6 +34,7 @@ import { RequireOnboarded } from './RequireOnboarded';
 export function AppRouter() {
   return (
     <BrowserRouter>
+      <Paywall />
       <Routes>
         <Route path="/" element={<Navigate to="/hoje" replace />} />
 
@@ -50,11 +56,15 @@ export function AppRouter() {
               <Route path="/hoje" element={<Today />} />
               <Route path="/revisao" element={<Review />} />
               <Route path="/catalogo" element={<Catalog />} />
+              <Route path="/unidades/:slug" element={<Unit />} />
               <Route path="/progresso" element={<Progress />} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="/nivelamento" element={<Placement />} />
             <Route path="/licoes/:slug" element={<Lesson />} />
+            <Route path="/planos" element={<Plans />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/minha-assinatura" element={<Subscription />} />
             <Route path="/onboarding/final" element={<Finish />} />
           </Route>
 

@@ -17,6 +17,8 @@ export type PracticeStepProps = {
   answeredItemIds: string[];
   answers: Record<string, AnswerResult>;
   onAnswer: (itemId: string, payload: ItemAnswerPayload) => void;
+  /** Resposta a caminho — trava a questão contra um segundo clique. */
+  isSubmitting: boolean;
   onContinue: () => void;
 };
 
@@ -36,6 +38,7 @@ export function PracticeStep({
   answeredItemIds,
   answers,
   onAnswer,
+  isSubmitting,
   onContinue,
 }: PracticeStepProps) {
   const [order] = useState(() =>
@@ -78,7 +81,7 @@ export function PracticeStep({
           item={toItemView(currentItem, assets)}
           mode="practice"
           feedback={currentFeedback}
-          disabled={currentFeedback !== null}
+          disabled={currentFeedback !== null || isSubmitting}
           onAnswer={(payload) => onAnswer(currentItem.id, payload)}
         />
       ) : null}

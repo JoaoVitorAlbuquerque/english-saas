@@ -48,7 +48,6 @@ describe('Revisão', () => {
       await screen.findByText('Complete: I ___ Lucas.'),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: '1. am' }));
-    await userEvent.keyboard('{Enter}');
     expect(await screen.findByText('Boa!')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
 

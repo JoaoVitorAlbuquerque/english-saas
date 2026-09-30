@@ -661,6 +661,319 @@ function resolvePendingRoleplayTurn(state: RoleplayMockState): void {
   state.goalsMet = [...new Set([...state.goalsMet, 'tell-name'])];
 }
 
+// ---------------------------------------------------------------------------
+// Catálogo e checkpoint — módulos 4 e 8.
+// ---------------------------------------------------------------------------
+
+const LOCKED_LESSON_ID = 'g1b2c3d4-e5f6-4a1b-8c2d-1234567890ab';
+
+export const catalogUnitFixture = {
+  id: lessonFixture.unit.id,
+  slug: lessonFixture.unit.slug,
+  order: 0,
+  title: lessonFixture.unit.title,
+  synopsis: 'Lucas se muda para o prédio e conhece os vizinhos.',
+  level: lessonFixture.level,
+  cover: null as {
+    id: string;
+    mimeType: string;
+    durationMs: number | null;
+    url: string;
+  } | null,
+  cast: [
+    {
+      id: CHAR_MAYA,
+      slug: 'maya',
+      name: 'Maya',
+      bio: 'Vizinha do 4B.',
+      avatar: null,
+    },
+    {
+      id: CHAR_LUCAS,
+      slug: 'lucas',
+      name: 'Lucas',
+      bio: 'Acabou de se mudar.',
+      avatar: null,
+    },
+  ],
+  lessons: [
+    {
+      id: lessonFixture.id,
+      slug: lessonFixture.slug,
+      order: 0,
+      publishedVersion: {
+        version: lessonFixture.version,
+        title: lessonFixture.title,
+        objective: lessonFixture.objective,
+        cefrLevel: lessonFixture.cefrLevel,
+        estimatedMinutes: lessonFixture.estimatedMinutes,
+      },
+      locked: false,
+      requiredPlan: null as string | null,
+    },
+    {
+      id: LOCKED_LESSON_ID,
+      slug: 'segredos-do-predio',
+      order: 1,
+      publishedVersion: {
+        version: 1,
+        title: 'Segredos do prédio',
+        objective: 'Aprender preposições de lugar.',
+        cefrLevel: 'A1',
+        estimatedMinutes: 12,
+      },
+      locked: true,
+      requiredPlan: 'BASE' as string | null,
+    },
+  ],
+  locked: false,
+  requiredPlan: null as string | null,
+};
+
+export const catalogUnitB1Fixture = {
+  id: 'unit-2',
+  slug: 'fazendo-compras',
+  order: 0,
+  title: 'Fazendo compras',
+  synopsis: 'Maya ensina como negociar preço na feira.',
+  level: { cefrLevel: 'B1', title: 'Intermediário' },
+  cover: null,
+  cast: [],
+  lessons: [],
+  locked: false,
+  requiredPlan: null as string | null,
+};
+
+function catalogUnitsForLevel(level: string | null) {
+  const all = [catalogUnitFixture, catalogUnitB1Fixture];
+  return level === null
+    ? all
+    : all.filter((unit) => unit.level.cefrLevel === level);
+}
+
+export const workbookFixture = {
+  id: 'workbook-1',
+  slug: 'primeiros-passos',
+  title: 'Apostila — Primeiros passos',
+  description: null as string | null,
+  order: 0,
+  unit: {
+    id: catalogUnitFixture.id,
+    slug: catalogUnitFixture.slug,
+    title: catalogUnitFixture.title,
+    level: { cefrLevel: catalogUnitFixture.level.cefrLevel },
+  },
+  file: {
+    id: 'asset-workbook',
+    mimeType: 'application/pdf',
+    durationMs: null,
+    url: 'https://example.com/apostila.pdf',
+  } as {
+    id: string;
+    mimeType: string;
+    durationMs: number | null;
+    url: string;
+  } | null,
+  locked: false,
+  requiredPlan: null as string | null,
+};
+
+export const checkpointItemFixture = {
+  id: 'checkpoint-item-1',
+  type: 'MULTIPLE_CHOICE',
+  prompt: 'Complete: She ___ my neighbor.',
+  content: {
+    options: [
+      { id: 'is', text: 'is' },
+      { id: 'am', text: 'am' },
+      { id: 'are', text: 'are' },
+    ],
+    shuffle: false,
+  },
+  cefrLevel: 'A1',
+  skillIds: ['skill-intro'],
+  assets: {},
+};
+
+export const checkpointItemFixture2 = {
+  id: 'checkpoint-item-2',
+  type: 'MULTIPLE_CHOICE',
+  prompt: 'Complete: They ___ from Brazil.',
+  content: {
+    options: [
+      { id: 'are', text: 'are' },
+      { id: 'is', text: 'is' },
+      { id: 'am', text: 'am' },
+    ],
+    shuffle: false,
+  },
+  cefrLevel: 'A1',
+  skillIds: ['skill-intro'],
+  assets: {},
+};
+
+let checkpointAnswered = false;
+
+/** Chame no `beforeEach` dos testes que usam o checkpoint. */
+export function resetCheckpointMockState(): void {
+  checkpointAnswered = false;
+}
+
+// ---------------------------------------------------------------------------
+// Planos e assinatura — módulo 11.
+// ---------------------------------------------------------------------------
+
+const TIER_LABEL: Record<string, string> = {
+  FREE: 'Gratuito',
+  BASE: 'Base',
+  PLUS: 'Plus',
+};
+
+export const plansFixture = [
+  {
+    id: 'plan-free',
+    tier: 'FREE',
+    billingPeriod: null,
+    priceCents: 0,
+    priceLabel: 'Grátis',
+    monthlyAiCredits: 10,
+    active: true,
+  },
+  {
+    id: 'plan-base-monthly',
+    tier: 'BASE',
+    billingPeriod: 'MONTHLY',
+    priceCents: 2_990,
+    priceLabel: 'R$ 29,90 por mês',
+    monthlyAiCredits: 60,
+    active: true,
+  },
+  {
+    id: 'plan-base-yearly',
+    tier: 'BASE',
+    billingPeriod: 'YEARLY',
+    priceCents: 29_900,
+    priceLabel: 'R$ 299,00 por ano (equivale a R$ 24,92 por mês)',
+    monthlyAiCredits: 60,
+    active: true,
+  },
+  {
+    id: 'plan-plus-monthly',
+    tier: 'PLUS',
+    billingPeriod: 'MONTHLY',
+    priceCents: 6_990,
+    priceLabel: 'R$ 69,90 por mês',
+    monthlyAiCredits: 500,
+    active: true,
+  },
+  {
+    id: 'plan-plus-yearly',
+    tier: 'PLUS',
+    billingPeriod: 'YEARLY',
+    priceCents: 69_900,
+    priceLabel: 'R$ 699,00 por ano (equivale a R$ 58,25 por mês)',
+    monthlyAiCredits: 500,
+    active: true,
+  },
+];
+
+type BillingMockSubscription = {
+  id: string;
+  tier: string;
+  billingPeriod: string;
+  paymentMethod: string;
+  status: 'PENDING' | 'ACTIVE' | 'CANCELED';
+  reads: number;
+};
+
+let billingSubscription: BillingMockSubscription | null = null;
+
+/** Chame no `beforeEach` dos testes de planos/checkout/assinatura. */
+export function resetBillingMockState(): void {
+  billingSubscription = null;
+}
+
+export const creditsFixture = {
+  tier: 'FREE',
+  balance: 10,
+  monthlyAiCredits: 10,
+  costs: {
+    TUTOR_CORRECTION: 1,
+    TUTOR_ROLEPLAY: 3,
+    GENERATOR_TOPIC: 5,
+    GENERATOR_INGEST: 5,
+  },
+};
+
+export const creditsHistoryFixture = {
+  data: [
+    {
+      id: 'entry-1',
+      kind: 'GRANT',
+      amount: 10,
+      feature: null,
+      reason: 'monthly_free',
+      cycleKey: 'FREE:2026-09',
+      createdAt: new Date().toISOString(),
+    },
+  ],
+  nextCursor: null,
+  hasMore: false,
+};
+
+function planFor(tier: string, billingPeriod: string) {
+  const plan = plansFixture.find(
+    (candidate) =>
+      candidate.tier === tier && candidate.billingPeriod === billingPeriod,
+  );
+  if (plan === undefined) {
+    throw new Error(`Plano de teste não encontrado: ${tier}/${billingPeriod}`);
+  }
+  return plan;
+}
+
+function subscriptionOverviewFor(sub: BillingMockSubscription | null) {
+  if (sub === null) {
+    return {
+      tier: 'FREE',
+      message: 'Você está no plano Gratuito.',
+      subscription: null,
+    };
+  }
+
+  const plan = planFor(sub.tier, sub.billingPeriod);
+  const checkoutUrl =
+    sub.reads >= 1 ? `https://sandbox.asaas.fake/i/${sub.id}` : null;
+  const periodEnd = isoDaysFromNow(30);
+
+  const message =
+    sub.status === 'PENDING'
+      ? checkoutUrl === null
+        ? 'Estamos preparando o seu link de pagamento. Leva só alguns segundos.'
+        : `Falta só o pagamento. Assim que ele for confirmado, o plano ${TIER_LABEL[sub.tier]} libera.`
+      : sub.status === 'ACTIVE'
+        ? `Seu plano ${TIER_LABEL[sub.tier]} renova em ${new Date(periodEnd).toLocaleDateString('pt-BR')}. Dá para cancelar quando quiser.`
+        : `Assinatura cancelada. Você continua com o plano ${TIER_LABEL[sub.tier]} até ${new Date(periodEnd).toLocaleDateString('pt-BR')}, e nada mais será cobrado.`;
+
+  return {
+    tier: sub.status === 'PENDING' ? 'FREE' : sub.tier,
+    message,
+    subscription: {
+      id: sub.id,
+      tier: sub.tier,
+      billingPeriod: sub.billingPeriod,
+      status: sub.status,
+      priceCents: plan.priceCents,
+      priceLabel: plan.priceLabel,
+      paymentMethod: sub.paymentMethod,
+      checkoutUrl,
+      currentPeriodEnd: sub.status === 'PENDING' ? null : periodEnd,
+      accessUntil: sub.status === 'PENDING' ? null : periodEnd,
+      canceledAt: sub.status === 'CANCELED' ? new Date().toISOString() : null,
+    },
+  };
+}
+
 export const handlers = [
   http.post(`${API_URL}/auth/signin`, async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
@@ -1036,4 +1349,147 @@ export const handlers = [
 
     return HttpResponse.json(roleplayViewFromState(roleplayMockState));
   }),
+
+  http.get(`${API_URL}/catalog/units`, ({ request }) => {
+    const url = new URL(request.url);
+    const level = url.searchParams.get('level');
+    return HttpResponse.json({
+      data: catalogUnitsForLevel(level),
+      nextCursor: null,
+      hasMore: false,
+    });
+  }),
+
+  http.get(`${API_URL}/catalog/units/:slug`, ({ params }) => {
+    const unit = [catalogUnitFixture, catalogUnitB1Fixture].find(
+      (candidate) => candidate.slug === params.slug,
+    );
+
+    if (unit === undefined) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Não encontramos esta unidade.',
+          },
+        },
+        { status: 404 },
+      );
+    }
+
+    return HttpResponse.json(unit);
+  }),
+
+  http.get(`${API_URL}/catalog/workbooks`, ({ request }) => {
+    const url = new URL(request.url);
+    const level = url.searchParams.get('level');
+    const workbooks =
+      level === null || level === workbookFixture.unit.level.cefrLevel
+        ? [workbookFixture]
+        : [];
+    return HttpResponse.json(workbooks);
+  }),
+
+  http.get(`${API_URL}/catalog/workbooks/:id/file`, ({ params }) =>
+    HttpResponse.json({ id: params.id, file: workbookFixture.file }),
+  ),
+
+  http.get(`${API_URL}/me/history`, () =>
+    HttpResponse.json({ data: [], nextCursor: null, hasMore: false }),
+  ),
+
+  http.post(`${API_URL}/checkpoints/:unitId/start`, ({ params }) => {
+    checkpointAnswered = false;
+    return HttpResponse.json({
+      id: 'checkpoint-1',
+      unitId: params.unitId,
+      status: 'IN_PROGRESS',
+      answered: 0,
+      maxItems: 8,
+      next: checkpointItemFixture,
+      result: null,
+    });
+  }),
+
+  http.post(`${API_URL}/checkpoints/:id/answer`, ({ params }) => {
+    if (!checkpointAnswered) {
+      checkpointAnswered = true;
+      return HttpResponse.json({
+        id: params.id,
+        unitId: catalogUnitFixture.id,
+        status: 'IN_PROGRESS',
+        answered: 1,
+        maxItems: 8,
+        next: checkpointItemFixture2,
+        result: null,
+      });
+    }
+
+    return HttpResponse.json({
+      id: params.id,
+      unitId: catalogUnitFixture.id,
+      status: 'COMPLETED',
+      answered: 2,
+      maxItems: 8,
+      next: null,
+      result: {
+        result: 'PASSED',
+        message: 'Tudo certo com esta unidade. Pode seguir.',
+        score: 1,
+        reinforce: [],
+        completedAt: new Date().toISOString(),
+      },
+    });
+  }),
+
+  http.get(`${API_URL}/plans`, () => HttpResponse.json(plansFixture)),
+
+  http.post(`${API_URL}/billing/checkout`, async ({ request }) => {
+    const body = (await request.json()) as {
+      tier: string;
+      billingPeriod: string;
+      paymentMethod: string;
+    };
+
+    billingSubscription = {
+      id: 'sub-mock-1',
+      tier: body.tier,
+      billingPeriod: body.billingPeriod,
+      paymentMethod: body.paymentMethod,
+      status: 'PENDING',
+      reads: 0,
+    };
+
+    return HttpResponse.json(subscriptionOverviewFor(billingSubscription), {
+      status: 202,
+    });
+  }),
+
+  http.post(`${API_URL}/billing/cancel`, () => {
+    if (billingSubscription !== null) {
+      billingSubscription.status = 'CANCELED';
+    }
+
+    return HttpResponse.json(subscriptionOverviewFor(billingSubscription));
+  }),
+
+  http.get(`${API_URL}/me/subscription`, () => {
+    if (
+      billingSubscription !== null &&
+      billingSubscription.status === 'PENDING'
+    ) {
+      billingSubscription.reads += 1;
+      if (billingSubscription.reads >= 3) {
+        billingSubscription.status = 'ACTIVE';
+      }
+    }
+
+    return HttpResponse.json(subscriptionOverviewFor(billingSubscription));
+  }),
+
+  http.get(`${API_URL}/me/credits`, () => HttpResponse.json(creditsFixture)),
+
+  http.get(`${API_URL}/me/credits/history`, () =>
+    HttpResponse.json(creditsHistoryFixture),
+  ),
 ];

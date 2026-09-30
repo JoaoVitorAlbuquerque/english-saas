@@ -106,6 +106,12 @@ function outlineSteps(
   });
 }
 
+/** O áudio de uma questão de escuta, se ela tiver um. */
+function itemAudioAssetIds(content: unknown): string[] {
+  const assetId = (content as { audioAssetId?: unknown } | null)?.audioAssetId;
+  return typeof assetId === 'string' ? [assetId] : [];
+}
+
 @Injectable()
 export class CatalogService {
   constructor(
@@ -489,11 +495,7 @@ export class CatalogService {
       },
     });
 
-    const audioIds = rows.flatMap((row) => {
-      const assetId = (row.content as { audioAssetId?: unknown } | null)
-        ?.audioAssetId;
-      return typeof assetId === 'string' ? [assetId] : [];
-    });
+    const audioIds = rows.flatMap((row) => itemAudioAssetIds(row.content));
 
     const assets = await this.assets.resolveMap(
       audioIds.length === 0
@@ -795,6 +797,9 @@ export class CatalogService {
         ...registerNotes.flatMap((n) =>
           n.audioAssetId === null ? [] : [n.audioAssetId],
         ),
+        // Questão de escuta (LISTEN_CHOOSE, DICTATION) carrega o próprio
+        // áudio no `content` — sem isso a prática chega sem URL.
+        ...items.flatMap((item) => itemAudioAssetIds(item.content)),
       ]),
     ];
 

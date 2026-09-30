@@ -4,6 +4,7 @@ import type { DragEvent } from 'react';
 import { cn } from '../../lib/cn';
 import { useAnswerTimer } from '../hooks/use-answer-timer';
 import { ItemFeedbackPanel } from '../ItemFeedbackPanel';
+import { SubmitAnswerButton } from '../SubmitAnswerButton';
 import type { ItemTypeProps, OrderWordsItemView } from '../types';
 
 /**
@@ -147,6 +148,13 @@ export function OrderWordsItem({
           </button>
         ))}
       </div>
+
+      {!answered ? (
+        <SubmitAnswerButton
+          onClick={submit}
+          disabled={!isInteractive || !isComplete}
+        />
+      ) : null}
 
       {feedback ? <ItemFeedbackPanel feedback={feedback} /> : null}
     </div>

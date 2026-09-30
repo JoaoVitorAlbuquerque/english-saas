@@ -43,4 +43,24 @@ describe('OrderWordsItem', () => {
       hintsUsed: 0,
     });
   });
+
+  it('Enviar só habilita com todas as palavras na frase', async () => {
+    const onAnswer = vi.fn();
+    render(<OrderWordsItem item={item} mode="practice" onAnswer={onAnswer} />);
+
+    const send = screen.getByRole('button', { name: 'Enviar' });
+    await userEvent.click(screen.getByRole('button', { name: "I'm" }));
+    expect(send).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'from' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Brazil' }));
+    expect(send).toBeEnabled();
+    await userEvent.click(send);
+
+    expect(onAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        response: { tokens: ["I'm", 'from', 'Brazil'] },
+      }),
+    );
+  });
 });

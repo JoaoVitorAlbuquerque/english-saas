@@ -45,3 +45,15 @@ export * from './modules/learning/schemas';
 export * as srsService from './modules/srs/service';
 export * from './modules/srs/hooks';
 export * from './modules/srs/schemas';
+
+export * as catalogService from './modules/catalog/service';
+export * from './modules/catalog/hooks';
+export * from './modules/catalog/schemas';
+
+export * as checkpointService from './modules/checkpoint/service';
+export * from './modules/checkpoint/hooks';
+export * from './modules/checkpoint/schemas';
+
+export * as billingService from './modules/billing/service';
+export * from './modules/billing/hooks';
+export * from './modules/billing/schemas';

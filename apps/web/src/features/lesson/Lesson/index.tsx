@@ -77,6 +77,7 @@ export function Lesson() {
           answeredItemIds={attempt.answeredItemIds}
           answers={controller.answers}
           onAnswer={controller.onSubmitAnswer}
+          isSubmitting={controller.isSubmittingAnswer}
           onContinue={() => controller.onCompleteStep()}
         />
       ) : null}

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { AiCreditEntryKind, Prisma, type PlanTier } from '@prisma/client';
+import type { Paginated } from '@english-saas/shared';
 
 import { NotFoundError } from 'src/common/errors/app.exception';
+import { buildPage, toPrismaCursorArgs } from 'src/common/pagination/cursor';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 
 import { InsufficientCreditsError } from '../billing.errors';
@@ -17,6 +19,16 @@ export type CreditReservation = {
   reservationId: string;
   cost: number;
   balanceAfter: number;
+};
+
+export type CreditLedgerEntryView = {
+  id: string;
+  kind: AiCreditEntryKind;
+  amount: number;
+  feature: string | null;
+  reason: string | null;
+  cycleKey: string | null;
+  createdAt: Date;
 };
 
 /**
@@ -35,6 +47,23 @@ export class AiCreditService {
     });
 
     return result._sum.amount ?? 0;
+  }
+
+  /** Lançamentos do aluno, mais recente primeiro — o extrato de `GET /me/credits/history`. */
+  async history(
+    userId: string,
+    query: { cursor?: string | undefined; limit: number },
+  ): Promise<Paginated<CreditLedgerEntryView>> {
+    const { take, ...cursorArgs } = toPrismaCursorArgs(query);
+
+    const rows = await this.prisma.aiCreditLedgerEntry.findMany({
+      take,
+      ...cursorArgs,
+      where: { userId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+
+    return buildPage(rows, query.limit, (row) => row.id);
   }
 
   /**

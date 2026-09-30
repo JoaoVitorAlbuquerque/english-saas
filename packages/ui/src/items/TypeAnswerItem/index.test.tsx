@@ -29,6 +29,42 @@ describe('TypeAnswerItem', () => {
     });
   });
 
+  it('botão Enviar: desabilitado vazio, envia o que foi digitado', async () => {
+    const onAnswer = vi.fn();
+    render(<TypeAnswerItem item={item} mode="practice" onAnswer={onAnswer} />);
+
+    const send = screen.getByRole('button', { name: 'Enviar' });
+    expect(send).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Sua resposta'), "She's from");
+    await userEvent.click(send);
+
+    expect(onAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ response: { text: "She's from" } }),
+    );
+  });
+
+  it('respondida, some o botão Enviar', () => {
+    render(
+      <TypeAnswerItem
+        item={item}
+        mode="practice"
+        feedback={{
+          isCorrect: true,
+          score: 1,
+          verdict: 'CORRECT',
+          feedback: 'Isso mesmo.',
+          explanation: '',
+          correctAnswer: { text: "She's from Austin." },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Enviar' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('não envia resposta vazia', async () => {
     const onAnswer = vi.fn();
     render(<TypeAnswerItem item={item} mode="practice" onAnswer={onAnswer} />);

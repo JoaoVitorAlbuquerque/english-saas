@@ -397,6 +397,29 @@ describe('Learning (e2e)', () => {
     expect(orderItem).toEqual({ exposureCount: 1, correctRate: null });
   });
 
+  it('entrega o áudio das questões de escuta junto com a lição', async () => {
+    const token = await studentToken();
+
+    const response = await http()
+      .get('/catalog/lessons/nice-to-meet-you')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = response.body as {
+      items: { type: string; content: { audioAssetId?: string } }[];
+      assets: Record<string, { url: string }>;
+    };
+    const listening = body.items.filter((item) =>
+      ['LISTEN_CHOOSE', 'DICTATION'].includes(item.type),
+    );
+
+    expect(listening.length).toBeGreaterThan(0);
+    for (const item of listening) {
+      const assetId = item.content.audioAssetId ?? '';
+      expect(body.assets[assetId]?.url).toContain('X-Amz-Signature');
+    }
+  });
+
   it('reenviar a mesma resposta não grava duas vezes', async () => {
     const auth = { Authorization: `Bearer ${await studentToken()}` };
     const items = await itemIds();

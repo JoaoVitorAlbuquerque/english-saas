@@ -125,7 +125,7 @@ export function Review() {
             item={toItemView(exercise.item, exercise.item.assets)}
             mode="practice"
             feedback={itemFeedback?.answer ?? null}
-            disabled={itemFeedback !== null}
+            disabled={itemFeedback !== null || isAnswering}
             onAnswer={(payload) => onAnswerItem(exercise.item.id, payload)}
           />
           {itemFeedback !== null ? (

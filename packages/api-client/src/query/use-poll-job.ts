@@ -53,6 +53,11 @@ export function usePollJob<T>({
     queryKey,
     queryFn: async () => schema.parse(await fetchJob()),
     enabled,
+    // O default global (30s) faria a primeira checagem depois de montar —
+    // ou depois de uma mutation escrever no mesmo cache — esperar até o
+    // cache "envelhecer" em vez de checar na hora. Polling sempre quer dado
+    // fresco.
+    staleTime: 0,
     refetchInterval: (query) => {
       const data = query.state.data;
 

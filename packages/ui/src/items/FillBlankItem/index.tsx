@@ -8,6 +8,7 @@ import { Input } from '../../components/Input/Input';
 import { useAnswerTimer } from '../hooks/use-answer-timer';
 import { useHint } from '../hooks/use-hint';
 import { ItemFeedbackPanel } from '../ItemFeedbackPanel';
+import { SubmitAnswerButton } from '../SubmitAnswerButton';
 import type { FillBlankItemView, ItemTypeProps } from '../types';
 
 export function FillBlankItem({
@@ -28,13 +29,13 @@ export function FillBlankItem({
   const [before, ...restParts] = item.content.sentence.split('___');
   const after = restParts.join('___');
 
-  function submit() {
-    if (!isInteractive || text.trim().length === 0) {
+  function submit(answer = text) {
+    if (!isInteractive || answer.trim().length === 0) {
       return;
     }
 
     onAnswer?.({
-      response: { text },
+      response: { text: answer },
       responseTimeMs: elapsed(),
       hintsUsed: hint.hintsUsed,
     });
@@ -59,13 +60,20 @@ export function FillBlankItem({
       </p>
 
       {item.content.choices ? (
-        <div className="flex flex-wrap gap-2" onKeyDown={handleKeyDown}>
+        // Com opções, escolher já responde — igual à múltipla escolha.
+        <div className="flex flex-wrap gap-2">
           {item.content.choices.map((choice) => (
             <Chip
               key={choice}
               selected={text === choice}
               disabled={!isInteractive}
-              onClick={() => setText(choice)}
+              onClick={() => {
+                if (!isInteractive) {
+                  return;
+                }
+                setText(choice);
+                submit(choice);
+              }}
             >
               {choice}
             </Chip>
@@ -84,6 +92,13 @@ export function FillBlankItem({
           spellCheck={false}
         />
       )}
+
+      {!item.content.choices && !answered ? (
+        <SubmitAnswerButton
+          onClick={() => submit()}
+          disabled={!isInteractive || text.trim().length === 0}
+        />
+      ) : null}
 
       {item.content.hint && mode !== 'assessment' ? (
         <div>

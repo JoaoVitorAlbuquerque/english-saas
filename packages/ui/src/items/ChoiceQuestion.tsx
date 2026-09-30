@@ -22,7 +22,8 @@ export type ChoiceQuestionProps = {
  * Lista de alternativas de seleção única — MULTIPLE_CHOICE, LISTEN_CHOOSE e
  * a pergunta de READING_COMPREHENSION são a mesma interação por baixo.
  *
- * Teclado: dígitos 1–4 escolhem a alternativa nessa posição, Enter confirma.
+ * Escolher já responde — clique, toque ou dígito 1–4 no teclado. Não há
+ * passo de confirmar: o feedback aparece na hora.
  */
 export function ChoiceQuestion({
   options,
@@ -43,33 +44,27 @@ export function ChoiceQuestion({
       ? feedback.correctAnswer.optionIds
       : [];
 
-  function submit() {
-    if (!isInteractive || !selectedId) {
+  function choose(optionId: string) {
+    // Quem trava o segundo clique é o pai (`disabled` enquanto envia): se o
+    // envio falhar, o aluno precisa conseguir escolher de novo.
+    if (!isInteractive) {
       return;
     }
 
+    setSelectedId(optionId);
     onAnswer?.({
-      response: { optionIds: [selectedId] },
+      response: { optionIds: [optionId] },
       responseTimeMs: elapsed(),
       hintsUsed: 0,
     });
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!isInteractive) {
-      return;
-    }
-
-    if (event.key === 'Enter') {
-      submit();
-      return;
-    }
-
     const digit = Number(event.key);
     const option = Number.isInteger(digit) ? options[digit - 1] : undefined;
 
     if (digit >= 1 && digit <= 4 && option) {
-      setSelectedId(option.id);
+      choose(option.id);
     }
   }
 
@@ -93,7 +88,7 @@ export function ChoiceQuestion({
             aria-checked={isSelected}
             aria-label={`${String(index + 1)}. ${option.text}`}
             disabled={!isInteractive}
-            onClick={() => setSelectedId(option.id)}
+            onClick={() => choose(option.id)}
             className={cn(
               'flex min-h-11 items-center gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-left text-base text-ink transition-colors',
               isInteractive && 'hover:bg-ground',

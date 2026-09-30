@@ -151,9 +151,41 @@ export const messages = {
   'placement.error.loadTitle': 'Não conseguimos carregar o nivelamento',
   'placement.error.retry': 'Tentar de novo',
 
-  'placeholder.catalog.title': 'Catálogo em construção',
-  'placeholder.catalog.description':
-    'Aqui vão aparecer as unidades e apostilas de cada nível.',
+  'catalog.title': 'Catálogo',
+  'catalog.searchPlaceholder': 'Buscar por título ou assunto',
+  'catalog.allLevels': 'Todos',
+  'catalog.locked': 'Bloqueada',
+  'catalog.errorTitle': 'Não conseguimos carregar o catálogo',
+  'catalog.emptyTitle': 'Ainda não temos unidades publicadas',
+  'catalog.emptyDescription': 'Volte em breve — o conteúdo está a caminho.',
+  'catalog.noMatchTitle': 'Nada encontrado',
+  'catalog.noMatchDescription': 'Tenta outro termo ou outro nível.',
+
+  'unit.errorTitle': 'Não conseguimos carregar esta unidade',
+  'unit.cast': 'Elenco',
+  'unit.lessons': 'Lições',
+  'unit.noLessonsTitle': 'Ainda não tem lição publicada aqui',
+  'unit.noLessonsDescription': 'Volte em breve — o conteúdo está a caminho.',
+  'unit.lesson.inPlan': 'No meu plano',
+  'unit.lesson.completed': 'Concluída',
+  'unit.lesson.inProgress': 'Em andamento',
+  'unit.checkpoint.title': 'Checkpoint da unidade',
+  'unit.checkpoint.subtitle':
+    'Um diagnóstico rápido do que já firmou — nunca trava, pode refazer quando quiser.',
+  'unit.checkpoint.action': 'Fazer checkpoint',
+  'unit.workbook.subtitle': 'Apostila em PDF desta unidade',
+  'unit.workbook.action': 'Baixar',
+
+  'checkpoint.intro.title': 'Checkpoint da unidade',
+  'checkpoint.intro.description':
+    'Algumas perguntas sobre o que esta unidade ensina, pra ver o que já firmou e o que vale reforçar. É diagnóstico — não trava nada.',
+  'checkpoint.intro.cancel': 'Agora não',
+  'checkpoint.intro.start': 'Começar',
+  'checkpoint.progress': 'Pergunta',
+  'checkpoint.result.title': 'Resultado do checkpoint',
+  'checkpoint.result.reinforceTitle': 'Vale reforçar',
+  'checkpoint.result.close': 'Fechar',
+
   'placeholder.progress.title': 'Seu progresso em construção',
   'placeholder.progress.description':
     'Aqui vão aparecer sequência, XP e evolução por competência.',
@@ -284,6 +316,51 @@ export const messages = {
   'paywall.titlePrefix': 'Isso é do plano',
   'paywall.titleGeneric': 'Isso é de um plano pago',
   'paywall.dismiss': 'Entendi',
+  'paywall.viewPlans': 'Ver planos',
+
+  'plans.title': 'Planos',
+  'plans.monthly': 'Mensal',
+  'plans.yearly': 'Anual',
+  'plans.currentBadge': 'Seu plano atual',
+  'plans.subscribe': 'Assinar',
+  'plans.errorTitle': 'Não conseguimos carregar os planos',
+  'plans.faqTitle': 'Perguntas frequentes',
+
+  'checkout.title': 'Finalizar assinatura',
+  'checkout.paymentMethod': 'Forma de pagamento',
+  'checkout.cpfCnpj': 'CPF ou CNPJ',
+  'checkout.cpfCnpjHint': 'Só os números — é o que o pagamento exige.',
+  'checkout.submit': 'Continuar',
+  'checkout.preparing': 'Preparando seu link de pagamento…',
+  'checkout.waitingTitle': 'Aguardando pagamento',
+  'checkout.waitingDescription':
+    'Assim que o pagamento for confirmado, esta tela atualiza sozinha.',
+  'checkout.reopenLink': 'Abrir o link de pagamento de novo',
+  'checkout.successTitle': 'Pagamento confirmado',
+  'checkout.successDescription': 'Seu plano já está liberado.',
+  'checkout.goToSubscription': 'Ver minha assinatura',
+  'checkout.failedTitle': 'Não deu certo desta vez',
+  'checkout.failedDescription':
+    'O checkout expirou ou foi cancelado. Você pode tentar de novo.',
+  'checkout.backToPlans': 'Voltar para os planos',
+  'checkout.noParamsTitle': 'Nenhum plano escolhido',
+  'checkout.noParamsDescription': 'Escolha um plano antes de finalizar.',
+
+  'subscription.title': 'Minha assinatura',
+  'subscription.errorTitle': 'Não conseguimos carregar sua assinatura',
+  'subscription.upgrade': 'Fazer upgrade',
+  'subscription.viewPlans': 'Ver planos',
+  'subscription.cancel': 'Cancelar assinatura',
+  'subscription.creditsTitle': 'Créditos de IA',
+  'subscription.creditsMonthly': 'Cota mensal:',
+  'subscription.creditsHistoryEmpty': 'Nenhum lançamento ainda.',
+  'subscription.cancelConfirm.title': 'Cancelar assinatura?',
+  'subscription.cancelConfirm.descriptionPrefix':
+    'Seu acesso ao plano pago continua até',
+  'subscription.cancelConfirm.descriptionNoAccess':
+    'O cancelamento vale a partir de agora.',
+  'subscription.cancelConfirm.stay': 'Manter assinatura',
+  'subscription.cancelConfirm.confirm': 'Cancelar mesmo assim',
 } as const;
 
 type MessageKey = keyof typeof messages;

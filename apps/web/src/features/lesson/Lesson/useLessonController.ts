@@ -136,19 +136,39 @@ export function useLessonController() {
     }
   }
 
+  const [isSubmittingAnswer, setSubmittingAnswer] = useState(false);
+
   async function submitAnswer(
     itemId: string,
     payload: ItemAnswerPayload,
   ): Promise<void> {
-    if (state.attempt === null) {
+    if (state.attempt === null || isSubmittingAnswer) {
       return;
     }
 
+    setSubmittingAnswer(true);
+    try {
+      await sendAnswer(state.attempt.id, itemId, payload);
+    } catch {
+      toast.error({
+        title: 'Não conseguimos enviar sua resposta',
+        description: 'Tenta de novo em instantes.',
+      });
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  }
+
+  async function sendAnswer(
+    attemptId: string,
+    itemId: string,
+    payload: ItemAnswerPayload,
+  ): Promise<void> {
     const outcome = await queue.run({
       kind: 'answer',
       input: {
         itemId,
-        attemptId: state.attempt.id,
+        attemptId,
         context: 'LESSON',
         response: payload.response,
         responseTimeMs: payload.responseTimeMs,
@@ -227,6 +247,7 @@ export function useLessonController() {
       void completeStep(response),
     onSubmitAnswer: (itemId: string, payload: ItemAnswerPayload) =>
       void submitAnswer(itemId, payload),
+    isSubmittingAnswer,
     onFinishLesson: () => void finishLesson(),
     isFinishingLesson: completeAttemptMutation.isPending,
     onRestart: () => void restart(),

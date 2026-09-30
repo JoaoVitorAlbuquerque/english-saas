@@ -20,15 +20,15 @@ const item: MultipleChoiceItemView = {
 };
 
 describe('MultipleChoiceItem', () => {
-  it('envia {optionIds} com a opção escolhida ao confirmar', async () => {
+  it('clicar na alternativa já responde, sem confirmar', async () => {
     const onAnswer = vi.fn();
     render(
       <MultipleChoiceItem item={item} mode="practice" onAnswer={onAnswer} />,
     );
 
     await userEvent.click(screen.getByRole('radio', { name: '1. am' }));
-    await userEvent.keyboard('{Enter}');
 
+    expect(onAnswer).toHaveBeenCalledTimes(1);
     expect(onAnswer).toHaveBeenCalledWith({
       response: { optionIds: ['am'] },
       responseTimeMs: expect.any(Number),
@@ -36,32 +36,36 @@ describe('MultipleChoiceItem', () => {
     });
   });
 
-  it('dígito 2 escolhe a segunda alternativa, e Enter confirma', async () => {
+  it('dígito 2 responde com a segunda alternativa', async () => {
     const onAnswer = vi.fn();
     render(
       <MultipleChoiceItem item={item} mode="practice" onAnswer={onAnswer} />,
     );
 
-    // Foca dentro do radiogroup (clicar numa alternativa) antes de digitar —
-    // o teclado dispara no elemento focado, e o dígito troca a seleção.
-    await userEvent.click(screen.getByRole('radio', { name: '1. am' }));
-    await userEvent.keyboard('2{Enter}');
+    // Tab só foca (dentro do radiogroup) — quem responde é o dígito.
+    await userEvent.tab();
+    expect(onAnswer).not.toHaveBeenCalled();
 
+    await userEvent.keyboard('2');
+
+    expect(onAnswer).toHaveBeenCalledTimes(1);
     expect(onAnswer).toHaveBeenCalledWith(
       expect.objectContaining({ response: { optionIds: ['is'] } }),
     );
   });
 
-  it('não confirma sem alternativa escolhida', async () => {
+  it('desabilitada (resposta a caminho), não responde de novo', async () => {
     const onAnswer = vi.fn();
     render(
-      <MultipleChoiceItem item={item} mode="practice" onAnswer={onAnswer} />,
+      <MultipleChoiceItem
+        item={item}
+        mode="practice"
+        onAnswer={onAnswer}
+        disabled
+      />,
     );
 
-    // Tab só foca, não seleciona (seleção é no clique) — Enter aqui não
-    // deve confirmar nada.
-    await userEvent.tab();
-    await userEvent.keyboard('{Enter}');
+    await userEvent.click(screen.getByRole('radio', { name: '2. is' }));
 
     expect(onAnswer).not.toHaveBeenCalled();
   });

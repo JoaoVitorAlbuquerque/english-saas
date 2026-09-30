@@ -593,6 +593,10 @@ admin), **direitos** (`EntitlementsService`) e **créditos de IA**
   `AiService.run` dentro do job (o saldo). `spend` reserva no início
   (`CONSUME`, já debita) e estorna se o trabalho lançar (`REFUND`, único por
   consumo). Não existe passo de "confirmar": sucesso não escreve nada.
+- **`GET /me/credits/history`** devolve o extrato (`AiCreditLedgerEntry`,
+  mais recente primeiro, paginado por cursor) — é o que a tela de assinatura
+  do front usa para mostrar saldo **e** histórico; `GET /me/credits` sozinho
+  só tinha o saldo.
 - **"Cota do tutor" e "créditos do Plus" são o mesmo mecanismo.** Um saldo
   só, custo por feature em
   [credits.ts](apps/api/src/modules/billing/domain/credits.ts). O FREE

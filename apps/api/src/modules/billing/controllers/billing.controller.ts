@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -12,7 +13,7 @@ import { ActiveUserId } from 'src/common/decorators/active-user-id.decorator';
 import { IsPublic } from 'src/common/decorators/is-public.decorator';
 
 import { AI_CREDIT_COSTS } from '../domain/credits';
-import { CheckoutDto } from '../dto/billing.dto';
+import { CheckoutDto, CreditHistoryQueryDto } from '../dto/billing.dto';
 import { AiCreditService } from '../services/ai-credit.service';
 import { EntitlementsService } from '../services/entitlements.service';
 import { PlansService } from '../services/plans.service';
@@ -74,5 +75,14 @@ export class BillingController {
       monthlyAiCredits: plan.monthlyAiCredits,
       costs: AI_CREDIT_COSTS,
     };
+  }
+
+  @Get('me/credits/history')
+  @ApiOperation({ summary: 'Extrato de créditos de IA, mais recente primeiro' })
+  async myCreditsHistory(
+    @ActiveUserId() userId: string,
+    @Query() query: CreditHistoryQueryDto,
+  ) {
+    return this.credits.history(userId, query);
   }
 }

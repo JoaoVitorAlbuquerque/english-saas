@@ -7,6 +7,7 @@ import { Input } from '../../components/Input/Input';
 import { useAnswerTimer } from '../hooks/use-answer-timer';
 import { useHint } from '../hooks/use-hint';
 import { ItemFeedbackPanel } from '../ItemFeedbackPanel';
+import { SubmitAnswerButton } from '../SubmitAnswerButton';
 import type { ItemTypeProps, TypeAnswerItemView } from '../types';
 
 export function TypeAnswerItem({
@@ -62,6 +63,13 @@ export function TypeAnswerItem({
         autoComplete="off"
         spellCheck={false}
       />
+
+      {!answered ? (
+        <SubmitAnswerButton
+          onClick={submit}
+          disabled={!isInteractive || text.trim().length === 0}
+        />
+      ) : null}
 
       {item.content.hint && mode !== 'assessment' ? (
         <div>

@@ -17,15 +17,20 @@ const freeTextItem: FillBlankItemView = {
 };
 
 describe('FillBlankItem', () => {
-  it('com choices, envia {text} com a alternativa clicada', async () => {
+  it('com choices, tocar a alternativa já responde com {text}', async () => {
     const onAnswer = vi.fn();
     render(
       <FillBlankItem item={freeTextItem} mode="practice" onAnswer={onAnswer} />,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'is' }));
-    await userEvent.keyboard('{Enter}');
+    // Sem botão "Enviar" — a opção é a resposta.
+    expect(
+      screen.queryByRole('button', { name: 'Enviar' }),
+    ).not.toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole('button', { name: 'is' }));
+
+    expect(onAnswer).toHaveBeenCalledTimes(1);
     expect(onAnswer).toHaveBeenCalledWith({
       response: { text: 'is' },
       responseTimeMs: expect.any(Number),
@@ -68,7 +73,6 @@ describe('FillBlankItem', () => {
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'is' }));
-    await userEvent.keyboard('{Enter}');
 
     expect(onAnswer).toHaveBeenCalledWith(
       expect.objectContaining({ hintsUsed: 1 }),

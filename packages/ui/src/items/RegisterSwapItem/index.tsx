@@ -5,6 +5,7 @@ import type { KeyboardEvent } from 'react';
 import { Input } from '../../components/Input/Input';
 import { useAnswerTimer } from '../hooks/use-answer-timer';
 import { ItemFeedbackPanel } from '../ItemFeedbackPanel';
+import { SubmitAnswerButton } from '../SubmitAnswerButton';
 import type { ItemTypeProps, RegisterSwapItemView } from '../types';
 
 export function RegisterSwapItem({
@@ -58,6 +59,13 @@ export function RegisterSwapItem({
         autoComplete="off"
         spellCheck={false}
       />
+
+      {!answered ? (
+        <SubmitAnswerButton
+          onClick={submit}
+          disabled={!isInteractive || text.trim().length === 0}
+        />
+      ) : null}
 
       {feedback ? (
         <ItemFeedbackPanel feedback={feedback} registerNote={registerNote} />

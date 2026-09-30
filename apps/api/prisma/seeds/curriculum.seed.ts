@@ -1,3 +1,4 @@
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   ContentStatus,
   type LessonStepType,
@@ -6,6 +7,8 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 
+import { isValidStorageKey } from '../../src/infra/storage/storage-keys';
+import { buildSilentWav } from '../../src/infra/tts/fake-tts.provider';
 import { buildSeedItems, LESSON_ITEM_SLUGS } from './curriculum/items';
 import { buildLessonSteps } from './curriculum/lesson';
 import {
@@ -21,9 +24,12 @@ import type { SeedModule } from './seed-module';
  * Cria a taxonomia, o curso com os cinco níveis, a unidade 1 com o elenco
  * fixo, as 20 questões e a lição "Nice to meet you" já publicada.
  *
- * **Os áudios não existem no bucket.** As linhas de `media_assets` apontam
- * para chaves sob `content/`, e a URL assinada é gerada normalmente — o
- * objeto é que ainda não está lá. Quem grava é o módulo 5, com o TTS.
+ * **Os áudios são sintéticos, gravados de verdade no bucket.** Este seed
+ * roda fora da esteira editorial do módulo 5 (sem revisão humana, sem o TTS
+ * de verdade), então usa a mesma receita do `FakeTtsProvider` — um WAV
+ * válido e silencioso — só para o player abrir sem erro em dev. As imagens
+ * (capa da unidade, avatar dos personagens) continuam só na linha do banco,
+ * sem arquivo: o `<img>` não trava a página por isso, só mostra quebrado.
  */
 
 const CHARACTERS = [
@@ -112,23 +118,23 @@ const ASSETS: {
 }[] = [
   ...['full', '1', '2', '3', '4', '5', '6', '7', '8'].map((part) => ({
     key: part === 'full' ? 'scene-full' : `scene-line-${part}`,
-    storageKey: `content/lessons/nice-to-meet-you/scene-${part}.mp3`,
+    storageKey: `content/lessons/nice-to-meet-you/scene-${part}.wav`,
     kind: 'AUDIO' as MediaKind,
-    mimeType: 'audio/mpeg',
+    mimeType: 'audio/wav',
     durationMs: part === 'full' ? 42_000 : 3_000,
   })),
   {
     key: 'item-hes-friendly',
-    storageKey: 'content/items/a1-listen-hes-friendly.mp3',
+    storageKey: 'content/items/a1-listen-hes-friendly.wav',
     kind: 'AUDIO',
-    mimeType: 'audio/mpeg',
+    mimeType: 'audio/wav',
     durationMs: 2_000,
   },
   {
     key: 'item-dictation',
-    storageKey: 'content/items/a1-dictation-im-from-brazil.mp3',
+    storageKey: 'content/items/a1-dictation-im-from-brazil.wav',
     kind: 'AUDIO',
-    mimeType: 'audio/mpeg',
+    mimeType: 'audio/wav',
     durationMs: 2_500,
   },
   {
@@ -149,9 +155,9 @@ const ASSETS: {
   // pela API seria recusado pela trava do módulo 5.
   ...['im-contraction', 'be-contraction-third'].map((id) => ({
     key: `note-${id}`,
-    storageKey: `content/audio/notes/${id}.mp3`,
+    storageKey: `content/audio/notes/${id}.wav`,
     kind: 'AUDIO' as MediaKind,
-    mimeType: 'audio/mpeg',
+    mimeType: 'audio/wav',
     durationMs: 1_200,
   })),
 ];
@@ -185,27 +191,62 @@ export const curriculumSeed: SeedModule = {
 
 // ---------------------------------------------------------------------------
 
+/** Mesmas envs que `S3StorageService` — este script roda fora do Nest. */
+function buildStorageClient(): S3Client {
+  return new S3Client({
+    region: process.env['S3_REGION'] ?? 'us-east-1',
+    endpoint: process.env['S3_ENDPOINT'],
+    forcePathStyle: process.env['S3_FORCE_PATH_STYLE'] !== 'false',
+    credentials: {
+      accessKeyId: process.env['S3_ACCESS_KEY_ID'] ?? '',
+      secretAccessKey: process.env['S3_SECRET_ACCESS_KEY'] ?? '',
+    },
+  });
+}
+
 async function seedAssets(
   prisma: PrismaClient,
 ): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
+  const bucket = process.env['S3_BUCKET'] ?? 'english-saas';
+  const storage = buildStorageClient();
 
-  for (const asset of ASSETS) {
-    const row = await prisma.mediaAsset.upsert({
-      where: { storageKey: asset.storageKey },
-      create: {
-        kind: asset.kind,
-        storageKey: asset.storageKey,
-        mimeType: asset.mimeType,
-        durationMs: asset.durationMs,
-        // O arquivo ainda não existe no bucket — ver o comentário do topo.
-        meta: { placeholder: true },
-      },
-      update: { mimeType: asset.mimeType, durationMs: asset.durationMs },
-      select: { id: true },
-    });
+  try {
+    for (const asset of ASSETS) {
+      const row = await prisma.mediaAsset.upsert({
+        where: { storageKey: asset.storageKey },
+        create: {
+          kind: asset.kind,
+          storageKey: asset.storageKey,
+          mimeType: asset.mimeType,
+          durationMs: asset.durationMs,
+          // Imagem ainda não tem arquivo — só o áudio é gravado de verdade
+          // logo abaixo (ver o comentário do topo do arquivo).
+          meta: asset.kind === 'IMAGE' ? { placeholder: true } : {},
+        },
+        update: { mimeType: asset.mimeType, durationMs: asset.durationMs },
+        select: { id: true },
+      });
 
-    map[asset.key] = row.id;
+      map[asset.key] = row.id;
+
+      if (asset.kind === 'AUDIO') {
+        if (!isValidStorageKey(asset.storageKey)) {
+          throw new Error(`Chave de storage inválida: ${asset.storageKey}`);
+        }
+
+        await storage.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: asset.storageKey,
+            Body: buildSilentWav(asset.durationMs ?? 1_000),
+            ContentType: asset.mimeType,
+          }),
+        );
+      }
+    }
+  } finally {
+    storage.destroy();
   }
 
   return map;

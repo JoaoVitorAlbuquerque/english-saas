@@ -4,6 +4,7 @@ import type { KeyboardEvent } from 'react';
 import { cn } from '../../lib/cn';
 import { useAnswerTimer } from '../hooks/use-answer-timer';
 import { ItemFeedbackPanel } from '../ItemFeedbackPanel';
+import { SubmitAnswerButton } from '../SubmitAnswerButton';
 import type { ItemTypeProps, MatchItemView } from '../types';
 
 type Pair = { left: string; right: string };
@@ -131,6 +132,13 @@ export function MatchItem({
           })}
         </div>
       </div>
+
+      {!answered ? (
+        <SubmitAnswerButton
+          onClick={submit}
+          disabled={!isInteractive || !isComplete}
+        />
+      ) : null}
 
       {feedback ? <ItemFeedbackPanel feedback={feedback} /> : null}
     </div>

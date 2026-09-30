@@ -1,5 +1,10 @@
+import { cursorPaginationQuerySchema } from '@english-saas/shared';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+
+export class CreditHistoryQueryDto extends createZodDto(
+  cursorPaginationQuerySchema,
+) {}
 
 export class CheckoutDto extends createZodDto(
   z.object({
