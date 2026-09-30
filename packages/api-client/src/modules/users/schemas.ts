@@ -63,3 +63,6 @@ export const consentViewSchema = z.object({
 export type ConsentView = z.infer<typeof consentViewSchema>;
 
 export const consentListSchema = z.array(consentViewSchema);
+
+/** `GET /me/interests` — do mais forte ao mais fraco. */
+export const interestListSchema = z.array(interestSchema);

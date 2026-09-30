@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -64,5 +65,31 @@ export class MaterialsController {
     @Body() body: MaterialFeedbackDto,
   ) {
     return this.materials.feedback(userId, id, body);
+  }
+
+  @Post(':id/vocabulary/:termKey/review')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Põe um termo do vocabulário na revisão (idempotente)',
+  })
+  async addTermToReview(
+    @ActiveUserId() userId: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('termKey') termKey: string,
+  ) {
+    return this.materials.addTermToReview(userId, id, termKey);
+  }
+
+  @Delete(':id/vocabulary/:termKey/review')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Tira um termo da revisão — suspende o card (idempotente)',
+  })
+  async removeTermFromReview(
+    @ActiveUserId() userId: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('termKey') termKey: string,
+  ) {
+    return this.materials.removeTermFromReview(userId, id, termKey);
   }
 }

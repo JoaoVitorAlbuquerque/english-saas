@@ -31,4 +31,22 @@ describe('MarkedText', () => {
 
     expect(onSpanClick).toHaveBeenCalledWith(SPANS[0], 'gonna');
   });
+
+  it('describeSpan acrescenta a explicação no popover', async () => {
+    render(
+      <MarkedText
+        text={TEXT}
+        spans={SPANS}
+        describeSpan={(_span, text) =>
+          `"${text}" é o jeito falado de going to.`
+        }
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button'));
+
+    expect(
+      await screen.findByText('"gonna" é o jeito falado de going to.'),
+    ).toBeInTheDocument();
+  });
 });

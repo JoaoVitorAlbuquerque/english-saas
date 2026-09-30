@@ -67,6 +67,17 @@ export class StudyTermService {
     });
   }
 
+  /** Pelo termo normalizado (`normalizeTerm`) — a chave estável do termo. */
+  async byKeys(userId: string, keys: readonly string[]): Promise<StudyTerm[]> {
+    if (keys.length === 0) {
+      return [];
+    }
+
+    return this.prisma.studyTerm.findMany({
+      where: { userId, normalizedTerm: { in: [...keys] } },
+    });
+  }
+
   async byIds(userId: string, ids: readonly string[]): Promise<StudyTerm[]> {
     if (ids.length === 0) {
       return [];

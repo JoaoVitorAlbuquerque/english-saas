@@ -156,6 +156,7 @@ describe('getCredits', () => {
         balance: 10,
         monthlyAiCredits: 10,
         costs: { TUTOR_CORRECTION: 1, TUTOR_ROLEPLAY: 3 },
+        nextGrantAt: '2026-10-01T00:05:00.000Z',
       }),
     );
     vi.stubGlobal('fetch', fetchMock);

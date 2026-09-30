@@ -8,6 +8,7 @@ import {
 } from '@english-saas/ui';
 
 import { t } from '../../../messages/pt-BR';
+import { PlusToolsCard } from '../../generator/components/PlusToolsCard';
 import { UnitCard } from './UnitCard';
 import { useCatalogController } from './useCatalogController';
 
@@ -28,6 +29,8 @@ export function Catalog() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-xl text-ink">{t('catalog.title')}</h1>
+
+      <PlusToolsCard />
 
       <Input
         placeholder={t('catalog.searchPlaceholder')}

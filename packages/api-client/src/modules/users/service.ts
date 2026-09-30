@@ -1,8 +1,11 @@
+import type { Interest } from '@english-saas/shared';
+
 import { apiFetch } from '../../http/fetch-client';
 import {
   completeOnboardingRequestSchema,
   completeOnboardingResponseSchema,
   consentListSchema,
+  interestListSchema,
   studentProfileSchema,
   updateConsentRequestSchema,
   type CompleteOnboardingRequest,
@@ -14,6 +17,10 @@ import {
 
 export async function getProfile(): Promise<StudentProfile> {
   return apiFetch('/me/profile', { schema: studentProfileSchema });
+}
+
+export async function getInterests(): Promise<Interest[]> {
+  return apiFetch('/me/interests', { schema: interestListSchema });
 }
 
 export async function completeOnboarding(

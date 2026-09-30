@@ -5,6 +5,7 @@ import request from 'supertest';
 
 import type { DomainEvent } from 'src/common/events';
 import { QUEUES } from 'src/infra/queue/queues';
+import { TermReviewService } from 'src/modules/srs/services/term-review.service';
 
 import { curriculumSeed } from '../prisma/seeds/curriculum.seed';
 import { createTestApp, type TestApp } from './utils/create-test-app';
@@ -309,6 +310,55 @@ describe('Srs (e2e)', () => {
       front: expect.any(String),
       back: expect.any(String),
     });
+  });
+
+  it('termo pedido pelo aluno: entra na sessão, sai ao remover e volta com o mesmo card', async () => {
+    const token = await studentToken();
+    const auth = { Authorization: `Bearer ${token}` };
+    const { id: userId } = await context.prisma.user.findUniqueOrThrow({
+      where: { email: 'aluno@exemplo.com' },
+    });
+    const termReview = context.app.get(TermReviewService);
+    const term = {
+      term: 'Take Off',
+      meaning: 'decolar',
+      example: 'The plane took off late.',
+      cefrLevel: 'B1' as const,
+    };
+    const termCards = async () =>
+      (
+        (await http().get('/reviews/session?minutes=30').set(auth).expect(200))
+          .body as { kind: string }[]
+      ).filter((card) => card.kind === 'TERM');
+
+    await termReview.add(userId, 'GENERATED_MATERIAL', term);
+    await termReview.add(userId, 'GENERATED_MATERIAL', term);
+    expect(await termCards()).toHaveLength(1);
+    expect([...(await termReview.activeKeys(userId, ['take off']))]).toEqual([
+      'take off',
+    ]);
+    const before = await context.prisma.reviewCard.findFirstOrThrow({
+      where: { userId, kind: 'TERM' },
+    });
+
+    // Remover pela chave (normalizada ou não) suspende; a sessão não traz.
+    await termReview.remove(userId, '  TAKE off ');
+    await termReview.remove(userId, 'take off');
+    expect(await termCards()).toHaveLength(0);
+    expect((await termReview.activeKeys(userId, ['take off'])).size).toBe(0);
+
+    // Voltar reativa o mesmo card — nada de recomeçar o agendamento.
+    await termReview.add(userId, 'GENERATED_MATERIAL', term);
+    const after = await context.prisma.reviewCard.findFirstOrThrow({
+      where: { userId, kind: 'TERM' },
+    });
+    expect(after).toMatchObject({ id: before.id, suspended: false });
+    expect(await termCards()).toHaveLength(1);
+
+    // Termo que o aluno nunca teve: remover não faz nada.
+    await expect(termReview.remove(userId, 'nunca visto')).resolves.toBe(
+      undefined,
+    );
   });
 
   it('responder os cards agenda o próximo due — dias à frente, não hoje', async () => {

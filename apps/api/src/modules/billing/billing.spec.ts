@@ -3,6 +3,7 @@ import {
   balanceFrom,
   creditCycleKey,
   monthlyTopUp,
+  nextCreditGrantAt,
   remainingUses,
 } from './domain/credits';
 import {
@@ -255,6 +256,24 @@ describe('billing — créditos', () => {
   it('chave do ciclo separa tier e mês — assinar no meio do mês ainda credita', () => {
     expect(creditCycleKey('FREE', NOW)).toBe('FREE:2026-09');
     expect(creditCycleKey('PLUS', NOW)).toBe('PLUS:2026-09');
+  });
+
+  it('próximo crédito: dia 1º do mês seguinte, 00:05 UTC — o mesmo horário do cron', () => {
+    expect(
+      nextCreditGrantAt(new Date('2026-09-29T15:00:00Z')).toISOString(),
+    ).toBe('2026-10-01T00:05:00.000Z');
+    // Virada de ano.
+    expect(
+      nextCreditGrantAt(new Date('2026-12-31T23:59:00Z')).toISOString(),
+    ).toBe('2027-01-01T00:05:00.000Z');
+    // Dia 1º antes do cron rodar: ainda é hoje.
+    expect(
+      nextCreditGrantAt(new Date('2026-10-01T00:02:00Z')).toISOString(),
+    ).toBe('2026-10-01T00:05:00.000Z');
+    // No minuto do cron em diante: só no mês seguinte.
+    expect(
+      nextCreditGrantAt(new Date('2026-10-01T00:05:00Z')).toISOString(),
+    ).toBe('2026-11-01T00:05:00.000Z');
   });
 });
 

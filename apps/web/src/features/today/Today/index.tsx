@@ -8,6 +8,7 @@ import {
 } from '@english-saas/ui';
 
 import { t } from '../../../messages/pt-BR';
+import { PlusToolsCard } from '../../generator/components/PlusToolsCard';
 import { AgendaBlockCard } from './AgendaBlockCard';
 import { PracticeBlockModal } from './PracticeBlockModal';
 import { RebuildConfirmDialog } from './RebuildConfirmDialog';
@@ -141,6 +142,8 @@ export function Today() {
           ))}
         </div>
       )}
+
+      <PlusToolsCard />
 
       <SkipBlockDialog
         open={skipTarget !== null}

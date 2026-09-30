@@ -1,6 +1,7 @@
 /** Registro central de chaves de cache — evita string solta espalhada pelos apps. */
 export const queryKeys = {
   meProfile: ['me', 'profile'] as const,
+  meInterests: ['me', 'interests'] as const,
   placementLatest: ['placement', 'latest'] as const,
   lesson: (slug: string) => ['lesson', slug] as const,
   correction: (id: string) => ['tutor', 'correction', id] as const,
@@ -21,4 +22,7 @@ export const queryKeys = {
   meSubscription: ['me', 'subscription'] as const,
   meCredits: ['me', 'credits'] as const,
   meCreditsHistory: ['me', 'credits', 'history'] as const,
+  generationJob: (id: string) => ['generator', 'job', id] as const,
+  meMaterials: ['me', 'materials'] as const,
+  material: (id: string) => ['me', 'materials', id] as const,
 };

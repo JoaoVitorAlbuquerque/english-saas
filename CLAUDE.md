@@ -508,6 +508,14 @@ state, answer?}`** — `answer` é o `AnswerResult` completo (gabarito,
 - Mesma trava por aluno do learner-model, agora num helper comum
   (`infra/redis/user-lock.ts`) que os dois módulos usam — sem marca d'água
   aqui, porque criar card é idempotente por `[userId, kind, refId]`.
+- **A única criação ativa é o termo que o aluno pede**:
+  `TermReviewService` (exportado) põe e tira um termo solto da revisão pela
+  chave normalizada (`normalizeTerm`, a mesma do dedup de `StudyTerm`).
+  Tirar **suspende** o card (`suspended = true`), não apaga — o `ReviewLog`
+  continua apontando para ele, e pôr de volta reativa o mesmo card com o
+  estado do FSRS que ele tinha. Sessão e `dueFor` ignoram suspensos. Sem a
+  trava por aluno: cada operação mexe numa linha só, e o índice único basta.
+  Quem chama é o vocabulário do material (generator, 13).
 
 ### Cronograma automático (planner)
 
@@ -597,6 +605,13 @@ admin), **direitos** (`EntitlementsService`) e **créditos de IA**
   mais recente primeiro, paginado por cursor) — é o que a tela de assinatura
   do front usa para mostrar saldo **e** histórico; `GET /me/credits` sozinho
   só tinha o saldo.
+- **`GET /me/credits` traz `nextGrantAt`**: o instante (UTC) do próximo
+  crédito do ciclo, pela mesma regra do cron — dia 1º, 00:05 UTC, para
+  todo aluno (`nextCreditGrantAt` e `MONTHLY_GRANT_CRON` em
+  [credits.ts](apps/api/src/modules/billing/domain/credits.ts); o
+  scheduler lê o cron de lá). O front só formata no fuso do aluno — em São
+  Paulo, isso cai às 21:05 do último dia do mês. Nunca calcule renovação no
+  front.
 - **"Cota do tutor" e "créditos do Plus" são o mesmo mecanismo.** Um saldo
   só, custo por feature em
   [credits.ts](apps/api/src/modules/billing/domain/credits.ts). O FREE
@@ -760,6 +775,12 @@ Regras que não são óbvias:
   item).
 - **Vocabulário vira `StudyTerm` + card TERM** (até 8 por material), e as
   skills-alvo viram card SKILL, pelo `generator.material_delivered`.
+- **O aluno põe e tira termos da revisão**: `GET /me/materials/:id` traz em
+  cada termo do vocabulário `termKey` (o termo normalizado) e `inReview`
+  (card TERM ativo). `POST` e `DELETE /me/materials/:id/vocabulary/:termKey/review`
+  põem ou tiram (suspendem) pelo `TermReviewService` do SRS — idempotentes,
+  pela chave e não pelo índice, e 404 se o termo não é daquele material. O
+  mesmo termo em dois materiais é um card só: tirar num tira no outro.
 - **Créditos**: 5 por material, reservados no request, estornados em falha
   ou recusa. Sugerir assunto não cobra. Material já gerado não trava por
   plano.
@@ -987,6 +1008,27 @@ também é consumido pela API Nest, que roda a partir de `dist/`).
   (`http/csrf-cookie.ts`) e copia para o header `x-csrf-token` nas rotas que
   dependem do cookie (`/auth/refresh`, `/auth/logout`) — nunca guarda esse
   valor em outro lugar.
+
+### Ferramentas do Plus (`apps/web/src/features/generator`)
+
+| Rota                           | Tela                                                                |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `/ferramentas`                 | Hub: saldo, custo, os dois cartões. Não Plus: paywall com exemplo.  |
+| `/ferramentas/tema`            | Interesse → `?sugestoes=<jobId>` (3 assuntos) / surpreenda-me.      |
+| `/ferramentas/colar`           | Abas Texto e Link; rede social pede transcrição; limite visível.    |
+| `/ferramentas/pedidos/:jobId`  | Acompanhamento em 4 fases (`lib/job-phases.ts`); pronto → material. |
+| `/materiais`, `/materiais/:id` | Lista com a evolução do nível; o material completo.                 |
+
+- **A URL é o estado do pedido**: sair e voltar para
+  `/ferramentas/pedidos/:jobId` retoma o polling. O `localStorage` só guarda
+  o último pedido para o atalho "Acompanhar" do hub.
+- **"Ferramentas" fica só na barra lateral do desktop** (`mobile: false` em
+  `nav-items.ts`) — a barra do celular tem 5 itens. No celular, o caminho é
+  o `PlusToolsCard` da tela Hoje e do Catálogo (para quem não é Plus, ele
+  leva ao paywall com o exemplo).
+- `402 INSUFFICIENT_AI_CREDITS` é tratado na própria tela (saldo, custo e
+  `nextGrantAt` no fuso do aluno), não pelo evento global.
+- `t(key, params)` troca `{nome}` no texto — ainda sem lib de i18n.
 
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 

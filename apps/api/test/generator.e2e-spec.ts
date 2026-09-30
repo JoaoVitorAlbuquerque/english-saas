@@ -688,6 +688,64 @@ describe('Generator (e2e)', () => {
     expect(await credits.balanceFor(userId)).toBe(5);
   });
 
+  it('vocabulário: marca inReview, remove (suspende) e põe de volta pelo termo normalizado', async () => {
+    const { userId, auth } = await student();
+    await setLearner(userId, 'A2');
+
+    const job = await ingest(auth, { text: NEWS_TEXT });
+    const materialId = job.materialId ?? '';
+    await drainAll();
+
+    type Vocab = { term: string; termKey: string; inReview: boolean };
+    const vocabulary = async (): Promise<Vocab[]> =>
+      (await material(auth, materialId)).content
+        .vocabulary as unknown as Vocab[];
+
+    // A entrega já pôs os termos na revisão (até MAX_TERM_CARDS).
+    const [first] = await waitFor(async () => {
+      const list = await vocabulary();
+      return list[0]?.inReview === true ? list : null;
+    }, 'termo na revisão');
+    expect(first).toBeDefined();
+    const termKey = first?.termKey ?? '';
+    expect(termKey).toBe(termKey.toLowerCase().trim());
+
+    const url = `/me/materials/${materialId}/vocabulary/${encodeURIComponent(termKey)}/review`;
+    const studyTermId = (
+      await context.prisma.studyTerm.findUniqueOrThrow({
+        where: { userId_normalizedTerm: { userId, normalizedTerm: termKey } },
+      })
+    ).id;
+    const card = () =>
+      context.prisma.reviewCard.findFirstOrThrow({
+        where: { userId, kind: 'TERM', refId: studyTermId },
+      });
+    const cardId = (await card()).id;
+
+    // Remover suspende — e repetir não quebra nada.
+    await http()
+      .delete(url)
+      .set(auth)
+      .expect(200, { termKey, inReview: false });
+    await http().delete(url).set(auth).expect(200);
+    expect((await card()).suspended).toBe(true);
+    expect((await vocabulary())[0]?.inReview).toBe(false);
+
+    // Adicionar reativa o MESMO card (histórico do FSRS preservado).
+    await http().post(url).set(auth).expect(200, { termKey, inReview: true });
+    await http().post(url).set(auth).expect(200);
+    expect(await card()).toMatchObject({ id: cardId, suspended: false });
+    expect((await vocabulary())[0]?.inReview).toBe(true);
+
+    // Termo que não é do material, ou material de outro aluno: 404.
+    await http()
+      .post(`/me/materials/${materialId}/vocabulary/zzz-not-here/review`)
+      .set(auth)
+      .expect(404);
+    const other = await student('outro@exemplo.com');
+    await http().post(url).set(other.auth).expect(404);
+  });
+
   it('prompt injection no texto colado não muda o comportamento', async () => {
     const { userId, auth } = await student();
     await setLearner(userId, 'A2');

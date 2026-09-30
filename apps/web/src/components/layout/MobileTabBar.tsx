@@ -1,7 +1,7 @@
 import { cn } from '@english-saas/ui';
 import { NavLink } from 'react-router-dom';
 
-import { NAV_ITEMS } from './nav-items';
+import { MOBILE_NAV_ITEMS } from './nav-items';
 
 export function MobileTabBar() {
   return (
@@ -9,7 +9,7 @@ export function MobileTabBar() {
       aria-label="Navegação principal"
       className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+      {MOBILE_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}

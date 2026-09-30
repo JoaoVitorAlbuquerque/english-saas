@@ -9,6 +9,7 @@ export const messages = {
   'nav.catalog': 'Catálogo',
   'nav.progress': 'Progresso',
   'nav.profile': 'Perfil',
+  'nav.tools': 'Ferramentas',
 
   'auth.login.title': 'Entre na sua conta',
   'auth.login.subtitle': 'Continue de onde parou.',
@@ -361,10 +362,146 @@ export const messages = {
     'O cancelamento vale a partir de agora.',
   'subscription.cancelConfirm.stay': 'Manter assinatura',
   'subscription.cancelConfirm.confirm': 'Cancelar mesmo assim',
+
+  'tools.title': 'Ferramentas do Plus',
+  'tools.subtitle':
+    'Material de estudo feito para você, no seu nível, sobre o que você gosta.',
+  'tools.balance': 'Seu saldo',
+  'tools.creditsUnit': 'créditos',
+  'tools.cost': '{cost} créditos por material',
+  'tools.topic.title': 'Tema que eu gosto',
+  'tools.topic.description':
+    'Você diz um interesse e a gente monta um texto sobre um fato real, com fonte.',
+  'tools.ingest.title': 'Colar conteúdo',
+  'tools.ingest.description':
+    'Uma reportagem, uma letra de música ou o link de um artigo vira material de estudo.',
+  'tools.start': 'Começar',
+  'tools.myMaterials': 'Meus materiais',
+  'tools.pending.title': 'Tem um material sendo montado',
+  'tools.pending.resume': 'Acompanhar',
+  'tools.errorTitle': 'Não conseguimos carregar suas ferramentas',
+
+  'tools.sample.title': 'Isso faz parte do plano Plus',
+  'tools.sample.description':
+    'Veja um pedaço de um material de verdade. No Plus, você recebe um desses sobre o assunto que quiser, no seu nível.',
+  'tools.sample.badge': 'Exemplo',
+  'tools.sample.cta': 'Conhecer o Plus',
+
+  'tools.card.plusTitle': 'Ferramentas do Plus',
+  'tools.card.plusDescription':
+    'Monte um material sobre um tema que você gosta ou cole um texto.',
+  'tools.card.plusAction': 'Abrir ferramentas',
+  'tools.card.freeTitle': 'Estude com o que você gosta',
+  'tools.card.freeDescription':
+    'No Plus, a IA monta material no seu nível sobre um tema seu ou um texto que você colar.',
+  'tools.card.freeAction': 'Ver como funciona',
+
+  'topic.title': 'Tema que eu gosto',
+  'topic.interestLabel': 'Do que você gosta?',
+  'topic.interestPlaceholder':
+    'Ex.: gosto de história, principalmente navegações',
+  'topic.fromProfile': 'Dos seus interesses',
+  'topic.suggest': 'Ver sugestões',
+  'topic.suggestFree': 'Sugerir assuntos não gasta crédito.',
+  'topic.thinking': 'Pensando em assuntos para você…',
+  'topic.suggestionsTitle': 'Escolha um assunto',
+  'topic.choose': 'Quero esse',
+  'topic.surprise': 'Surpreenda-me',
+  'topic.surpriseHint': 'A gente escolhe pelos seus interesses.',
+  'topic.ownTitleLabel': 'Ou digite um assunto',
+  'topic.ownTitlePlaceholder': 'Ex.: a viagem de Fernão de Magalhães',
+  'topic.ownTitleSubmit': 'Usar este assunto',
+  'topic.again': 'Mudar o interesse',
+
+  'ingest.title': 'Colar conteúdo',
+  'ingest.tabText': 'Texto',
+  'ingest.tabLink': 'Link de artigo',
+  'ingest.textLabel': 'Cole o texto em inglês',
+  'ingest.textHint': 'Uma reportagem, um post, a letra de uma música.',
+  'ingest.linkLabel': 'Link do artigo',
+  'ingest.linkPlaceholder': 'https://',
+  'ingest.linkHint':
+    'A gente lê a página e monta o material. Se o site não deixar, é só colar o texto.',
+  'ingest.socialTitle': 'Não baixamos vídeo nem post de rede social',
+  'ingest.socialDescription':
+    'No momento, para links do {platform}, cole também a legenda ou a transcrição aqui embaixo.',
+  'ingest.transcriptLabel': 'Legenda ou transcrição',
+  'ingest.counter': '{count} / {max}',
+  'ingest.tooShort': 'Faltam {count} caracteres para o mínimo.',
+  'ingest.tooLong': 'Passou do limite em {count} caracteres.',
+  'ingest.limits': 'Mínimo de {min} e máximo de {max} caracteres.',
+  'ingest.submit': 'Montar material',
+
+  'job.title': 'Montando seu material',
+  'job.leaveHint':
+    'Pode sair desta tela: o material continua sendo montado e aparece em Meus materiais.',
+  'job.openMaterial': 'Abrir o material',
+  'job.tryAgain': 'Tentar de novo',
+  'job.backToTools': 'Voltar às ferramentas',
+  'job.errorTitle': 'Não encontramos esse pedido',
+
+  'credits.insufficientTitle': 'Seus créditos não dão para isso agora',
+  'credits.insufficientBody':
+    'Você tem {balance} créditos e cada material custa {cost}.',
+  'credits.renews': 'Seus créditos renovam em {date}.',
+  'credits.viewPlans': 'Ver planos',
+  'credits.viewSubscription': 'Minha assinatura',
+
+  'material.basedOn': 'Baseado em:',
+  'material.basedOnPasted': 'Baseado no texto que você mandou.',
+  'material.textTitle': 'Texto',
+  'material.textHint': 'Toque num destaque para ver a explicação.',
+  'material.spotlightTitle': 'Estrutura em foco',
+  'material.spokenTitle': 'Como se fala',
+  'material.registerNotesTitle': 'Falado × padrão',
+  'material.vocabularyTitle': 'Vocabulário',
+  'material.inReview': 'Na revisão ✓',
+  'material.removeFromReview': 'Remover',
+  'material.addToReview': 'Adicionar à revisão',
+  'material.exercisesTitle': 'Exercícios',
+  'material.alreadyCorrect': 'Você já respondeu: acertou.',
+  'material.alreadyWrong': 'Você já respondeu: errou.',
+  'material.answerError': 'Não conseguimos enviar sua resposta. Tenta de novo.',
+  'material.rateTitle': 'O que achou deste material?',
+  'material.rateLiked': 'Gostei',
+  'material.rateTooEasy': 'Fácil demais',
+  'material.rateTooHard': 'Difícil demais',
+  'material.rateThanks': 'Valeu — os próximos materiais levam isso em conta.',
+  'material.errorTitle': 'Não conseguimos abrir este material',
+
+  'materials.title': 'Meus materiais',
+  'materials.empty.title': 'Nenhum material ainda',
+  'materials.empty.description':
+    'Quando você montar um material nas ferramentas do Plus, ele aparece aqui.',
+  'materials.new': 'Montar um material',
+  'materials.evolutionTitle': 'Seu nível nos materiais',
+  'materials.evolutionUp':
+    'Você subiu {steps} nível desde o primeiro material.',
+  'materials.evolutionUpMany':
+    'Você subiu {steps} níveis desde o primeiro material.',
+  'materials.evolutionSame':
+    'Seus materiais estão no mesmo nível desde o primeiro.',
+  'materials.evolutionDown':
+    'Os materiais mais recentes estão num nível abaixo — a gente ajusta pelo que você avalia.',
+  'materials.exercises': '{count} exercícios',
+  'materials.loadMore': 'Carregar mais',
+  'materials.errorTitle': 'Não conseguimos carregar seus materiais',
 } as const;
 
 type MessageKey = keyof typeof messages;
 
-export function t(key: MessageKey): string {
-  return messages[key];
+/** `{nome}` no texto é trocado por `params.nome` — sem lib de i18n. */
+export function t(
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): string {
+  const text: string = messages[key];
+
+  if (params === undefined) {
+    return text;
+  }
+
+  return text.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in params ? String(params[name]) : match,
+  );
 }

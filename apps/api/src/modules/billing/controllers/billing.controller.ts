@@ -12,7 +12,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ActiveUserId } from 'src/common/decorators/active-user-id.decorator';
 import { IsPublic } from 'src/common/decorators/is-public.decorator';
 
-import { AI_CREDIT_COSTS } from '../domain/credits';
+import { AI_CREDIT_COSTS, nextCreditGrantAt } from '../domain/credits';
 import { CheckoutDto, CreditHistoryQueryDto } from '../dto/billing.dto';
 import { AiCreditService } from '../services/ai-credit.service';
 import { EntitlementsService } from '../services/entitlements.service';
@@ -74,6 +74,9 @@ export class BillingController {
       balance,
       monthlyAiCredits: plan.monthlyAiCredits,
       costs: AI_CREDIT_COSTS,
+      // Instante (UTC) do próximo crédito do ciclo — o app mostra no fuso
+      // do aluno. Repõe até a cota: quem está acima dela não recebe nada.
+      nextGrantAt: nextCreditGrantAt(new Date()).toISOString(),
     };
   }
 

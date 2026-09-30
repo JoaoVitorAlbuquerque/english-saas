@@ -40,3 +40,23 @@ export function monthlyTopUp(balance: number, monthlyCredits: number): number {
 export function creditCycleKey(tier: PlanTier, now: Date): string {
   return `${tier}:${now.toISOString().slice(0, 7)}`;
 }
+
+/**
+ * Quando o cron do crédito mensal roda: dia 1º, 00:05 UTC — para todo
+ * aluno, pago ou não (o pago também recebe no webhook, mas a chave do ciclo
+ * é por mês, então o cron é o que vale para o próximo mês). Mudou um, muda
+ * o outro: o scheduler lê daqui.
+ */
+export const MONTHLY_GRANT_CRON = '5 0 1 * *';
+const GRANT_MINUTE_UTC = 5;
+
+/** Próximo disparo de `MONTHLY_GRANT_CRON` depois de `now`. */
+export function nextCreditGrantAt(now: Date): Date {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const thisMonth = new Date(Date.UTC(year, month, 1, 0, GRANT_MINUTE_UTC));
+
+  return now < thisMonth
+    ? thisMonth
+    : new Date(Date.UTC(year, month + 1, 1, 0, GRANT_MINUTE_UTC));
+}

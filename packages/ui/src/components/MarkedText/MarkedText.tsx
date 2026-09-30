@@ -1,6 +1,7 @@
 import { SPAN_KIND_LABELS } from '@english-saas/shared';
 import type { Span } from '@english-saas/shared';
 import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 
 import { Mark } from '../Mark/Mark';
 import { Popover, PopoverContent, PopoverTrigger } from '../Popover/Popover';
@@ -9,6 +10,11 @@ export type MarkedTextProps = {
   text: string;
   spans: Span[];
   onSpanClick?: (span: Span, text: string) => void;
+  /**
+   * Conteúdo extra do popover, abaixo do tipo e do trecho — a explicação
+   * que a tela já tem (ex.: `explanationPtBr` do material gerado).
+   */
+  describeSpan?: (span: Span, text: string) => ReactNode;
   className?: string;
 };
 
@@ -52,6 +58,7 @@ export function MarkedText({
   text,
   spans,
   onSpanClick,
+  describeSpan,
   className,
 }: MarkedTextProps) {
   const segments = toSegments(text, spans);
@@ -82,6 +89,11 @@ export function MarkedText({
                 {SPAN_KIND_LABELS[segment.span.kind]}
               </p>
               <p className="mt-1 text-muted">&ldquo;{segment.text}&rdquo;</p>
+              {describeSpan ? (
+                <div className="mt-2 text-ink">
+                  {describeSpan(segment.span, segment.text)}
+                </div>
+              ) : null}
             </PopoverContent>
           </Popover>
         );

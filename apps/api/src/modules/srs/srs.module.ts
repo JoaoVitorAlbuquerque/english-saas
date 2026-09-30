@@ -15,6 +15,7 @@ import { ReviewLogService } from './services/review-log.service';
 import { ReviewSessionService } from './services/review-session.service';
 import { SrsUpdateService } from './services/srs-update.service';
 import { StudyTermService } from './services/study-term.service';
+import { TermReviewService } from './services/term-review.service';
 
 /**
  * Módulo 9 — srs.
@@ -48,9 +49,15 @@ import { StudyTermService } from './services/study-term.service';
     ReviewAnswerService,
     SrsUpdateService,
     StudyTermService,
+    TermReviewService,
     SrsListener,
     SrsUpdatesProcessor,
   ],
-  exports: [ReviewCardService, ReviewLogService, StudyTermService],
+  exports: [
+    ReviewCardService,
+    ReviewLogService,
+    StudyTermService,
+    TermReviewService,
+  ],
 })
 export class SrsModule {}

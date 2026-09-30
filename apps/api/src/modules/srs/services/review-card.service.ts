@@ -160,6 +160,74 @@ export class ReviewCardService {
     return updated;
   }
 
+  /**
+   * O aluno pediu o card: cria se não existe, ou reativa um suspenso — com
+   * o estado do FSRS que ele tinha, sem recomeçar do zero. Idempotente.
+   */
+  async activate(
+    userId: string,
+    kind: ReviewCardKind,
+    refId: string,
+    source: ReviewCardSource,
+    now: Date,
+  ): Promise<void> {
+    await this.prisma.reviewCard.upsert({
+      where: {
+        userId_kind_refId: {
+          userId,
+          kind: kind as PrismaReviewCardKind,
+          refId,
+        },
+      },
+      create: {
+        userId,
+        kind: kind as PrismaReviewCardKind,
+        refId,
+        source,
+        ...toRow(emptyCardState(now)),
+      },
+      update: { suspended: false },
+    });
+  }
+
+  /**
+   * Tira o card das sessões sem apagar: o `ReviewLog` continua apontando
+   * para ele, e reativar volta de onde parou. Sem card, nada a fazer.
+   */
+  async suspend(
+    userId: string,
+    kind: ReviewCardKind,
+    refId: string,
+  ): Promise<void> {
+    await this.prisma.reviewCard.updateMany({
+      where: { userId, kind: kind as PrismaReviewCardKind, refId },
+      data: { suspended: true },
+    });
+  }
+
+  /** Quais desses `refId` têm card ativo (não suspenso) do tipo dado. */
+  async activeRefIds(
+    userId: string,
+    kind: ReviewCardKind,
+    refIds: readonly string[],
+  ): Promise<Set<string>> {
+    if (refIds.length === 0) {
+      return new Set();
+    }
+
+    const rows = await this.prisma.reviewCard.findMany({
+      where: {
+        userId,
+        kind: kind as PrismaReviewCardKind,
+        refId: { in: [...refIds] },
+        suspended: false,
+      },
+      select: { refId: true },
+    });
+
+    return new Set(rows.map((row) => row.refId));
+  }
+
   /** Ids dos cards do aluno por skill — a ação "revisar" do progresso. */
   async cardIdsForSkills(
     userId: string,

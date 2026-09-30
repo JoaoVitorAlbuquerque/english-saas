@@ -15,6 +15,8 @@ import {
   type AnswerResult,
 } from 'src/modules/learning/services/answer.service';
 import { LearnerInterestService } from 'src/modules/learner-model/services/learner-interest.service';
+import { normalizeTerm } from 'src/modules/srs/domain/card-creation';
+import { TermReviewService } from 'src/modules/srs/services/term-review.service';
 
 import { ratingSignal } from '../domain/calibration';
 import type { MaterialContent } from '../domain/material';
@@ -49,6 +51,7 @@ export class MaterialService {
     private readonly taxonomy: TaxonomyService,
     private readonly answers: AnswerService,
     private readonly interests: LearnerInterestService,
+    private readonly termReview: TermReviewService,
   ) {}
 
   /** Do mais novo para o mais antigo: nível e alvos mostram a evolução. */
@@ -93,7 +96,11 @@ export class MaterialService {
     const material = await this.findOwned(userId, materialId);
     const content = await this.contentOf(material);
 
-    const [items, answered, titles] = await Promise.all([
+    const termKeys = content.vocabulary.map((entry) =>
+      normalizeTerm(entry.term),
+    );
+
+    const [items, answered, titles, inReview] = await Promise.all([
       this.catalog.studentItems(material.itemIds),
       this.answers.firstAnswersForItems(
         userId,
@@ -101,6 +108,7 @@ export class MaterialService {
         'GENERATED_MATERIAL',
       ),
       this.skillTitles(material.targetSkillIds),
+      this.termReview.activeKeys(userId, termKeys),
     ]);
     const itemsById = new Map(items.map((item) => [item.id, item]));
     const answerByItem = new Map(answered.map((row) => [row.itemId, row]));
@@ -115,7 +123,15 @@ export class MaterialService {
         id,
         title: titles.get(id) ?? id,
       })),
-      content,
+      content: {
+        ...content,
+        // `termKey` é o termo normalizado — o que as rotas de revisão do
+        // vocabulário recebem; `inReview`, se o card TERM está ativo.
+        vocabulary: content.vocabulary.map((entry, index) => {
+          const termKey = termKeys[index] ?? '';
+          return { ...entry, termKey, inReview: inReview.has(termKey) };
+        }),
+      },
       attribution: material.attribution,
       referenceUrl: material.referenceUrl,
       // Sem gabarito: o `studentItems` do catálogo já tira a resposta.
@@ -219,6 +235,65 @@ export class MaterialService {
       rating: updated.rating,
       difficulty: updated.difficulty,
     };
+  }
+
+  /**
+   * "Adicionar à revisão" de um termo do vocabulário. Idempotente: o termo
+   * que já tem card ativo continua como está; o suspenso volta de onde
+   * parou.
+   */
+  async addTermToReview(
+    userId: string,
+    materialId: string,
+    termKey: string,
+  ): Promise<{ termKey: string; inReview: boolean }> {
+    const { key, entry } = await this.vocabularyEntry(
+      userId,
+      materialId,
+      termKey,
+    );
+
+    await this.termReview.add(userId, 'GENERATED_MATERIAL', {
+      term: entry.term,
+      meaning: entry.meaningPtBr,
+      example: entry.example,
+      cefrLevel: entry.cefr,
+    });
+
+    return { termKey: key, inReview: true };
+  }
+
+  /** "Remover" da revisão: suspende o card, sem apagar o histórico. */
+  async removeTermFromReview(
+    userId: string,
+    materialId: string,
+    termKey: string,
+  ): Promise<{ termKey: string; inReview: boolean }> {
+    const { key } = await this.vocabularyEntry(userId, materialId, termKey);
+
+    await this.termReview.remove(userId, key);
+
+    return { termKey: key, inReview: false };
+  }
+
+  /** O termo precisa estar no vocabulário deste material, do aluno. */
+  private async vocabularyEntry(
+    userId: string,
+    materialId: string,
+    termKey: string,
+  ): Promise<{ key: string; entry: MaterialContent['vocabulary'][number] }> {
+    const material = await this.findOwned(userId, materialId);
+    const content = await this.contentOf(material);
+    const key = normalizeTerm(termKey);
+    const entry = content.vocabulary.find(
+      (candidate) => normalizeTerm(candidate.term) === key,
+    );
+
+    if (key.length === 0 || entry === undefined) {
+      throw new NotFoundError('Esse termo não é deste material.');
+    }
+
+    return { key, entry };
   }
 
   private async findOwned(

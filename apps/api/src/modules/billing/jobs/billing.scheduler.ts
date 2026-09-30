@@ -6,6 +6,7 @@ import { Queue } from 'bullmq';
 import { EnvService } from 'src/common/config/env.service';
 import { QUEUES } from 'src/infra/queue/queues';
 
+import { MONTHLY_GRANT_CRON } from '../domain/credits';
 import { COST_ALERT_TICK_JOB, MONTHLY_GRANT_TICK_JOB } from './billing-jobs';
 
 /**
@@ -29,7 +30,7 @@ export class BillingScheduler implements OnModuleInit {
       MONTHLY_GRANT_TICK_JOB,
       {},
       {
-        repeat: { pattern: '5 0 1 * *', tz: 'UTC' },
+        repeat: { pattern: MONTHLY_GRANT_CRON, tz: 'UTC' },
         jobId: MONTHLY_GRANT_TICK_JOB,
       },
     );

@@ -80,6 +80,8 @@ export const creditsBalanceSchema = z.object({
   balance: z.number(),
   monthlyAiCredits: z.number(),
   costs: creditCostsSchema,
+  /** Próximo crédito do ciclo (instante UTC) — exibir no fuso do aluno. */
+  nextGrantAt: z.string(),
 });
 export type CreditsBalance = z.infer<typeof creditsBalanceSchema>;
 

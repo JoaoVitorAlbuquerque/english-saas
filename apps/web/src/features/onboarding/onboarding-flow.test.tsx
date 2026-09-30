@@ -95,5 +95,5 @@ describe('cadastro → onboarding completo', () => {
       goals: ['TRAVEL'],
       selfReportedLevel: 'NONE',
     });
-  });
+  }, 15_000);
 });

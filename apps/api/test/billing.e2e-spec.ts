@@ -229,6 +229,8 @@ describe('Billing (e2e)', () => {
       balance: 500,
       monthlyAiCredits: 500,
     });
+    // Dia 1º do mês seguinte, 00:05 UTC (a regra está no billing.spec).
+    expect(afterGrant.body.nextGrantAt).toMatch(/^\d{4}-\d{2}-01T00:05:00/);
     expect(await entitlements.can(userId, 'GENERATOR_TOPIC')).toBe(true);
 
     // Consome: material por tema custa 5.

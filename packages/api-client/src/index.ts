@@ -57,3 +57,7 @@ export * from './modules/checkpoint/schemas';
 export * as billingService from './modules/billing/service';
 export * from './modules/billing/hooks';
 export * from './modules/billing/schemas';
+
+export * as generatorService from './modules/generator/service';
+export * from './modules/generator/hooks';
+export * from './modules/generator/schemas';

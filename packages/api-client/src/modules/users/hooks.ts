@@ -17,6 +17,13 @@ export function useProfile() {
   });
 }
 
+export function useInterests() {
+  return useQuery({
+    queryKey: queryKeys.meInterests,
+    queryFn: () => usersService.getInterests(),
+  });
+}
+
 /**
  * Atualiza o cache do perfil no sucesso — as guardas de onboarding leem essa
  * mesma chave e precisam ver `onboardingCompletedAt` novo sem esperar um

@@ -1,5 +1,7 @@
 import { http, HttpResponse } from 'msw';
 
+import { generatorHandlers } from './generator-handlers';
+
 const API_URL = 'http://localhost:3333';
 
 export const sessionFixture = {
@@ -903,6 +905,7 @@ export const creditsFixture = {
     GENERATOR_TOPIC: 5,
     GENERATOR_INGEST: 5,
   },
+  nextGrantAt: '2026-10-01T00:05:00.000Z',
 };
 
 export const creditsHistoryFixture = {
@@ -1492,4 +1495,6 @@ export const handlers = [
   http.get(`${API_URL}/me/credits/history`, () =>
     HttpResponse.json(creditsHistoryFixture),
   ),
+
+  ...generatorHandlers,
 ];

@@ -11,6 +11,12 @@ import { Unit } from '../features/catalog/Unit';
 import { Checkout } from '../features/billing/Checkout';
 import { Plans } from '../features/billing/Plans';
 import { Subscription } from '../features/billing/Subscription';
+import { GenerationJob } from '../features/generator/GenerationJob';
+import { IngestRequest } from '../features/generator/IngestRequest';
+import { Material } from '../features/generator/Material';
+import { Materials } from '../features/generator/Materials';
+import { Tools } from '../features/generator/Tools';
+import { TopicRequest } from '../features/generator/TopicRequest';
 import { Availability } from '../features/onboarding/Availability';
 import { Consents } from '../features/onboarding/Consents';
 import { Finish } from '../features/onboarding/Finish';
@@ -58,6 +64,15 @@ export function AppRouter() {
               <Route path="/catalogo" element={<Catalog />} />
               <Route path="/unidades/:slug" element={<Unit />} />
               <Route path="/progresso" element={<Progress />} />
+              <Route path="/ferramentas" element={<Tools />} />
+              <Route path="/ferramentas/tema" element={<TopicRequest />} />
+              <Route path="/ferramentas/colar" element={<IngestRequest />} />
+              <Route
+                path="/ferramentas/pedidos/:jobId"
+                element={<GenerationJob />}
+              />
+              <Route path="/materiais" element={<Materials />} />
+              <Route path="/materiais/:materialId" element={<Material />} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="/nivelamento" element={<Placement />} />
