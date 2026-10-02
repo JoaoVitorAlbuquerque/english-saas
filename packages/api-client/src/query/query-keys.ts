@@ -2,6 +2,8 @@
 export const queryKeys = {
   meProfile: ['me', 'profile'] as const,
   meInterests: ['me', 'interests'] as const,
+  meProgress: (weeks: number) => ['me', 'progress', weeks] as const,
+  meLearnerProfile: ['me', 'learner-profile'] as const,
   placementLatest: ['placement', 'latest'] as const,
   lesson: (slug: string) => ['lesson', slug] as const,
   correction: (id: string) => ['tutor', 'correction', id] as const,

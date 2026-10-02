@@ -403,6 +403,12 @@ fica no Redis até o modelo mudar.
 **Os exemplos de erro do snapshot são frases reais do aluno.** Vão para a
 IA como conteúdo não confiável, em mensagem separada, e nunca para log.
 
+**`GET /me/learner-profile` traz o grau de confiança de cada competência
+duas vezes**: `confidence` (texto pt-BR pronto) e `confidenceLevel`
+(`LOW | MEDIUM | HIGH`). Quem precisa decidir algo (destacar estimativa
+frágil) usa o valor; nunca compare o texto. O painel de progresso (14)
+repassa os dois em `level.competencies`.
+
 Habilidade por skill é `theta` na mesma escala logit da dificuldade do
 item, atualizada tipo Elo. Regras que não são óbvias:
 
@@ -830,7 +836,13 @@ cruas dos outros módulos.
   2 semanas, "ainda cedo".
 - Ação de cada fraqueza, nessa ordem: a lição que ensina (se não foi
   feita) → a revisão (se há card) → material do generator (só Plus) →
-  refazer a lição → a prática da agenda.
+  refazer a lição → a prática da agenda. A ação traz `type`, `refId`,
+  `label` e, só em `LESSON`, **`lessonSlug`** — a rota do front é
+  `/licoes/:slug`, e não existe rota que resolva lição por id.
+- **`topErrors` não traz as frases do aluno** — só descrição, correção,
+  contagem e tendência. Os exemplos vêm de `GET /me/learner-profile`
+  (`errors`/`observedErrors`, `yourExamples`), ligados pelo mesmo id; é
+  o front que junta as duas respostas.
 - **Receita é MRR** (anual ÷ 12) das assinaturas com acesso no dia, não
   caixa — não existe tabela de pagamento recebido. Custo de IA em US$ vira
   R$ pelo câmbio fixo `USD_BRL_RATE`, que o relatório mostra.
@@ -1030,6 +1042,29 @@ também é consumido pela API Nest, que roda a partir de `dist/`).
   `nextGrantAt` no fuso do aluno), não pelo evento global.
 - `t(key, params)` troca `{nome}` no texto — ainda sem lib de i18n.
 
+### Progresso (`apps/web/src/features/progress`)
+
+`/progresso` lê `GET /me/progress?weeks=` (período 4 / 8 / 12 / 26, padrão 8)
+e `GET /me/learner-profile` (só para as frases dos erros).
+
+- **Nível**: barras por competência na escala A1…C1; confiança `LOW` fica
+  listrada com o texto "Poucos dados", as outras mostram o rótulo da API.
+- **Evolução**: linha do nível geral (ou de uma competência) por semana, com a
+  meta (`forecast.targetLevel`) tracejada, e a previsão de chegada (cronograma
+  × ritmo) com selo de ícone e texto.
+- **Pontos fracos** com um botão cada, pelo `type` da ação
+  (`lib/weakness-action.ts`): `LESSON` → "Ver lição" (`/licoes/:slug`),
+  `REVIEW` → "Praticar agora" (`/revisao`), `PRACTICE` → "Praticar agora"
+  (`/hoje`), `MATERIAL` → "Gerar material sobre isso" (`/ferramentas/tema`).
+  "Gerar material" só aparece para Plus porque o **backend** só devolve
+  `MATERIAL` a quem tem o direito — o front não repete a regra.
+- **Aluno novo** (`lib/is-new-student.ts`: sem nível, sem estudo, sem erro)
+  vê o convite ao nivelamento, não gráficos vazios. Quem só fez o nivelamento
+  já sai desse estado.
+- A falha do `learner-profile` só tira as frases dos erros; a tela segue.
+- Datas `YYYY-MM-DD` do painel são formatadas **por string**, nunca por
+  `new Date` (o fuso deslocaria o dia).
+
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 
 Variáveis CSS lidas pelo `@theme` do Tailwind v4; o escuro sobrescreve as
@@ -1058,8 +1093,25 @@ números) — self-hospedadas via `@fontsource`, sem depender de rede externa.
 Componentes base em `packages/ui/src/components/`: Button, Input, Textarea,
 Select, Checkbox, Chip, Card, Badge, Tabs, Dialog, Sheet, Toast, Tooltip,
 Popover, ProgressBar, StepDots, CharacterAvatar, Skeleton, EmptyState,
-ErrorState, AudioButton, Mark. Cada um tem `.stories.tsx` (Ladle) e
+ErrorState, AudioButton, Mark, **BarChart, LineChart, GroupedBarChart**
+(mais `ChartFigure`, a moldura comum). Cada um tem `.stories.tsx` (Ladle) e
 `.test.tsx` (Vitest + Testing Library) ao lado.
+
+**Gráficos** (`BarChart`, `LineChart`, `GroupedBarChart`) são genéricos —
+não sabem o que é CEFR ou minuto; quem os usa traduz o dado numa escala
+(`ChartScale`). SVG/CSS próprio, sem biblioteca de gráfico. Regras que valem
+para qualquer gráfico novo (o admin, F13, reaproveita estes):
+
+- **Só tokens do design system** (`accent`, `chunk`, `ok`, `error`, `muted`,
+  `line`), então os dois temas funcionam sem código extra.
+- **Nunca só cor**: todo valor tem rótulo de texto; estimativa frágil e a
+  série "planejado" usam preenchimento **listrado** (`hatched`); série de
+  linha ganha forma de marcador própria; a legenda mostra cor e padrão.
+- **Tabela alternativa**: o desenho é `aria-hidden` e a `ChartFigure` traz os
+  mesmos números em "Ver como tabela" (`<details>`).
+- **`null` é "sem dado", não zero**: a barra vira texto, a linha abre lacuna.
+- Gráfico que pode ser largo rola **por dentro**; e o `main` do `AppShell`
+  tem `min-w-0` justamente para o conteúdo largo não dar rolagem na página.
 
 ### Como rodar
 

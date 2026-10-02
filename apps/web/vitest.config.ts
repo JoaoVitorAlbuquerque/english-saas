@@ -19,6 +19,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setup-tests.ts'],
     css: false,
+    // Os testes de tela percorrem fluxos inteiros (lição, revisão, checkout).
+    // Com os pacotes rodando em paralelo, 5 s não bastam; sozinhos, levam 1–3 s.
+    testTimeout: 15_000,
     // e2e/ é Playwright, não Vitest — cada um fica no seu comando.
     exclude: ['**/node_modules/**', 'e2e/**'],
   },

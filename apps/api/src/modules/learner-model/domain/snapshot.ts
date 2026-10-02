@@ -153,7 +153,10 @@ export type StudentProfile = {
     competency: Competency;
     label: string;
     level: CefrLevel | null;
+    /** Texto pt-BR para exibir. */
     confidence: string;
+    /** O mesmo grau como valor, para a tela decidir o que destacar. */
+    confidenceLevel: Confidence;
   }[];
   strengths: { skillId: string; title: string }[];
   weaknesses: { skillId: string; title: string; why: string }[];
@@ -211,6 +214,7 @@ export function buildStudentProfile(input: {
         label: COMPETENCY_LABELS[competency],
         level: entry.level,
         confidence: CONFIDENCE_LABELS[entry.confidence],
+        confidenceLevel: entry.confidence,
       };
     }),
     strengths: model.strengths.map((skill) => ({

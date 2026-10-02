@@ -154,6 +154,7 @@ describe('Progress (e2e)', () => {
 
     return {
       lessonId: lesson.id,
+      slug: lesson.slug,
       versionId: version.id,
       version: version.version,
       stepTypes: version.steps.map((step) => step.type),
@@ -738,6 +739,10 @@ describe('Progress (e2e)', () => {
         ),
       ).toEqual([null, 'A1', 'A2', 'A2']);
       expect(body.level.competencies).toHaveLength(6);
+      expect(body.level.competencies[0]).toMatchObject({
+        confidence: expect.any(String),
+        confidenceLevel: expect.stringMatching(/^(LOW|MEDIUM|HIGH)$/),
+      });
 
       expect(body.stats).toMatchObject({
         minutesStudied: 14 * 15,
@@ -786,6 +791,8 @@ describe('Progress (e2e)', () => {
       expect(weakness.action).toMatchObject({
         type: 'LESSON',
         refId: ana.lesson.lessonId,
+        // O slug é o que a rota `/licoes/:slug` do front recebe.
+        lessonSlug: ana.lesson.slug,
       });
       expect(weakness.action.label).toContain('Refaça');
     });
@@ -802,6 +809,7 @@ describe('Progress (e2e)', () => {
       expect(await actionFor()).toMatchObject({
         type: 'LESSON',
         refId: ana.lesson.lessonId,
+        lessonSlug: ana.lesson.slug,
       });
 
       await context.prisma.lessonAttempt.create({

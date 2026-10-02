@@ -187,9 +187,6 @@ export const messages = {
   'checkpoint.result.reinforceTitle': 'Vale reforçar',
   'checkpoint.result.close': 'Fechar',
 
-  'placeholder.progress.title': 'Seu progresso em construção',
-  'placeholder.progress.description':
-    'Aqui vão aparecer sequência, XP e evolução por competência.',
   'placeholder.profile.title': 'Perfil em construção',
   'placeholder.profile.description':
     'Aqui vão aparecer seus dados e preferências.',
@@ -486,6 +483,78 @@ export const messages = {
   'materials.exercises': '{count} exercícios',
   'materials.loadMore': 'Carregar mais',
   'materials.errorTitle': 'Não conseguimos carregar seus materiais',
+
+  'progress.title': 'Seu progresso',
+  'progress.period.label': 'Período',
+  'progress.period.weeks': '{count} semanas',
+  'progress.errorTitle': 'Não conseguimos carregar seu progresso',
+
+  'progress.empty.title': 'Seu progresso começa na primeira lição',
+  'progress.empty.description':
+    'Assim que você responder algumas questões, a gente mostra seu nível em cada habilidade, como ele evolui e o que vale reforçar.',
+  'progress.empty.placement': 'Fazer o nivelamento',
+  'progress.empty.today': 'Ver a agenda de hoje',
+
+  'progress.level.title': 'Seu nível',
+  'progress.level.overallPrefix': 'Nível geral',
+  'progress.level.chartTitle': 'Nível por habilidade',
+  'progress.level.chartDescription':
+    'Até onde você chega em cada habilidade, do A1 ao C1.',
+  'progress.level.rowHeader': 'Habilidade',
+  'progress.level.valueHeader': 'Nível',
+  'progress.level.lowConfidence': 'Poucos dados',
+  'progress.level.solidLegend': 'Estimativa com dados suficientes',
+  'progress.level.hatchedLegend': 'Poucos dados — pode mudar',
+  'progress.level.empty': 'Sem dados ainda',
+
+  'progress.evolution.title': 'Evolução do nível',
+  'progress.evolution.description': 'Seu nível ao longo das semanas.',
+  'progress.evolution.overall': 'Geral',
+  'progress.evolution.rowHeader': 'Semana',
+  'progress.evolution.empty': 'Ainda não há histórico de nível neste período.',
+  'progress.evolution.target': 'Meta: {level}',
+
+  'progress.forecast.title': 'Previsão de chegada',
+  'progress.forecast.target': 'Seu objetivo: nível {level}',
+  'progress.forecast.byPlan': 'Pelo cronograma: {date}',
+  'progress.forecast.byPace': 'Pelo seu ritmo: {date}',
+  'progress.forecast.ON_TRACK': 'No ritmo',
+  'progress.forecast.AHEAD': 'Adiantado',
+  'progress.forecast.BEHIND': 'Atrás do previsto',
+  'progress.forecast.TOO_EARLY': 'Ainda é cedo',
+  'progress.forecast.NO_STUDY': 'Sem estudo recente',
+  'progress.forecast.NO_PLAN': 'Sem cronograma',
+
+  'progress.strengths.title': 'Pontos fortes',
+  'progress.strengths.empty':
+    'Seus pontos fortes aparecem depois de algumas questões.',
+  'progress.weaknesses.title': 'Para reforçar',
+  'progress.weaknesses.empty': 'Nenhum ponto fraco por enquanto. Bom sinal.',
+  'progress.action.lesson': 'Ver lição',
+  'progress.action.practice': 'Praticar agora',
+  'progress.action.material': 'Gerar material sobre isso',
+
+  'progress.errors.title': 'Erros mais frequentes',
+  'progress.errors.empty': 'Nenhum erro se repetindo por enquanto.',
+  'progress.errors.correction': 'Melhor assim:',
+  'progress.errors.occurrences': 'Apareceu {count} de {total} vezes recentes',
+  'progress.errors.yourExamples': 'O que você escreveu:',
+
+  'progress.plan.title': 'Cumprimento do plano',
+  'progress.plan.description': 'Minutos planejados e estudados em cada semana.',
+  'progress.plan.planned': 'Planejado',
+  'progress.plan.done': 'Feito',
+  'progress.plan.minutes': '{count} min',
+  'progress.plan.rowHeader': 'Semana',
+  'progress.plan.empty': 'Sem semanas com plano neste período.',
+
+  'progress.stats.minutes': 'Minutos estudados',
+  'progress.stats.lessons': 'Lições concluídas',
+  'progress.stats.reviews': 'Revisões feitas',
+  'progress.stats.streak': 'Sequência atual',
+  'progress.stats.longestStreak': 'Maior sequência',
+  'progress.stats.day': '{count} dia',
+  'progress.stats.days': '{count} dias',
 } as const;
 
 type MessageKey = keyof typeof messages;

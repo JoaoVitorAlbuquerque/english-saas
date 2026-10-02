@@ -61,3 +61,11 @@ export * from './modules/billing/schemas';
 export * as generatorService from './modules/generator/service';
 export * from './modules/generator/hooks';
 export * from './modules/generator/schemas';
+
+export * as progressService from './modules/progress/service';
+export * from './modules/progress/hooks';
+export * from './modules/progress/schemas';
+
+export * as learnerModelService from './modules/learner-model/service';
+export * from './modules/learner-model/hooks';
+export * from './modules/learner-model/schemas';

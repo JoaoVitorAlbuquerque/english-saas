@@ -26,6 +26,13 @@ export * from './components/AudioButton/AudioButton';
 export * from './components/Mark/Mark';
 export * from './components/MarkedText/MarkedText';
 export * from './components/SpokenStandardToggle/SpokenStandardToggle';
+export * from './components/Chart/ChartFigure';
+export * from './components/Chart/ChartTable';
+export * from './components/Chart/chart-scale';
+export * from './components/Chart/chart-tones';
+export * from './components/BarChart/BarChart';
+export * from './components/LineChart/LineChart';
+export * from './components/GroupedBarChart/GroupedBarChart';
 
 export * from './items/types';
 export * from './items/to-item-view';

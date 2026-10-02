@@ -378,20 +378,33 @@ describe('progress / actions', () => {
     skillId: 'grammar.past-simple.regular',
     title: 'Past simple',
   };
-  const lesson = { lessonId: 'l1', title: 'Yesterday', completed: false };
+  const lesson = {
+    lessonId: 'l1',
+    slug: 'yesterday',
+    title: 'Yesterday',
+    completed: false,
+  };
 
   it('prioriza a lição, depois a revisão, depois o material', () => {
+    // A lição leva o slug — é o que a rota `/licoes/:slug` do front recebe.
     expect(
-      suggestAction(weakness, { lesson, reviewCardId: 'c1', canGenerate: true })
-        .type,
-    ).toBe('LESSON');
+      suggestAction(weakness, {
+        lesson,
+        reviewCardId: 'c1',
+        canGenerate: true,
+      }),
+    ).toMatchObject({
+      type: 'LESSON',
+      refId: 'l1',
+      lessonSlug: 'yesterday',
+    });
     expect(
       suggestAction(weakness, {
         lesson: { ...lesson, completed: true },
         reviewCardId: 'c1',
         canGenerate: true,
       }),
-    ).toMatchObject({ type: 'REVIEW', refId: 'c1' });
+    ).toMatchObject({ type: 'REVIEW', refId: 'c1', lessonSlug: null });
     expect(
       suggestAction(weakness, {
         lesson: { ...lesson, completed: true },
@@ -408,7 +421,11 @@ describe('progress / actions', () => {
         reviewCardId: null,
         canGenerate: false,
       }),
-    ).toMatchObject({ type: 'LESSON', label: 'Refaça a lição "Yesterday"' });
+    ).toMatchObject({
+      type: 'LESSON',
+      label: 'Refaça a lição "Yesterday"',
+      lessonSlug: 'yesterday',
+    });
     expect(
       suggestAction(weakness, {
         lesson: null,
@@ -420,11 +437,11 @@ describe('progress / actions', () => {
 
   it('acha a primeira lição do curso que ensina a skill', () => {
     const map = lessonBySkill([
-      { lessonId: 'l1', title: 'A', targetSkillIds: ['s1'] },
-      { lessonId: 'l2', title: 'B', targetSkillIds: ['s1', 's2'] },
+      { lessonId: 'l1', slug: 'a', title: 'A', targetSkillIds: ['s1'] },
+      { lessonId: 'l2', slug: 'b', title: 'B', targetSkillIds: ['s1', 's2'] },
     ]);
 
-    expect(map.get('s1')?.lessonId).toBe('l1');
+    expect(map.get('s1')).toMatchObject({ lessonId: 'l1', slug: 'a' });
     expect(map.get('s2')?.lessonId).toBe('l2');
     expect(accuracyLabel(4, 3)).toBe('75% de acerto de primeira (3 de 4)');
   });

@@ -979,5 +979,21 @@ describe('ponto de partida do nivelamento', () => {
       level: null,
       confidence: 'LOW',
     });
+
+    // O perfil do aluno traz o grau como texto E como valor: a tela destaca a
+    // estimativa frágil sem comparar frase.
+    const { competencies } = buildStudentProfile({ model, goals: [] });
+    expect(
+      competencies.find((entry) => entry.competency === 'GRAMMAR'),
+    ).toMatchObject({
+      confidence: 'Estimativa razoável',
+      confidenceLevel: 'MEDIUM',
+    });
+    expect(
+      competencies.find((entry) => entry.competency === 'SPEAKING'),
+    ).toMatchObject({
+      confidence: 'Ainda poucos dados',
+      confidenceLevel: 'LOW',
+    });
   });
 });
