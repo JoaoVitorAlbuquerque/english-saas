@@ -42,6 +42,25 @@ describe('apiFetch', () => {
     );
   });
 
+  it('trata corpo vazio com 200 (o Nest devolve assim um `null`) como null', async () => {
+    setAccessToken('token-123');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => new Response('', { status: 200 })),
+    );
+
+    await expect(
+      apiFetch('/me/export', {
+        schema: z.object({ id: z.string() }).nullable(),
+      }),
+    ).resolves.toBeNull();
+
+    // Quem não declara `nullable()` continua recusando.
+    await expect(
+      apiFetch('/me/export', { schema: z.object({ id: z.string() }) }),
+    ).rejects.toThrow();
+  });
+
   it('em 401 tenta o refresh e repete a chamada original uma vez', async () => {
     setAccessToken('expired');
     const fetchMock = vi

@@ -187,9 +187,210 @@ export const messages = {
   'checkpoint.result.reinforceTitle': 'Vale reforçar',
   'checkpoint.result.close': 'Fechar',
 
-  'placeholder.profile.title': 'Perfil em construção',
-  'placeholder.profile.description':
-    'Aqui vão aparecer seus dados e preferências.',
+  'auth.login.accountDeletedTitle': 'Sua conta foi excluída',
+  'auth.login.accountDeleted':
+    'Ela saiu do ar agora. Seus dados pessoais serão anonimizados em {days} dias, até {date}.',
+
+  'interests.full':
+    'Você chegou ao limite de {max} temas. Tire um para pôr outro.',
+
+  'profile.title': 'Perfil',
+  'profile.back': 'Voltar ao perfil',
+  'profile.errorTitle': 'Não conseguimos carregar seu perfil',
+  'profile.cancel': 'Cancelar',
+
+  'profile.account.title': 'Seus dados',
+  'profile.account.name': 'Nome',
+  'profile.account.nameInvalid': 'Escreva um nome com pelo menos 2 letras.',
+  'profile.account.email': 'E-mail',
+  'profile.account.emailHint':
+    'O e-mail não pode ser alterado por aqui por enquanto.',
+  'profile.account.emailVerified': 'E-mail confirmado',
+  'profile.account.emailUnverified': 'E-mail ainda não confirmado',
+  'profile.account.timezone': 'Fuso horário',
+  'profile.account.timezoneHint':
+    'Define quando o seu dia começa e a hora dos lembretes. Se mudar, recalculamos o plano.',
+  'profile.account.save': 'Salvar alterações',
+  'profile.account.saved': 'Dados salvos',
+  'profile.account.saveError': 'Não conseguimos salvar agora. Tente de novo.',
+
+  'profile.links.title': 'Configurações',
+  'profile.links.study': 'Estudo',
+  'profile.links.studyDescription':
+    'Objetivos, tempo disponível, nível-alvo e interesses',
+  'profile.links.notifications': 'Notificações',
+  'profile.links.notificationsDescription':
+    'Lembretes por e-mail e no navegador',
+  'profile.links.privacy': 'Privacidade e conta',
+  'profile.links.privacyDescription':
+    'Consentimentos, seus dados e exclusão da conta',
+  'profile.links.subscriptionDescription': 'Plano, pagamento e créditos de IA',
+
+  'profile.session.title': 'Sessão',
+  'profile.session.logout': 'Sair',
+  'profile.session.logoutAll': 'Sair de todos os dispositivos',
+  'profile.session.logoutAllTitle': 'Sair de todos os dispositivos?',
+  'profile.session.logoutAllDescription':
+    'Vamos encerrar a sessão em todos os aparelhos onde você entrou, inclusive neste. Você vai precisar entrar de novo.',
+  'profile.session.logoutAllConfirm': 'Sair de todos',
+  'profile.session.logoutError':
+    'Não conseguimos encerrar a sessão agora. Confira a conexão e tente de novo.',
+
+  'profile.study.title': 'Estudo',
+  'profile.study.errorTitle':
+    'Não conseguimos carregar suas configurações de estudo',
+  'profile.study.goalsTitle': 'Seus objetivos',
+  'profile.study.goalsEmpty': 'Escolha pelo menos um objetivo.',
+  'profile.study.availabilityTitle': 'Tempo para estudar',
+  'profile.study.availabilityDescription':
+    'Quantos minutos você consegue estudar em cada dia. O plano se ajusta a isso.',
+  'profile.study.weeklyTotal': 'Total por semana: {minutes} min',
+  'profile.study.targetTitle': 'Sua meta',
+  'profile.study.targetLevel': 'Nível que você quer alcançar',
+  'profile.study.targetDate': 'Data-alvo (opcional)',
+  'profile.study.targetDateHint':
+    'O plano usa a data para avisar se o seu ritmo dá conta.',
+  'profile.study.targetDateClear': 'Tirar a data-alvo',
+  'profile.study.targetDatePast': 'Escolha uma data a partir de amanhã.',
+  'profile.study.interestsTitle': 'Interesses',
+  'profile.study.interestsDescription':
+    'Os materiais e os exemplos puxam para esses temas.',
+  'profile.study.save': 'Salvar',
+  'profile.study.saved': 'Estudo atualizado.',
+  'profile.study.savedReplan': 'Salvo. Estamos recalculando o seu plano.',
+  'profile.study.saveError':
+    'Não conseguimos salvar agora. Nada mudou; tente de novo.',
+  'profile.study.partialError':
+    'Parte das mudanças foi salva e parte não. Confira a tela e tente de novo.',
+  'profile.study.replanTitle': 'Recalcular o seu plano?',
+  'profile.study.replanDescription':
+    'O que você mudou altera o seu plano de estudo. Vamos recalcular a trilha e a agenda com isso. O que você já estudou continua contando.',
+  'profile.study.replanConfirm': 'Salvar e recalcular',
+  'profile.study.replanBack': 'Voltar',
+
+  'profile.notifications.title': 'Notificações',
+  'profile.notifications.description':
+    'Escolha o que avisar e quando. No máximo um lembrete por dia.',
+  'profile.notifications.errorTitle':
+    'Não conseguimos carregar suas notificações',
+  'profile.notifications.saved': 'Preferência salva.',
+  'profile.notifications.saveError':
+    'Não conseguimos salvar agora. Nada mudou; tente de novo.',
+  'profile.notifications.channelsTitle': 'Por onde avisar',
+  'profile.notifications.channelEmail': 'E-mail',
+  'profile.notifications.allOff':
+    'Com e-mail e navegador desligados, você não recebe nenhum aviso.',
+  'profile.notifications.typesTitle': 'O que avisar',
+  'profile.notifications.typeDaily': 'Lembrete diário',
+  'profile.notifications.typeDailyHint':
+    'Quando o plano de hoje ainda não foi começado.',
+  'profile.notifications.typeReview': 'Revisões acumulando',
+  'profile.notifications.typeReviewHint':
+    'Quando passam de 25 as revisões vencidas.',
+  'profile.notifications.typeWeekly': 'Resumo semanal',
+  'profile.notifications.typeWeeklyHint':
+    'Toda segunda-feira, por e-mail, com os números da semana.',
+  'profile.notifications.timeTitle': 'Horários',
+  'profile.notifications.reminderHour': 'Hora do lembrete',
+  'profile.notifications.followStudyTime':
+    'Seguir o meu horário de estudo ({hour})',
+  'profile.notifications.quietTitle': 'Horário silencioso',
+  'profile.notifications.quietDescription':
+    'Nesse intervalo, nenhum aviso é enviado.',
+  'profile.notifications.quietStart': 'Começa às',
+  'profile.notifications.quietEnd': 'Termina às',
+  'profile.notifications.hourInQuiet':
+    'Essa hora cai no horário silencioso. Escolha outra ou ajuste o silencioso.',
+  'profile.notifications.quietCoversReminder':
+    'O lembrete de {hour} cairia dentro desse silencioso. Mude a hora do lembrete primeiro.',
+
+  'profile.push.title': 'Avisos no navegador',
+  'profile.push.description':
+    'Um aviso na tela do computador ou do celular, mesmo com o site fechado.',
+  'profile.push.enable': 'Ativar avisos no navegador',
+  'profile.push.disable': 'Desativar neste navegador',
+  'profile.push.test': 'Enviar um aviso de teste',
+  'profile.push.testSent':
+    'Enviamos um aviso de teste. Ele deve aparecer em instantes.',
+  'profile.push.testNotDelivered':
+    'Não conseguimos entregar o teste neste navegador. Tente ativar de novo.',
+  'profile.push.activeOne': 'Ativo em {count} dispositivo.',
+  'profile.push.activeMany': 'Ativo em {count} dispositivos.',
+  'profile.push.activeNotHere':
+    'Este navegador ainda não está inscrito. Ative para receber aqui.',
+  'profile.push.unsupported':
+    'Este navegador não recebe avisos. No iPhone, instale o site na tela inicial (Compartilhar → Adicionar à Tela de Início) para receber. Por e-mail já funciona.',
+  'profile.push.denied':
+    'Você bloqueou os avisos neste navegador. Para ativar, libere as notificações deste site nas configurações do navegador.',
+  'profile.push.dismissed':
+    'Você fechou o pedido sem escolher. Quando quiser, é só tentar de novo.',
+  'profile.push.unavailable':
+    'Os avisos no navegador ainda não estão disponíveis. Por enquanto, os lembretes vão por e-mail.',
+  'profile.push.error': 'Não conseguimos mudar os avisos agora. Tente de novo.',
+
+  'profile.privacy.title': 'Privacidade e conta',
+  'profile.privacy.consentsTitle': 'Consentimentos',
+  'profile.privacy.consentsDescription':
+    'O que você aceitou, e a versão do documento que valia na hora.',
+  'profile.privacy.consentTERMS': 'Termos de uso',
+  'profile.privacy.consentPRIVACY_POLICY': 'Política de privacidade',
+  'profile.privacy.consentDATA_PERSONALIZATION':
+    'Personalizar meu estudo com base no meu progresso e nos meus interesses',
+  'profile.privacy.consentMARKETING': 'Receber novidades e ofertas por e-mail',
+  'profile.privacy.consentRequired': 'Obrigatório para ter uma conta.',
+  'profile.privacy.consentVersion': 'Versão {version}',
+  'profile.privacy.consentGranted': 'Aceito em {date} · versão {version}',
+  'profile.privacy.consentRevoked': 'Retirado em {date}',
+  'profile.privacy.consentNever': 'Ainda não respondido',
+  'profile.privacy.consentOutdated': 'Há uma versão nova deste documento.',
+  'profile.privacy.consentAccept': 'Aceitar a versão nova',
+  'profile.privacy.consentError':
+    'Não conseguimos salvar agora. Nada mudou; tente de novo.',
+  'profile.privacy.consentsErrorTitle':
+    'Não conseguimos carregar seus consentimentos',
+  'profile.privacy.revokeTitle': 'Retirar a personalização?',
+  'profile.privacy.revokeDescription':
+    'Esse aceite é o que permite ajustar o seu estudo ao seu progresso, e a personalização é o centro da plataforma. Registramos a sua escolha; se quiser parar de vez, você também pode excluir a conta, mais abaixo.',
+  'profile.privacy.revokeConfirm': 'Retirar consentimento',
+  'profile.privacy.revokeKeep': 'Manter',
+
+  'profile.export.title': 'Meus dados',
+  'profile.export.description':
+    'Baixe uma cópia dos dados da sua conta, em um arquivo JSON.',
+  'profile.export.request': 'Pedir meus dados',
+  'profile.export.requestAgain': 'Pedir de novo',
+  'profile.export.retry': 'Tentar de novo',
+  'profile.export.pending':
+    'Estamos juntando seus dados. Pode sair desta tela: o link aparece aqui quando ficar pronto.',
+  'profile.export.ready': 'Seus dados estão prontos.',
+  'profile.export.download': 'Baixar meus dados',
+  'profile.export.readyInfo': 'Tamanho: {size} · o link vale até {date}.',
+  'profile.export.expired':
+    'O link do último pedido venceu. Peça de novo para gerar outro.',
+  'profile.export.failed': 'Não conseguimos montar seus dados. Tente de novo.',
+  'profile.export.requestError':
+    'Não conseguimos fazer o pedido agora. Tente de novo.',
+  'profile.export.loadError': 'Não conseguimos ver o estado do seu pedido.',
+
+  'profile.delete.title': 'Excluir minha conta',
+  'profile.delete.description':
+    'Sua conta sai do ar na hora e seus dados pessoais são anonimizados em {days} dias. Depois disso, não dá para recuperar.',
+  'profile.delete.open': 'Excluir minha conta',
+  'profile.delete.dialogTitle': 'Excluir a sua conta?',
+  'profile.delete.pointNow':
+    'Sua conta sai do ar agora e você é desconectado de todos os dispositivos.',
+  'profile.delete.pointAnonymize':
+    'Em {days} dias, seu nome, e-mail e dados pessoais são anonimizados. Não há como desfazer depois disso.',
+  'profile.delete.pointSubscription':
+    'Se você tem assinatura, ela é cancelada.',
+  'profile.delete.pointExport':
+    'Quer guardar seus dados? Peça a exportação antes de excluir.',
+  'profile.delete.confirmWord': 'EXCLUIR',
+  'profile.delete.confirmLabel': 'Para confirmar, digite {word}',
+  'profile.delete.confirm': 'Excluir minha conta',
+  'profile.delete.keep': 'Manter minha conta',
+  'profile.delete.error':
+    'Não conseguimos excluir sua conta agora. Nada foi alterado; tente de novo.',
 
   'notFound.title': 'Página não encontrada',
   'notFound.description': 'O endereço que você tentou acessar não existe.',

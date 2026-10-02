@@ -8,11 +8,15 @@ import {
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
+import { t } from '../../../messages/pt-BR';
 import { useAuthStore } from '../../../stores/auth-store';
+import { useSessionNoticeStore } from '../../../stores/session-notice-store';
 
 export function useLoginController() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
+  const accountDeleted = useSessionNoticeStore((state) => state.accountDeleted);
+  const clearNotice = useSessionNoticeStore((state) => state.clear);
   const signIn = useSignIn();
   const googleUrl = useGoogleUrl();
 
@@ -27,6 +31,7 @@ export function useLoginController() {
   const handleSubmit = hookFormSubmit(async (data) => {
     try {
       const session = await signIn.mutateAsync(data);
+      clearNotice();
       setSession(session.user);
       navigate('/', { replace: true });
     } catch {
@@ -44,6 +49,15 @@ export function useLoginController() {
   };
 
   return {
+    accountDeletedMessage:
+      accountDeleted === null
+        ? null
+        : t('auth.login.accountDeleted', {
+            days: accountDeleted.daysRemaining,
+            date: new Date(accountDeleted.anonymizeAt).toLocaleDateString(
+              'pt-BR',
+            ),
+          }),
     register,
     errors,
     handleSubmit,

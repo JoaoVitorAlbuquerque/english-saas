@@ -1065,6 +1065,67 @@ e `GET /me/learner-profile` (só para as frases dos erros).
 - Datas `YYYY-MM-DD` do painel são formatadas **por string**, nunca por
   `new Date` (o fuso deslocaria o dia).
 
+### Perfil e configurações (`apps/web/src/features/profile`)
+
+| Rota                   | Tela                   | O que tem                                                                                   |
+| ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------- |
+| `/perfil`              | `Profile` (hub)        | Avatar de iniciais, nome, e-mail (só leitura), fuso, atalhos, **Sair** e **Sair de todos**. |
+| `/perfil/estudo`       | `StudySettings`        | Objetivos, disponibilidade, horário preferido, nível-alvo, data-alvo, interesses.           |
+| `/perfil/notificacoes` | `NotificationSettings` | Canais, tipos, hora do lembrete, horário silencioso, push do navegador.                     |
+| `/perfil/privacidade`  | `Privacy`              | Consentimentos, exportar meus dados, excluir a conta.                                       |
+
+- **Foto não existe**: o `User` não tem campo de avatar nem há rota de upload
+  (o `avatarAssetId` do schema é do `Character`). O avatar é de iniciais
+  (`lib/initials.ts`). **O e-mail também é só leitura** — não há rota de troca.
+- **Estudo — ordem do save** (`lib/study-settings.ts`, `diffStudySettings`):
+  só vai o que mudou. `PATCH /me/profile` (a disponibilidade vai **inteira**,
+  os 7 dias: o schema compartilhado preenche com 0 o que falta e o back-end
+  troca a semana toda) → `PUT /me/interests` → `POST /me/plan/rebuild
+{targetLevel}` só se o nível-alvo mudou. **Nível-alvo não é do perfil**:
+  mora em `StudyPlan.targetLevel`. Disponibilidade, data-alvo, objetivos e
+  nível-alvo fazem o planner recalcular — antes do save, um diálogo avisa; o
+  horário preferido, a observação e os interesses salvam direto. Se uma etapa
+  falha, o que já entrou fica salvo e a tela mostra só o que falta.
+- **Push** (`lib/web-push.ts`, ambiente do navegador injetável): a permissão
+  só é pedida **dentro do clique de "Ativar"** — nunca ao montar a tela, e a
+  chamada vem antes de qualquer `await` (o Safari exige o gesto). Ordem:
+  suporte → permissão → worker → `getSubscription` (reaproveita) ou
+  `subscribe` com a chave VAPID → `POST push/subscriptions`. `DELETE
+push/subscriptions` **não** desliga o canal: desativar também manda
+  `PATCH channels.push=false`. Sem suporte (iPhone fora do PWA), negado e
+  `PUSH_UNAVAILABLE` (sem VAPID no servidor) têm texto próprio; o e-mail segue.
+- **`public/push-sw.js` registra em escopo próprio (`/push-sw/`)**: push só
+  precisa de uma registration, não de controlar as páginas, e assim não disputa
+  o escopo `/` com o `mockServiceWorker.js` do MSW do build de e2e (um escopo
+  só aceita um worker). Não faz cache; mostra `{title, body}` como texto e, no
+  clique, abre só caminho do próprio site (`url`).
+- **Notificações salvam ao mudar** (PATCH parcial, otimista, volta ao valor
+  anterior se o servidor recusar). `reminderHour: null` = seguir o horário de
+  estudo do perfil (a API devolve `effectiveReminderHour`). `lib/hours.ts`
+  espelha `isQuietHour` só para avisar antes do request; a API é quem recusa
+  (422 `REMINDER_HOUR_IN_QUIET_TIME`).
+- **Consentimentos**: `TERMS` e `PRIVACY_POLICY` são obrigatórios (sem
+  interruptor); os outros dois alternam. Retirar `DATA_PERSONALIZATION` pede
+  confirmação. **Hoje o back-end só registra o aceite — nenhum módulo
+  consulta `DATA_PERSONALIZATION` nem `MARKETING`** —, então a tela não promete
+  efeito além do registro.
+- **Exportar**: `GET /me/export` é o estado (corpo **vazio** com 200 quando
+  nunca houve pedido — o `apiFetch` lê corpo vazio como `null`); `useLatestExport`
+  consulta a cada 3 s enquanto `PENDING`, então sair e voltar retoma sozinho.
+  READY sem `downloadUrl` = link vencido.
+- **Excluir a conta**: o aluno digita **EXCLUIR**; o diálogo explica o prazo
+  (`ANONYMIZATION_GRACE_DAYS` = 30), o cancelamento da assinatura e sugere
+  exportar antes. Sucesso: limpa o token, o cache e a sessão e cai em
+  `/login` com o recado do prazo. O recado vai por `stores/session-notice-store`
+  porque o `AuthGuard` redireciona sozinho para `/login`, sem `state` de
+  navegação.
+- **Sair**: só sai se o servidor confirmar; falha mostra erro e continua
+  logado (senão o cookie de refresh ficaria válido e a sessão voltaria no
+  reload). `POST /auth/logout-all` responde 200 com `{revoked}`, **não** 204.
+- Componentes compartilhados com o onboarding: `components/InterestPicker`
+  (o tema livre vira slug — `copa-do-mundo` — porque a API só aceita
+  `^[a-z0-9][a-z0-9-]*$`) e `components/WeekdayMinutesGrid`.
+
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 
 Variáveis CSS lidas pelo `@theme` do Tailwind v4; o escuro sobrescreve as

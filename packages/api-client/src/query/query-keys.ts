@@ -2,6 +2,9 @@
 export const queryKeys = {
   meProfile: ['me', 'profile'] as const,
   meInterests: ['me', 'interests'] as const,
+  meConsents: ['me', 'consents'] as const,
+  meExport: ['me', 'export'] as const,
+  meNotificationPreferences: ['me', 'notifications', 'preferences'] as const,
   meProgress: (weeks: number) => ['me', 'progress', weeks] as const,
   meLearnerProfile: ['me', 'learner-profile'] as const,
   placementLatest: ['placement', 'latest'] as const,

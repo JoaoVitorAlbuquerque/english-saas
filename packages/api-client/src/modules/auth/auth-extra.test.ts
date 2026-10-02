@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { configureApiClient } from '../../http/config';
-import { clearAccessToken, getAccessToken } from '../../http/token-store';
+import {
+  clearAccessToken,
+  getAccessToken,
+  setAccessToken,
+} from '../../http/token-store';
 import {
   forgotPassword,
   getGoogleUrl,
+  logoutAll,
   resendVerification,
   resetPassword,
   signinWithGoogle,
@@ -40,6 +45,22 @@ describe('forgotPassword', () => {
       'http://api.local/auth/forgot-password',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+});
+
+describe('logoutAll', () => {
+  it('aceita o 200 com `{ revoked }` que a API devolve e limpa o token', async () => {
+    setAccessToken('token-123');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ revoked: 3 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(logoutAll()).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/auth/logout-all',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(getAccessToken()).toBeNull();
   });
 });
 

@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 
 import { generatorHandlers } from './generator-handlers';
+import { profileHandlers } from './profile-handlers';
 import { progressHandlers } from './progress-handlers';
 
 const API_URL = 'http://localhost:3333';
@@ -1499,4 +1500,5 @@ export const handlers = [
 
   ...generatorHandlers,
   ...progressHandlers,
+  ...profileHandlers,
 ];

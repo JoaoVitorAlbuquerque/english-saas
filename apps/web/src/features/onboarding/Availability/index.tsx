@@ -2,7 +2,7 @@ import { Button, Chip } from '@english-saas/ui';
 
 import { t } from '../../../messages/pt-BR';
 import { useAvailabilityController } from './useAvailabilityController';
-import { WeekdayMinutesGrid } from './WeekdayMinutesGrid';
+import { WeekdayMinutesGrid } from '../../../components/WeekdayMinutesGrid';
 
 export function Availability() {
   const {

@@ -66,6 +66,11 @@ export * as progressService from './modules/progress/service';
 export * from './modules/progress/hooks';
 export * from './modules/progress/schemas';
 
+export * as notificationsService from './modules/notifications/service';
+export * from './modules/notifications/hooks';
+export * from './modules/notifications/schemas';
+export { applyPreferencesPatch } from './modules/notifications/apply-patch';
+
 export * as learnerModelService from './modules/learner-model/service';
 export * from './modules/learner-model/hooks';
 export * from './modules/learner-model/schemas';

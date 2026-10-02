@@ -32,6 +32,12 @@ export function useLogout() {
   });
 }
 
+export function useLogoutAll() {
+  return useMutation<void, ApiError, void>({
+    mutationFn: () => authService.logoutAll(),
+  });
+}
+
 export function useForgotPassword() {
   return useMutation<void, ApiError, ForgotPasswordRequest>({
     mutationFn: (input) => authService.forgotPassword(input),

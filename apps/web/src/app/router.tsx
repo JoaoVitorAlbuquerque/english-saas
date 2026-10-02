@@ -24,7 +24,10 @@ import { Goal } from '../features/onboarding/Goal';
 import { Interests } from '../features/onboarding/Interests';
 import { Level } from '../features/onboarding/Level';
 import { OnboardingLayout } from '../features/onboarding/OnboardingLayout';
+import { NotificationSettings } from '../features/profile/NotificationSettings';
+import { Privacy } from '../features/profile/Privacy';
 import { Profile } from '../features/profile/Profile';
+import { StudySettings } from '../features/profile/StudySettings';
 import { Progress } from '../features/progress/Progress';
 import { Today } from '../features/today/Today';
 import { Review } from '../features/review/Review';
@@ -74,6 +77,12 @@ export function AppRouter() {
               <Route path="/materiais" element={<Materials />} />
               <Route path="/materiais/:materialId" element={<Material />} />
               <Route path="/perfil" element={<Profile />} />
+              <Route path="/perfil/estudo" element={<StudySettings />} />
+              <Route
+                path="/perfil/notificacoes"
+                element={<NotificationSettings />}
+              />
+              <Route path="/perfil/privacidade" element={<Privacy />} />
             </Route>
             <Route path="/nivelamento" element={<Placement />} />
             <Route path="/licoes/:slug" element={<Lesson />} />

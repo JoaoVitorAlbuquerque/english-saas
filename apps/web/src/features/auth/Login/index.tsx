@@ -6,6 +6,7 @@ import { useLoginController } from './useLoginController';
 
 export function Login() {
   const {
+    accountDeletedMessage,
     register,
     errors,
     handleSubmit,
@@ -19,6 +20,17 @@ export function Login() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-ground p-4">
       <Card className="w-full max-w-sm">
+        {accountDeletedMessage !== null ? (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-line bg-ground p-3"
+          >
+            <p className="text-sm font-medium text-ink">
+              {t('auth.login.accountDeletedTitle')}
+            </p>
+            <p className="mt-1 text-sm text-muted">{accountDeletedMessage}</p>
+          </div>
+        ) : null}
         <h1 className="font-display text-2xl text-ink">
           {t('auth.login.title')}
         </h1>

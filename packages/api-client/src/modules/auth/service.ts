@@ -69,7 +69,11 @@ export async function logout(): Promise<void> {
 
 export async function logoutAll(): Promise<void> {
   try {
-    await apiFetch('/auth/logout-all', { method: 'POST', schema: z.void() });
+    // A API responde 200 com `{ revoked }` (quantas sessões encerrou), não 204.
+    await apiFetch('/auth/logout-all', {
+      method: 'POST',
+      schema: z.object({ revoked: z.number() }),
+    });
   } finally {
     clearAccessToken();
   }

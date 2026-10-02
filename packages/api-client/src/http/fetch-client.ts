@@ -71,7 +71,11 @@ async function performRequest<T>(
     return undefined as T;
   }
 
-  const json: unknown = await response.json();
+  // O Nest responde `return null` com 200 e corpo vazio (ex.: `GET /me/export`
+  // sem nenhum export ainda). Corpo vazio vale `null`: quem aceita ausência
+  // declara `nullable()` no schema; para os demais, o `parse` recusa.
+  const text = await response.text();
+  const json: unknown = text === '' ? null : JSON.parse(text);
 
   return options.schema.parse(json);
 }

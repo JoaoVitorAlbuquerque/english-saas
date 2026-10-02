@@ -1,19 +1,11 @@
-import { Button, Chip, Input } from '@english-saas/ui';
+import { Button } from '@english-saas/ui';
 
+import { InterestPicker } from '../../../components/InterestPicker';
 import { t } from '../../../messages/pt-BR';
 import { useInterestsController } from './useInterestsController';
 
 export function Interests() {
-  const {
-    search,
-    setSearch,
-    selected,
-    suggestions,
-    addInterest,
-    removeInterest,
-    canAddCustom,
-    handleContinue,
-  } = useInterestsController();
+  const { selected, setSelected, handleContinue } = useInterestsController();
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -26,56 +18,7 @@ export function Interests() {
         </p>
       </div>
 
-      <Input
-        placeholder={t('onboarding.step.interests.search')}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
-
-      {selected.length > 0 ? (
-        <div>
-          <p className="mb-2 text-sm font-medium text-ink">
-            {t('onboarding.step.interests.selected')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {selected.map((interest) => (
-              <Chip
-                key={interest.topic}
-                selected
-                onClick={() => removeInterest(interest.topic)}
-              >
-                {interest.label}
-              </Chip>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div>
-        <p className="mb-2 text-sm font-medium text-ink">
-          {t('onboarding.step.interests.suggestions')}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {canAddCustom ? (
-            <Chip onClick={() => addInterest(search)}>
-              {t('onboarding.step.interests.addCustom')} "{search.trim()}"
-            </Chip>
-          ) : null}
-          {suggestions.map((suggestion) => (
-            <Chip
-              key={suggestion.topic}
-              onClick={() => addInterest(suggestion.topic)}
-            >
-              {suggestion.label}
-            </Chip>
-          ))}
-          {suggestions.length === 0 && !canAddCustom ? (
-            <p className="text-sm text-muted">
-              {t('onboarding.step.interests.empty')}
-            </p>
-          ) : null}
-        </div>
-      </div>
+      <InterestPicker value={selected} onChange={setSelected} />
 
       <Button className="mt-auto" onClick={handleContinue}>
         {t('onboarding.continue')}
