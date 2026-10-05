@@ -1,6 +1,7 @@
 import {
   cefrLevelSchema,
   contentSlugSchema,
+  lessonVersionMetaPatchSchema,
   lessonStepTypeSchema,
   taxonomySlugSchema,
 } from '@english-saas/shared';
@@ -24,13 +25,7 @@ export class CreateLessonDto extends createZodDto(
 ) {}
 
 export class UpdateLessonVersionDto extends createZodDto(
-  z.object({
-    title: z.string().trim().min(2).max(160).optional(),
-    objective: z.string().trim().min(4).max(500).optional(),
-    cefrLevel: cefrLevelSchema.optional(),
-    estimatedMinutes: z.number().int().min(1).max(180).optional(),
-    targetSkillIds: z.array(taxonomySlugSchema).max(20).optional(),
-  }),
+  lessonVersionMetaPatchSchema,
 ) {}
 
 /**
@@ -52,5 +47,13 @@ export class ReplaceStepsDto extends createZodDto(
         }),
       )
       .max(40),
+  }),
+) {}
+
+export class ReorderLessonsDto extends createZodDto(
+  z.object({
+    unitId: z.uuid(),
+    /** As lições da unidade, todas, na ordem nova. */
+    ids: z.array(z.uuid()).min(1).max(200),
   }),
 ) {}

@@ -900,4 +900,480 @@ describe('Curriculum (e2e)', () => {
 
     expect(units.body.data).toHaveLength(0);
   });
+
+  // -------------------------------------------------------------------
+  // Autoria para o editor do admin: reordenar, rascunho tolerante, preview,
+  // busca de skill e upload de imagem
+  // -------------------------------------------------------------------
+
+  describe('suporte ao editor', () => {
+    const asEditor = (fixture: Fixture) => ({
+      Authorization: `Bearer ${fixture.editor}`,
+    });
+
+    async function createLesson(
+      fixture: Fixture,
+      slug: string,
+      order: number,
+    ): Promise<string> {
+      const response = await http()
+        .post('/admin/curriculum/lessons')
+        .set(asEditor(fixture))
+        .send({
+          unitId: fixture.unitId,
+          slug,
+          order,
+          title: `Lição ${slug}`,
+          objective: 'Se apresentar.',
+          cefrLevel: 'A1',
+        })
+        .expect(201);
+
+      return response.body.id as string;
+    }
+
+    it('reordena as lições da unidade sem esbarrar na unicidade', async () => {
+      const fixture = await buildFixture();
+      const second = await createLesson(fixture, 'second', 5);
+      const third = await createLesson(fixture, 'third', 9);
+
+      const response = await http()
+        .post('/admin/curriculum/lessons/reorder')
+        .set(asEditor(fixture))
+        .send({
+          unitId: fixture.unitId,
+          ids: [third, fixture.lessonId, second],
+        })
+        .expect(201);
+
+      expect(
+        response.body.map((lesson: { id: string; order: number }) => [
+          lesson.id,
+          lesson.order,
+        ]),
+      ).toEqual([
+        [third, 0],
+        [fixture.lessonId, 1],
+        [second, 2],
+      ]);
+    });
+
+    it('recusa reordenar com lista que não bate com a unidade', async () => {
+      const fixture = await buildFixture();
+      const second = await createLesson(fixture, 'second', 1);
+
+      const missing = await http()
+        .post('/admin/curriculum/lessons/reorder')
+        .set(asEditor(fixture))
+        .send({ unitId: fixture.unitId, ids: [second] })
+        .expect(422);
+
+      expect(missing.body.error.code).toBe('REORDER_MISMATCH');
+      expect(missing.body.error.details.missing).toEqual([fixture.lessonId]);
+
+      await http()
+        .post('/admin/curriculum/lessons/reorder')
+        .set(asEditor(fixture))
+        .send({
+          unitId: fixture.unitId,
+          ids: [second, second, fixture.lessonId],
+        })
+        .expect(422);
+
+      // Nada mudou.
+      const lessons = await http()
+        .get(`/admin/curriculum/lessons?unitId=${fixture.unitId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(lessons.body.map((lesson: { id: string }) => lesson.id)).toEqual([
+        fixture.lessonId,
+        second,
+      ]);
+    });
+
+    it('reordena as unidades do nível', async () => {
+      const fixture = await buildFixture();
+      const unit = await http()
+        .get(`/admin/curriculum/units/${fixture.unitId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+      const levelId = unit.body.levelId as string;
+
+      const other = await http()
+        .post('/admin/curriculum/units')
+        .set(asEditor(fixture))
+        .send({ levelId, slug: 'a1-u2', order: 7, title: 'Episódio 2' })
+        .expect(201);
+
+      const response = await http()
+        .post('/admin/curriculum/units/reorder')
+        .set(asEditor(fixture))
+        .send({ levelId, ids: [other.body.id, fixture.unitId] })
+        .expect(201);
+
+      expect(
+        response.body.map((item: { id: string; order: number }) => [
+          item.id,
+          item.order,
+        ]),
+      ).toEqual([
+        [other.body.id, 0],
+        [fixture.unitId, 1],
+      ]);
+
+      await http()
+        .post('/admin/curriculum/units/reorder')
+        .set(asEditor(fixture))
+        .send({ levelId, ids: [fixture.unitId] })
+        .expect(422);
+    });
+
+    it('reordenar é coisa de editor: aluno recebe 403', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .post('/admin/curriculum/lessons/reorder')
+        .set('Authorization', `Bearer ${fixture.student}`)
+        .send({ unitId: fixture.unitId, ids: [fixture.lessonId] })
+        .expect(403);
+    });
+
+    it('rascunho tolerante grava conteúdo incompleto e devolve os problemas', async () => {
+      const fixture = await buildFixture();
+      const url = `/admin/curriculum/lesson-versions/${fixture.versionId}/steps`;
+      const broken = [
+        {
+          order: 0,
+          type: 'SCENE',
+          content: { location: 'Corredor', characterIds: [], lines: [] },
+        },
+      ];
+
+      // Sem o parâmetro, a regra de sempre: recusa.
+      await http()
+        .put(url)
+        .set(asEditor(fixture))
+        .send({ steps: broken })
+        .expect(422);
+
+      const saved = await http()
+        .put(`${url}?draft=true`)
+        .set(asEditor(fixture))
+        .send({ steps: broken })
+        .expect(200);
+
+      expect(saved.body.steps).toHaveLength(1);
+      expect(saved.body.issues.length).toBeGreaterThan(0);
+      expect(saved.body.issues[0]).toEqual(
+        expect.objectContaining({ order: 0, path: expect.any(String) }),
+      );
+
+      // O que foi salvo volta como estava.
+      const reread = await http()
+        .get(`/admin/curriculum/lesson-versions/${fixture.versionId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(reread.body.steps[0].content.location).toBe('Corredor');
+    });
+
+    it('rascunho tolerante recusa só o que nem objeto é', async () => {
+      const fixture = await buildFixture();
+
+      const response = await http()
+        .put(
+          `/admin/curriculum/lesson-versions/${fixture.versionId}/steps?draft=true`,
+        )
+        .set(asEditor(fixture))
+        .send({ steps: [{ order: 0, type: 'SCENE', content: 'texto' }] })
+        .expect(422);
+
+      expect(response.body.error.code).toBe('CONTENT_VALIDATION_FAILED');
+    });
+
+    it('mandar para revisão valida tudo: o rascunho quebrado não passa', async () => {
+      const fixture = await buildFixture();
+      const url = `/admin/curriculum/lesson-versions/${fixture.versionId}`;
+
+      await http()
+        .put(`${url}/steps?draft=true`)
+        .set(asEditor(fixture))
+        .send({
+          steps: [{ order: 0, type: 'PRACTICE', content: { itemIds: [] } }],
+        })
+        .expect(200);
+
+      const refused = await http()
+        .post(`${url}/submit-for-review`)
+        .set(asEditor(fixture))
+        .expect(422);
+
+      expect(refused.body.error.code).toBe('CONTENT_VALIDATION_FAILED');
+      expect(refused.body.error.details.issues[0].order).toBe(0);
+
+      const fixed = await http()
+        .put(`${url}/steps?draft=true`)
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(200);
+
+      expect(fixed.body.issues).toEqual([]);
+
+      await http()
+        .post(`${url}/submit-for-review`)
+        .set(asEditor(fixture))
+        .expect(201);
+    });
+
+    it('rascunho tolerante sobre versão aprovada devolve ela para rascunho', async () => {
+      const fixture = await buildFixture();
+      const url = `/admin/curriculum/lesson-versions/${fixture.versionId}`;
+
+      await http()
+        .put(`${url}/steps`)
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(200);
+      await http()
+        .post(`${url}/submit-for-review`)
+        .set(asEditor(fixture))
+        .expect(201);
+      await http().post(`${url}/approve`).set(asEditor(fixture)).expect(201);
+
+      const saved = await http()
+        .put(`${url}/steps?draft=true`)
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(200);
+
+      expect(saved.body.status).toBe('DRAFT');
+      expect(saved.body.approvedAt).toBeNull();
+    });
+
+    it('versão publicada não aceita nem o rascunho tolerante', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .put(`/admin/curriculum/lesson-versions/${fixture.versionId}/steps`)
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(200);
+      await publish(fixture, fixture.versionId);
+
+      const response = await http()
+        .put(
+          `/admin/curriculum/lesson-versions/${fixture.versionId}/steps?draft=true`,
+        )
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(409);
+
+      expect(response.body.error.code).toBe('INVALID_CONTENT_TRANSITION');
+    });
+
+    it('preview de rascunho: o que o aluno veria, sem gabarito e com áudio assinado', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .put(`/admin/curriculum/lesson-versions/${fixture.versionId}/steps`)
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(200);
+
+      const response = await http()
+        .get(`/admin/curriculum/lesson-versions/${fixture.versionId}/preview`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(response.body.slug).toBe('nice-to-meet-you');
+      expect(response.body.steps).toHaveLength(3);
+      expect(response.body.items).toHaveLength(1);
+      expect(JSON.stringify(response.body.items)).not.toContain(
+        'correctOptionIds',
+      );
+      expect(response.body.assets[fixture.assetId].url).toEqual(
+        expect.stringContaining('http'),
+      );
+
+      // O aluno continua sem ver nada: o rascunho não está publicado.
+      await http()
+        .get('/catalog/lessons/nice-to-meet-you')
+        .set('Authorization', `Bearer ${fixture.student}`)
+        .expect(404);
+    });
+
+    it('preview não quebra com conteúdo pela metade', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .put(
+          `/admin/curriculum/lesson-versions/${fixture.versionId}/steps?draft=true`,
+        )
+        .set(asEditor(fixture))
+        .send({
+          steps: [
+            { order: 0, type: 'SCENE', content: { location: 'x' } },
+            {
+              order: 1,
+              type: 'PRACTICE',
+              content: { itemIds: [fixture.itemId] },
+            },
+          ],
+        })
+        .expect(200);
+
+      const response = await http()
+        .get(`/admin/curriculum/lesson-versions/${fixture.versionId}/preview`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(response.body.steps).toHaveLength(2);
+      // A etapa válida segue resolvendo o item.
+      expect(response.body.items).toHaveLength(1);
+    });
+
+    it('preview de versão que não existe é 404; aluno recebe 403', async () => {
+      const fixture = await buildFixture();
+      const missing = '00000000-0000-4000-8000-000000000000';
+
+      await http()
+        .get(`/admin/curriculum/lesson-versions/${missing}/preview`)
+        .set(asEditor(fixture))
+        .expect(404);
+      await http()
+        .get(`/admin/curriculum/lesson-versions/${fixture.versionId}/preview`)
+        .set('Authorization', `Bearer ${fixture.student}`)
+        .expect(403);
+    });
+
+    it('busca de skill por texto ignora acento e caixa', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .post('/admin/curriculum/skills')
+        .set(asEditor(fixture))
+        .send({
+          id: 'vocab.cafe',
+          type: 'VOCAB_SET',
+          competency: 'VOCABULARY',
+          cefrLevel: 'A1',
+          title: 'Pedir um café',
+        })
+        .expect(201);
+
+      const find = async (q: string): Promise<string[]> => {
+        const response = await http()
+          .get(`/admin/curriculum/skills?q=${encodeURIComponent(q)}`)
+          .set(asEditor(fixture))
+          .expect(200);
+
+        return response.body.data.map((skill: { id: string }) => skill.id);
+      };
+
+      expect(await find('CAFE')).toEqual(['vocab.cafe']);
+      expect(await find('verbo presente')).toEqual([
+        'grammar.be.present.affirmative',
+      ]);
+      expect(await find('grammar.be')).toEqual([
+        'grammar.be.present.affirmative',
+      ]);
+      expect(await find('nada disso')).toEqual([]);
+    });
+
+    const PNG = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(32, 1),
+    ]);
+
+    it('recebe a imagem do avatar e registra o asset', async () => {
+      const fixture = await buildFixture();
+
+      const response = await http()
+        .post('/admin/curriculum/media-assets/upload')
+        .set(asEditor(fixture))
+        .attach('file', PNG, { filename: 'maya.png', contentType: 'image/png' })
+        .expect(201);
+
+      expect(response.body.kind).toBe('IMAGE');
+      expect(response.body.mimeType).toBe('image/png');
+      expect(response.body.storageKey).toMatch(/^content\/images\/.+\.png$/);
+      expect(response.body.url).toEqual(expect.stringContaining('http'));
+
+      // Mesmo arquivo, mesmo asset.
+      const again = await http()
+        .post('/admin/curriculum/media-assets/upload')
+        .set(asEditor(fixture))
+        .attach('file', PNG, {
+          filename: 'outra.png',
+          contentType: 'image/png',
+        })
+        .expect(201);
+
+      expect(again.body.id).toBe(response.body.id);
+
+      // E o personagem enxerga o avatar na listagem.
+      const character = await http()
+        .patch(`/admin/curriculum/characters/${fixture.characterId}`)
+        .set(asEditor(fixture))
+        .send({ avatarAssetId: response.body.id })
+        .expect(200);
+
+      expect(character.body.avatarAssetId).toBe(response.body.id);
+
+      const list = await http()
+        .get('/admin/curriculum/characters')
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(list.body[0].avatarUrl).toEqual(expect.stringContaining('http'));
+    });
+
+    it('recusa arquivo que não é imagem, mesmo com nome de imagem', async () => {
+      const fixture = await buildFixture();
+
+      const response = await http()
+        .post('/admin/curriculum/media-assets/upload')
+        .set(asEditor(fixture))
+        .attach('file', Buffer.from('<svg></svg>'), {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+        })
+        .expect(422);
+
+      expect(response.body.error.code).toBe('INVALID_IMAGE');
+
+      const none = await http()
+        .post('/admin/curriculum/media-assets/upload')
+        .set(asEditor(fixture))
+        .expect(422);
+
+      expect(none.body.error.code).toBe('INVALID_IMAGE');
+    });
+
+    it('recusa imagem acima de 2 MB', async () => {
+      const fixture = await buildFixture();
+      const big = Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)]);
+
+      const response = await http()
+        .post('/admin/curriculum/media-assets/upload')
+        .set(asEditor(fixture))
+        .attach('file', big, {
+          filename: 'grande.png',
+          contentType: 'image/png',
+        });
+
+      expect(response.status).toBe(413);
+    });
+
+    it('upload é coisa de editor: aluno recebe 403', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .post('/admin/curriculum/media-assets/upload')
+        .set('Authorization', `Bearer ${fixture.student}`)
+        .attach('file', PNG, { filename: 'a.png', contentType: 'image/png' })
+        .expect(403);
+    });
+  });
 });

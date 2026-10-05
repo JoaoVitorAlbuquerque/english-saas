@@ -28,7 +28,7 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end
+            end={to === '/'}
             className={({ isActive }) =>
               cn(
                 'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium',

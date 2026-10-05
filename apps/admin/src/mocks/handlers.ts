@@ -1,5 +1,7 @@
 import { http, HttpResponse } from 'msw';
 
+import { curriculumHandlers } from './curriculum-mock';
+
 const API_URL = 'http://localhost:3333';
 
 export const editorSessionFixture = {
@@ -27,6 +29,8 @@ export const studentSessionFixture = {
 };
 
 export const handlers = [
+  ...curriculumHandlers,
+
   http.post(`${API_URL}/auth/signin`, async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
 

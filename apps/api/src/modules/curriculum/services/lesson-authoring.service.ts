@@ -5,7 +5,11 @@ import {
   type LessonStepType,
   type Prisma,
 } from '@prisma/client';
-import type { LessonStepInput } from '@english-saas/shared';
+import {
+  DRAFT_MAX_BYTES,
+  DRAFT_MAX_STEPS,
+  type LessonStepInput,
+} from '@english-saas/shared';
 
 import { CONTENT_GATE, type ContentGate } from 'src/common/access/content-gate';
 import { NotFoundError } from 'src/common/errors/app.exception';
@@ -17,10 +21,16 @@ import {
   DraftAlreadyOpenError,
   InvalidTransitionError,
   MissingReferencesError,
+  ReorderMismatchError,
   SlugInUseError,
 } from '../curriculum.errors';
 import { collectStepReferences, missingReferences } from '../domain/references';
-import { validateSteps, type StepInput } from '../domain/step-content';
+import { planReorder, temporaryOrderBase } from '../domain/reorder';
+import {
+  validateSteps,
+  type StepInput,
+  type StepIssue,
+} from '../domain/step-content';
 import {
   clearsApproval,
   isEditable,
@@ -213,6 +223,53 @@ export class LessonAuthoringService {
   }
 
   /**
+   * Reordena as lições de uma unidade. `ids` é o conjunto atual na ordem
+   * nova; a escrita é em duas fases por causa do `@@unique([unitId, order])`.
+   */
+  async reorderLessons(unitId: string, ids: readonly string[]) {
+    await this.structure.findUnit(unitId);
+
+    await this.prisma.$transaction(async (tx) => {
+      const current = await tx.lesson.findMany({
+        where: { unitId },
+        select: { id: true, order: true },
+      });
+      const plan = planReorder(
+        current.map((lesson) => lesson.id),
+        ids,
+      );
+
+      if (!plan.ok) {
+        throw new ReorderMismatchError({
+          reason: plan.reason,
+          missing: plan.missing,
+          unknown: plan.unknown,
+        });
+      }
+
+      const base = temporaryOrderBase(current.map((lesson) => lesson.order));
+
+      for (const step of plan.steps) {
+        await tx.lesson.update({
+          where: { id: step.id },
+          data: { order: base + step.order },
+        });
+      }
+
+      for (const step of plan.steps) {
+        await tx.lesson.update({
+          where: { id: step.id },
+          data: { order: step.order },
+        });
+      }
+    });
+
+    await this.cache.invalidateLists();
+
+    return this.listLessons(unitId);
+  }
+
+  /**
    * Abre a próxima versão, clonando a que está publicada (ou a mais recente,
    * quando a lição nunca publicou).
    */
@@ -345,6 +402,92 @@ export class LessonAuthoringService {
     return this.findVersion(id);
   }
 
+  /**
+   * Rascunho tolerante: grava as etapas **como vieram** e devolve o que a
+   * validação diria, em vez de recusar.
+   *
+   * É o que sustenta o salvamento automático do editor — uma cena pela metade
+   * não pode perder o que a pessoa digitou. O que protege o aluno não é esta
+   * rota: `submit-for-review` e `publish` validam tudo de novo, e só
+   * `publishedVersionId` chega ao aluno.
+   *
+   * Continua exigindo o mínimo para a gravação fazer sentido: `content`
+   * objeto, até `DRAFT_MAX_STEPS` etapas e `DRAFT_MAX_BYTES` de JSON.
+   */
+  async replaceDraftSteps(id: string, steps: readonly StepInput[]) {
+    const version = await this.findVersion(id);
+
+    this.assertEditable(version.status, 'editar');
+
+    const shapeIssues: StepIssue[] = [];
+
+    for (const [index, step] of steps.entries()) {
+      if (
+        typeof step.content !== 'object' ||
+        step.content === null ||
+        Array.isArray(step.content)
+      ) {
+        shapeIssues.push({
+          order: index,
+          path: '',
+          message: 'O conteúdo da etapa precisa ser um objeto.',
+        });
+      }
+    }
+
+    if (steps.length > DRAFT_MAX_STEPS) {
+      shapeIssues.push({
+        order: -1,
+        path: 'steps',
+        message: `A lição passa de ${String(DRAFT_MAX_STEPS)} etapas.`,
+      });
+    }
+
+    if (Buffer.byteLength(JSON.stringify(steps)) > DRAFT_MAX_BYTES) {
+      shapeIssues.push({
+        order: -1,
+        path: 'steps',
+        message: 'O conteúdo da lição ficou grande demais para salvar.',
+      });
+    }
+
+    if (shapeIssues.length > 0) {
+      throw new ContentValidationError({ issues: shapeIssues });
+    }
+
+    // Em rascunho a ordem é só posição: renumera 0..n-1 mantendo a sequência
+    // pedida, para dois `order` iguais não estourarem a unicidade do banco.
+    const ordered = steps
+      .map((step, index) => ({ step, index }))
+      .sort((a, b) => a.step.order - b.step.order || a.index - b.index)
+      .map(({ step }, order) => ({ ...step, order }));
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.lessonStep.deleteMany({ where: { lessonVersionId: id } });
+
+      await tx.lessonStep.createMany({
+        data: ordered.map((step) => ({
+          lessonVersionId: id,
+          order: step.order,
+          type: step.type as LessonStepType,
+          content: step.content as Prisma.InputJsonValue,
+        })),
+      });
+
+      await tx.lessonVersion.update({
+        where: { id },
+        data: this.editSideEffects(version.status),
+      });
+    });
+
+    const validation = validateSteps(ordered);
+
+    return {
+      version: await this.findVersion(id),
+      issues: validation.ok ? [] : validation.issues,
+    };
+  }
+
   // -------------------------------------------------------------------
   // Fluxo editorial
   // -------------------------------------------------------------------
@@ -355,6 +498,21 @@ export class LessonAuthoringService {
 
     if (target === null) {
       throw new InvalidTransitionError(version.status, action);
+    }
+
+    if (action === 'submit') {
+      // O rascunho tolerante aceita conteúdo quebrado; ele não passa daqui.
+      const validation = validateSteps(
+        version.steps.map((step) => ({
+          order: step.order,
+          type: step.type,
+          content: step.content,
+        })),
+      );
+
+      if (!validation.ok) {
+        throw new ContentValidationError({ issues: validation.issues });
+      }
     }
 
     if (target === ContentStatus.PUBLISHED) {

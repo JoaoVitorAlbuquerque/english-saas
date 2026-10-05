@@ -106,3 +106,11 @@ export class CreateWorkbookDto extends createZodDto(
 export class ContentActionDto extends createZodDto(
   z.object({ action: z.enum(CONTENT_ACTIONS) }),
 ) {}
+
+export class ReorderUnitsDto extends createZodDto(
+  z.object({
+    levelId: z.uuid(),
+    /** As unidades do nível, todas, na ordem nova. */
+    ids: z.array(z.uuid()).min(1).max(200),
+  }),
+) {}

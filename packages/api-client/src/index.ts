@@ -74,3 +74,7 @@ export { applyPreferencesPatch } from './modules/notifications/apply-patch';
 export * as learnerModelService from './modules/learner-model/service';
 export * from './modules/learner-model/hooks';
 export * from './modules/learner-model/schemas';
+
+export * as curriculumAdminService from './modules/curriculum-admin/service';
+export * from './modules/curriculum-admin/hooks';
+export * from './modules/curriculum-admin/schemas';

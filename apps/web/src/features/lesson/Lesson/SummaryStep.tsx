@@ -4,11 +4,9 @@ import type {
   AttemptView,
   CompletionResult,
 } from '@english-saas/api-client';
-import { Badge, Button, Card } from '@english-saas/ui';
+import { SummaryView } from '@english-saas/ui';
 import type { SummaryContent } from '@english-saas/shared';
 import { useNavigate } from 'react-router-dom';
-
-import { t } from '../../../messages/pt-BR';
 
 export type SummaryStepProps = {
   content: SummaryContent;
@@ -23,6 +21,10 @@ export type SummaryStepProps = {
   goToToday: () => void;
 };
 
+/**
+ * A tela é `SummaryView` (packages/ui, também usada no preview do admin);
+ * aqui ficam o XP, a taxa de acerto e a próxima lição do plano.
+ */
 export function SummaryStep({
   content,
   attempt,
@@ -49,76 +51,23 @@ export function SummaryStep({
         )
       : null;
 
-  const isCompleted = attempt.status === 'COMPLETED';
-
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
-      <Card className="flex flex-col gap-2">
-        <h2 className="font-display text-lg text-ink">
-          {t('lesson.summary.takeawaysTitle')}
-        </h2>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
-          {content.takeaways.map((takeaway, index) => (
-            <li key={index}>{takeaway}</li>
-          ))}
-        </ul>
-      </Card>
-
-      {!isCompleted ? (
-        <Button onClick={onFinish} isLoading={isFinishing} className="self-end">
-          {t('lesson.summary.finish')}
-        </Button>
-      ) : (
-        <>
-          <Card className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <Badge tone="accent">{completionXp?.total ?? sessionXp} XP</Badge>
-              {accuracy !== null ? (
-                <Badge tone="ok">
-                  {accuracy}
-                  {t('lesson.summary.accuracySuffix')}
-                </Badge>
-              ) : null}
-            </div>
-            <p className="text-sm text-muted">
-              {t('lesson.summary.reviewNote')}
-            </p>
-          </Card>
-
-          {nextLesson !== null ? (
-            <Card className="flex flex-col gap-2">
-              <p className="text-sm text-muted">
-                {t('lesson.summary.nextLessonLabel')}
-              </p>
-              <p className="text-ink">{nextLesson.title}</p>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => navigate(`/licoes/${nextLesson.slug}`)}
-                  className="self-start"
-                >
-                  {t('lesson.summary.startNextLesson')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={goToToday}
-                  className="self-start"
-                >
-                  {t('lesson.summary.goToPlan')}
-                </Button>
-              </div>
-            </Card>
-          ) : null}
-
-          <Button
-            variant="ghost"
-            onClick={onRestart}
-            isLoading={isRestarting}
-            className="self-end"
-          >
-            {t('lesson.summary.retake')}
-          </Button>
-        </>
-      )}
-    </div>
+    <SummaryView
+      content={content}
+      completed={attempt.status === 'COMPLETED'}
+      onFinish={onFinish}
+      isFinishing={isFinishing}
+      xp={completionXp?.total ?? sessionXp}
+      accuracy={accuracy}
+      nextLesson={nextLesson}
+      onStartNextLesson={() => {
+        if (nextLesson !== null) {
+          navigate(`/licoes/${nextLesson.slug}`);
+        }
+      }}
+      onGoToPlan={goToToday}
+      onRestart={onRestart}
+      isRestarting={isRestarting}
+    />
   );
 }

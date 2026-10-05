@@ -123,3 +123,31 @@ export class TaxonomySlugIsImmutableError extends AppException {
     );
   }
 }
+
+/** O pedido de reordenação não bate com os itens que existem. */
+export class ReorderMismatchError extends AppException {
+  constructor(details: unknown) {
+    super(
+      'REORDER_MISMATCH',
+      'A lista de reordenação não bate com o que existe agora. Recarregue a tela e tente de novo.',
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      details,
+    );
+  }
+}
+
+/** O arquivo enviado não é uma imagem aceita (JPEG, PNG ou WebP até 2 MB). */
+export class InvalidImageError extends AppException {
+  constructor(reason: 'MISSING' | 'TOO_LARGE' | 'UNSUPPORTED_TYPE') {
+    super(
+      'INVALID_IMAGE',
+      reason === 'TOO_LARGE'
+        ? 'A imagem passa de 2 MB. Envie uma menor.'
+        : reason === 'MISSING'
+          ? 'Escolha uma imagem para enviar.'
+          : 'Envie uma imagem JPEG, PNG ou WebP.',
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      { reason },
+    );
+  }
+}

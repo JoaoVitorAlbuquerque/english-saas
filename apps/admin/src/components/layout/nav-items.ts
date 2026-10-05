@@ -15,7 +15,12 @@ export const NAV_ITEMS = [
     icon: LayoutDashboard,
     disabled: false,
   },
-  { to: '/conteudo', label: t('nav.content'), icon: BookOpen, disabled: true },
+  {
+    to: '/conteudo',
+    label: t('nav.content'),
+    icon: BookOpen,
+    disabled: false,
+  },
   { to: '/alunos', label: t('nav.students'), icon: Users, disabled: true },
   {
     to: '/assinaturas',

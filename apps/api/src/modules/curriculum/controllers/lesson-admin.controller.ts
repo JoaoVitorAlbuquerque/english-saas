@@ -6,9 +6,11 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 
 import {
   CreateLessonDto,
+  ReorderLessonsDto,
   ReplaceStepsDto,
   UpdateLessonVersionDto,
 } from '../dto/lesson.dto';
+import { CatalogService } from '../services/catalog.service';
 import { LessonAuthoringService } from '../services/lesson-authoring.service';
 
 /**
@@ -22,7 +24,10 @@ import { LessonAuthoringService } from '../services/lesson-authoring.service';
 @Roles('EDITOR', 'ADMIN')
 @Controller('admin/curriculum')
 export class LessonAdminController {
-  constructor(private readonly lessons: LessonAuthoringService) {}
+  constructor(
+    private readonly lessons: LessonAuthoringService,
+    private readonly catalog: CatalogService,
+  ) {}
 
   @Get('lessons')
   @ApiOperation({ summary: 'Lições e o histórico de versões de cada uma' })
@@ -42,6 +47,14 @@ export class LessonAdminController {
     return this.lessons.createLesson(body);
   }
 
+  @Post('lessons/reorder')
+  @ApiOperation({
+    summary: 'Reordena as lições de uma unidade (todas, na ordem nova)',
+  })
+  async reorder(@Body() body: ReorderLessonsDto) {
+    return this.lessons.reorderLessons(body.unitId, body.ids);
+  }
+
   @Post('lessons/:id/versions')
   @ApiOperation({
     summary: 'Abre a próxima versão, clonando a publicada',
@@ -56,6 +69,15 @@ export class LessonAdminController {
     return this.lessons.findVersion(id);
   }
 
+  @Get('lesson-versions/:id/preview')
+  @ApiOperation({
+    summary:
+      'A versão como o aluno a vê (qualquer status), sem cache e sem gabarito',
+  })
+  async previewVersion(@Param('id') id: string) {
+    return this.catalog.previewVersion(id);
+  }
+
   @Put('lesson-versions/:id')
   @ApiOperation({
     summary: 'Edita os metadados da versão (derruba a revisão feita)',
@@ -68,8 +90,24 @@ export class LessonAdminController {
   }
 
   @Put('lesson-versions/:id/steps')
-  @ApiOperation({ summary: 'Substitui as etapas inteiras, com validação' })
-  async replaceSteps(@Param('id') id: string, @Body() body: ReplaceStepsDto) {
+  @ApiOperation({
+    summary:
+      'Substitui as etapas inteiras. Com ?draft=true grava como veio e devolve os problemas em issues',
+  })
+  async replaceSteps(
+    @Param('id') id: string,
+    @Body() body: ReplaceStepsDto,
+    @Query('draft') draft?: string,
+  ) {
+    if (draft === 'true') {
+      const { version, issues } = await this.lessons.replaceDraftSteps(
+        id,
+        body.steps,
+      );
+
+      return { ...version, issues };
+    }
+
     return this.lessons.replaceSteps(id, body.steps);
   }
 

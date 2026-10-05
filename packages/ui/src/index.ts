@@ -47,3 +47,12 @@ export * from './items/MatchItem';
 export * from './items/DictationItem';
 export * from './items/ReadingComprehensionItem';
 export * from './items/RegisterSwapItem';
+
+export * from './lesson/lesson-types';
+export * from './lesson/MarkdownLite';
+export * from './lesson/SceneView';
+export * from './lesson/ExplanationCardsView';
+export * from './lesson/PracticeView';
+export * from './lesson/FreeProductionView';
+export * from './lesson/RoleplayView';
+export * from './lesson/SummaryView';

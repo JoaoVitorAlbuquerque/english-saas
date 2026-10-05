@@ -94,5 +94,7 @@ export class TaxonomyListQueryDto extends createZodDto(
       .enum(['true', 'false'])
       .transform((value) => value === 'true')
       .optional(),
+    /** Busca por texto no id e no título (só em `skills`). */
+    q: z.string().trim().min(1).max(80).optional(),
   }),
 ) {}

@@ -6,8 +6,11 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { MediaKind } from '@prisma/client';
 
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -20,10 +23,12 @@ import {
   CreateUnitDto,
   CreateWorkbookDto,
   RegisterMediaAssetDto,
+  ReorderUnitsDto,
   UpdateCharacterDto,
   UpdateLevelDto,
   UpdateUnitDto,
 } from '../dto/structure.dto';
+import { IMAGE_MAX_BYTES } from '../domain/image-upload';
 import { StructureService } from '../services/structure.service';
 
 /** Autoria da estrutura do curso. Restrita a EDITOR e ADMIN. */
@@ -79,6 +84,14 @@ export class StructureAdminController {
     return this.structure.createUnit(body);
   }
 
+  @Post('units/reorder')
+  @ApiOperation({
+    summary: 'Reordena as unidades de um nível (todas, na ordem nova)',
+  })
+  async reorderUnits(@Body() body: ReorderUnitsDto) {
+    return this.structure.reorderUnits(body.levelId, body.ids);
+  }
+
   @Patch('units/:id')
   @ApiOperation({ summary: 'Edita a unidade e o elenco' })
   async updateUnit(@Param('id') id: string, @Body() body: UpdateUnitDto) {
@@ -131,6 +144,18 @@ export class StructureAdminController {
   })
   async registerMediaAsset(@Body() body: RegisterMediaAssetDto) {
     return this.structure.registerMediaAsset(body);
+  }
+
+  @Post('media-assets/upload')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: IMAGE_MAX_BYTES } }),
+  )
+  @ApiOperation({
+    summary: 'Envia uma imagem (JPEG, PNG ou WebP até 2 MB) e registra o asset',
+  })
+  async uploadImage(@UploadedFile() file: { buffer: Buffer } | undefined) {
+    return this.structure.uploadImage(file);
   }
 
   // --- Apostila ---

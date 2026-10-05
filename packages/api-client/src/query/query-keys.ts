@@ -30,4 +30,18 @@ export const queryKeys = {
   generationJob: (id: string) => ['generator', 'job', id] as const,
   meMaterials: ['me', 'materials'] as const,
   material: (id: string) => ['me', 'materials', id] as const,
+  adminCourses: ['admin', 'courses'] as const,
+  adminUnits: (levelId?: string) =>
+    ['admin', 'units', levelId ?? 'all'] as const,
+  adminLessons: (unitId?: string) =>
+    ['admin', 'lessons', unitId ?? 'all'] as const,
+  adminLesson: (id: string) => ['admin', 'lesson', id] as const,
+  adminVersion: (id: string) => ['admin', 'version', id] as const,
+  adminPreview: (id: string) => ['admin', 'preview', id] as const,
+  adminCharacters: ['admin', 'characters'] as const,
+  adminSkills: (q: string) => ['admin', 'skills', q] as const,
+  adminRegisterNotes: ['admin', 'register-notes'] as const,
+  adminErrorPatterns: ['admin', 'error-patterns'] as const,
+  adminItems: (filter: object) => ['admin', 'items', filter] as const,
+  adminItem: (id: string) => ['admin', 'item', id] as const,
 };

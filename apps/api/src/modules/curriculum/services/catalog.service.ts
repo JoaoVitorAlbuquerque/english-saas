@@ -690,10 +690,36 @@ export class CatalogService {
     };
   }
 
-  /** Monta a lição a partir do banco e guarda no cache. */
+  /**
+   * A lição de **qualquer** versão (rascunho, em revisão, arquivada) como o
+   * aluno a veria, com URL assinada e sem gabarito. É o preview do editor:
+   * nunca passa pelo cache — o rascunho muda a cada salvamento e não pode
+   * contaminar a chave da versão publicada.
+   *
+   * Tolera conteúdo inválido: a etapa que não passa no schema segue crua na
+   * resposta (quem valida para mostrar é o editor) e só não entra no cálculo
+   * das referências.
+   */
+  async previewVersion(versionId: string): Promise<CatalogLesson> {
+    const exists = await this.prisma.lessonVersion.findUnique({
+      where: { id: versionId },
+      select: { id: true },
+    });
+
+    if (exists === null) {
+      throw new NotFoundError('Não encontramos esta versão da lição.');
+    }
+
+    return this.signLesson(await this.buildLesson(versionId));
+  }
+
+  /**
+   * Monta a lição a partir do banco. Com `cacheKey`, guarda no cache; sem
+   * ela (preview de versão não publicada), só devolve.
+   */
   private async buildLesson(
     versionId: string,
-    cacheKey: string,
+    cacheKey?: string,
   ): Promise<CachedLesson> {
     const version = await this.prisma.lessonVersion.findUniqueOrThrow({
       where: { id: versionId },
@@ -747,7 +773,15 @@ export class CatalogService {
       content: step.content,
     })) as ({ order: number } & LessonStepInput)[];
 
-    const references = collectStepReferences(steps);
+    // Só etapas bem formadas entram nas referências: no preview de rascunho
+    // o conteúdo pode estar pela metade, e o `collect` lê o contrato inteiro.
+    const references = collectStepReferences(
+      steps.filter(
+        (step) =>
+          lessonStepSchema.safeParse({ type: step.type, content: step.content })
+            .success,
+      ),
+    );
 
     const [characters, registerNotes, items] = await Promise.all([
       this.prisma.character.findMany({
@@ -837,7 +871,9 @@ export class CatalogService {
       assetIds,
     };
 
-    await this.cache.set(cacheKey, payload);
+    if (cacheKey !== undefined) {
+      await this.cache.set(cacheKey, payload);
+    }
 
     return payload;
   }

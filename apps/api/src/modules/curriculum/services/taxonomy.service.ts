@@ -10,7 +10,11 @@ import type {
 import type { Paginated } from '@english-saas/shared';
 
 import { NotFoundError } from 'src/common/errors/app.exception';
-import { buildPage, toPrismaCursorArgs } from 'src/common/pagination/cursor';
+import {
+  buildPage,
+  decodeCursor,
+  toPrismaCursorArgs,
+} from 'src/common/pagination/cursor';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 
 import {
@@ -18,6 +22,7 @@ import {
   SlugInUseError,
   TaxonomySlugIsImmutableError,
 } from '../curriculum.errors';
+import { matchesSearch } from '../domain/search';
 
 /**
  * Autoria da taxonomia: Skill, ErrorPattern e RegisterNote.
@@ -102,7 +107,12 @@ export class TaxonomyService {
     cursor?: string | undefined;
     limit: number;
     includeDeprecated?: boolean | undefined;
+    q?: string | undefined;
   }): Promise<Paginated<unknown>> {
+    if (query.q !== undefined) {
+      return this.searchSkills(query.q, query);
+    }
+
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
 
     const rows = await this.prisma.skill.findMany({
@@ -114,6 +124,43 @@ export class TaxonomyService {
     });
 
     const page = buildPage(rows, query.limit, (row) => row.id);
+
+    return { ...page, data: page.data.map((row) => this.flattenSkill(row)) };
+  }
+
+  /**
+   * Busca por texto no id e no título, sem acento nem caixa. Lê a taxonomia
+   * inteira e filtra em memória (ver `domain/search.ts`), paginando pelo
+   * mesmo cursor opaco da listagem comum.
+   */
+  private async searchSkills(
+    q: string,
+    query: {
+      cursor?: string | undefined;
+      limit: number;
+      includeDeprecated?: boolean | undefined;
+    },
+  ): Promise<Paginated<unknown>> {
+    const rows = await this.prisma.skill.findMany({
+      where: query.includeDeprecated === true ? {} : { deprecatedAt: null },
+      orderBy: { id: 'asc' },
+      select: skillSelect,
+    });
+
+    const matching = rows.filter((row) =>
+      matchesSearch([row.id, row.title], q),
+    );
+    const after =
+      query.cursor === undefined ? undefined : decodeCursor(query.cursor);
+    const start =
+      after === undefined
+        ? 0
+        : matching.findIndex((row) => row.id === after) + 1;
+    const page = buildPage(
+      matching.slice(start, start + query.limit + 1),
+      query.limit,
+      (row) => row.id,
+    );
 
     return { ...page, data: page.data.map((row) => this.flattenSkill(row)) };
   }

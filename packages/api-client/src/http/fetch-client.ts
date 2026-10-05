@@ -42,8 +42,7 @@ async function performRequest<T>(
       credentials: 'include',
       signal: options.signal,
       headers: buildHeaders(options),
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: serializeBody(options.body),
     });
   } catch {
     throw networkApiError();
@@ -80,9 +79,21 @@ async function performRequest<T>(
   return options.schema.parse(json);
 }
 
+/** `FormData` segue como está (upload); o resto vira JSON. */
+function serializeBody(body: unknown): BodyInit | undefined {
+  if (body === undefined) {
+    return undefined;
+  }
+
+  return body instanceof FormData ? body : JSON.stringify(body);
+}
+
 function buildHeaders(options: ApiFetchOptions<unknown>): HeadersInit {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    // Com `FormData` o navegador monta o `Content-Type` com o boundary.
+    ...(options.body instanceof FormData
+      ? {}
+      : { 'Content-Type': 'application/json' }),
     ...options.extraHeaders,
   };
 

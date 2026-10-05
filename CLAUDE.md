@@ -319,6 +319,39 @@ O catálogo é cacheado no Redis com a versão na chave, então publicar
 invalida sozinho. **O cache guarda `storageKey`, nunca URL assinada** — a
 assinatura vence e a URL nasce na resposta.
 
+**O editor do admin conta com cinco rotas a mais** (todas `EDITOR`/`ADMIN`):
+
+- **`PUT lesson-versions/:id/steps?draft=true`** é o rascunho tolerante: grava
+  as etapas **como vieram** (só exige `content` objeto, até 40 etapas e 256 KB)
+  e devolve a versão com `issues` — o que `validateSteps` diria. Existe para o
+  salvamento automático não perder uma cena pela metade. Por isso
+  **`submit-for-review` valida tudo** (422 `CONTENT_VALIDATION_FAILED`): sem
+  isso um rascunho quebrado chegaria a APPROVED. Sem o parâmetro, a rota
+  continua tudo-ou-nada. O que protege o aluno nunca foi esta rota — só
+  `publishedVersionId` chega a ele, e o publish revalida.
+- **`POST units/reorder {levelId, ids}` e `POST lessons/reorder {unitId, ids}`**
+  recebem **todos** os irmãos na ordem nova (`planReorder`, em `domain/reorder.ts`,
+  recusa lista que não bate: 422 `REORDER_MISMATCH`). `units` e `lessons` têm
+  `@@unique([…, order])`, então trocar dois por `PATCH` quebra no meio: a escrita
+  é em transação e em duas fases (primeiro `order` acima de todos, depois 0..n-1).
+- **`GET lesson-versions/:id/preview`** devolve o `CatalogLesson` de **qualquer
+  versão**, com URL de áudio assinada e itens sem gabarito, **sem cache** (o
+  rascunho muda a cada salvamento) e sem recusar conteúdo inválido — a etapa
+  quebrada segue crua e só fica de fora do cálculo das referências.
+- **`GET skills?q=`** busca no id e no título, sem acento e sem caixa
+  (`domain/search.ts`; filtra em memória, a taxonomia é pequena).
+- **`POST media-assets/upload`** (multipart, campo `file`) recebe JPEG, PNG ou
+  WebP até 2 MB — o tipo vem dos primeiros bytes, não do nome nem do
+  `Content-Type` (`domain/image-upload.ts`) — e grava em
+  `content/images/<hash>.<ext>`: o mesmo arquivo é um asset só. `GET characters`
+  devolve `avatarUrl` assinada.
+
+**A validação do conteúdo da lição mora em `packages/shared`**
+(`lesson-validation.ts`: `validateSteps`, `parseStep`, `validateSpans`;
+`lesson-authoring.ts`: `lessonVersionMetaSchema`), e a API e o editor do admin
+chamam as mesmas funções. As mensagens do zod saem em pt-BR (`issueMessage`),
+porque quem lê é o editor, no campo.
+
 ### Autoria com IA (content-studio)
 
 **Nada gerado por IA chega ao aluno sem um humano aprovar.** O rascunho
@@ -958,9 +991,11 @@ valida a mensagem.
 
 ## 5. Front-end
 
-**Estado atual: fundação pronta (design system, cliente de API, esqueleto
-dos dois apps). Nenhuma tela de negócio ainda** — cada uma entra como um
-módulo à parte, igual ao back-end.
+**Estado atual: o app do aluno tem as telas de negócio (lição, hoje,
+catálogo, ferramentas do Plus, progresso, perfil); o admin tem o Conteúdo
+(árvore do curso, personagens, versões e editor de lição). Alunos,
+assinaturas e métricas do admin ainda são placeholders** — cada tela entra
+como um módulo à parte, igual ao back-end.
 
 ### Pacotes
 
@@ -1126,6 +1161,68 @@ push/subscriptions` **não** desliga o canal: desativar também manda
   (o tema livre vira slug — `copa-do-mundo` — porque a API só aceita
   `^[a-z0-9][a-z0-9-]*$`) e `components/WeekdayMinutesGrid`.
 
+### Admin → Conteúdo (`apps/admin/src/features/curriculum`)
+
+| Rota                           | Tela                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `/conteudo`                    | `CurriculumTree`: nível → unidades → lições, com status, "vN publicada", criar e reordenar (↑ ↓).          |
+| `/conteudo/personagens`        | `Characters`: nome, bio, `voiceId` e avatar (upload). O slug não muda depois de criado.                    |
+| `/conteudo/licoes/:lessonId`   | `LessonVersions`: versões, ações editoriais, **criar nova versão** e comparar duas versões.                |
+| `/conteudo/versoes/:versionId` | `VersionEditor`: metadados, etapas com editor por tipo, validação ao vivo, salvamento automático, preview. |
+
+O editor tem layout largo (`<AppShell width="wide" />`); as outras telas ficam
+no miolo de leitura. As rotas moram em `AppRoutes` (`app/router.tsx`) para o
+teste montar o painel inteiro num `MemoryRouter`.
+
+- **O conteúdo vive em memória no editor** (`editor-reducer.ts`, puro) e vai para o
+  servidor pelo **salvamento automático**: `autosave-machine.ts` (puro) +
+  `useAutosave` (debounce de 1,5 s, **um pedido por vez** — edição durante o
+  salvamento fica na fila —, repete com 2, 4 e 8 s se a rede falhar, e o botão
+  "Tentar de novo" cobre o resto). O indicador é sempre visível, com texto.
+  Salva metadados (`PUT`) e etapas (`PUT steps?draft=true`); campo de metadado
+  que não passa no limite **não vai** e o indicador diz qual. Antes de qualquer
+  ação editorial o editor descarrega o salvamento (`flush`).
+- **Validação ao vivo com o código do servidor** (`lib/validation.ts` roda
+  `validateSteps` e `lessonVersionMetaSchema` do `packages/shared`) e o erro
+  aparece **no campo**, pelo caminho `(etapa, lines.2.spans.0)`; cada campo
+  marca o próprio caminho em `data-field`, e "Ir para o campo" (`lib/focus-field.ts`)
+  abre a etapa e foca. Nada disso bloqueia digitar nem salvar.
+- **Versão publicada ou arquivada abre somente leitura**, com atalho para criar a
+  próxima. Editar versão em revisão ou aprovada mostra o aviso de que ela voltou
+  para rascunho (o servidor devolve o status em cada salvamento).
+- **Marcações (spans)** — `MarkedTextField`: o trecho é selecionado no próprio
+  texto (`selectionStart/End`), com tipo e skill ou nota de registro. Mudar o texto
+  chama `rebaseSpans(antes, depois, spans)`: marcação antes do trecho que mudou fica,
+  depois dele **desloca**, dentro dele acompanha, e a que foi cortada ao meio **sai
+  com aviso** — senão os índices envelheceriam em silêncio.
+- **Preview** (`LessonPreview`): quadro de **celular (390 px)** ou **desktop**, com
+  as views de `packages/ui` e os dados de `GET lesson-versions/:id/preview`; refaz a
+  leitura a cada salvamento. Etapa inválida vira um aviso naquela etapa (cada uma passa
+  por `parseStep` antes de ser desenhada). **A IA não roda no preview**: produção livre
+  e conversa mostram só o estado de entrada, e a prática responde sem corrigir; "Ver
+  gabarito" usa o modo `preview` dos componentes de questão, com a resposta lida de
+  `GET items/:id` (`lib/preview-feedback.ts`) — o gabarito nunca vem no preview.
+- **Fluxo editorial** (`Editorial/`): mesmos botões e mesmo painel de problemas na
+  barra do editor e na lista de versões. O painel sabe desenhar
+  `CONTENT_VALIDATION_FAILED` (por etapa, com link ao campo), `MISSING_REFERENCES`
+  (por tipo), `QA_BLOCKERS` (os bloqueadores), `MISSING_AUDIO` ("o áudio é gerado
+  ao aprovar; tente de novo em instantes") e `DRAFT_ALREADY_OPEN`. Publicar e
+  arquivar pedem confirmação. `lib/editorial.ts` espelha `nextStatus`, mas só para
+  decidir o que mostrar: quem decide é a API.
+- **Diff** (`lib/version-diff.ts`): metadados, skills-alvo e, por etapa, "antes →
+  depois" campo a campo. Sem diff de palavra.
+- **Reordenar** unidades e lições chama `POST …/reorder` com **a lista inteira** e é
+  otimista: se a API recusar, a lista volta e um aviso aparece.
+- **Mocks com estado** (`src/mocks/curriculum-mock.ts`) servem ao Vitest e ao build
+  de e2e (`VITE_E2E_MOCKS=true`, `__e2e_authenticated__` no `localStorage`).
+  `failNext('rota', {...})` faz o próximo pedido falhar; `mockState.calls` registra o
+  que foi enviado. No jsdom o `fetch` do Node não serializa o `FormData` do jsdom, então
+  `setup-tests.ts` monta o multipart na mão — num navegador isso não existe.
+- Fora do escopo desta tela: banco de questões (criar/editar item), taxonomia (CRUD de
+  skills, erros típicos e notas), apostilas, criação de curso e nível, e as telas do
+  módulo 5 (rascunho por IA, relatório de QA, gerar áudio, comentários). Duas pessoas
+  editando a mesma versão: vence quem salvar por último.
+
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 
 Variáveis CSS lidas pelo `@theme` do Tailwind v4; o escuro sobrescreve as
@@ -1157,6 +1254,15 @@ Popover, ProgressBar, StepDots, CharacterAvatar, Skeleton, EmptyState,
 ErrorState, AudioButton, Mark, **BarChart, LineChart, GroupedBarChart**
 (mais `ChartFigure`, a moldura comum). Cada um tem `.stories.tsx` (Ladle) e
 `.test.tsx` (Vitest + Testing Library) ao lado.
+
+**Etapas da lição** (`packages/ui/src/lesson/`): `SceneView`,
+`ExplanationCardsView` (+ `MarkdownLite`), `PracticeView`,
+`FreeProductionView`, `RoleplayView` e `SummaryView`. São **só apresentação**:
+não importam o api-client, recebem tipos estruturais (`LessonCharacter`,
+`LessonAssets`, `RawStudentItem`) e trazem o texto em pt-BR. O player do aluno
+(`apps/web/src/features/lesson/Lesson/*Step.tsx`) virou invólucro fino que mantém
+os hooks (tutor, XP, plano); o preview do admin usa as **mesmas** views. Mexeu
+numa delas, rode `e2e/lesson.spec.ts` do web.
 
 **Gráficos** (`BarChart`, `LineChart`, `GroupedBarChart`) são genéricos —
 não sabem o que é CEFR ou minuto; quem os usa traduz o dado numa escala

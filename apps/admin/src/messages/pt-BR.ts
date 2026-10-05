@@ -19,7 +19,7 @@ export const messages = {
 
   'dashboard.title': 'Painel em construção',
   'dashboard.description':
-    'As telas de conteúdo, alunos, assinaturas e métricas entram como módulos à parte.',
+    'As telas de alunos, assinaturas e métricas entram como módulos à parte. O conteúdo já está em "Conteúdo".',
 
   'notFound.title': 'Página não encontrada',
   'notFound.description': 'O endereço que você tentou acessar não existe.',
@@ -27,10 +27,400 @@ export const messages = {
 
   'error.boundary.title': 'Algo deu errado nesta tela',
   'error.boundary.description': 'Tente recarregar a página.',
+
+  // --- Compartilhado do conteúdo ---
+  'content.status.DRAFT': 'Rascunho',
+  'content.status.IN_REVIEW': 'Em revisão',
+  'content.status.APPROVED': 'Aprovado',
+  'content.status.PUBLISHED': 'Publicado',
+  'content.status.ARCHIVED': 'Arquivado',
+  'content.retry': 'Tentar de novo',
+  'content.cancel': 'Cancelar',
+  'content.create': 'Criar',
+  'content.save': 'Salvar',
+  'content.saving': 'Salvando…',
+  'content.remove': 'Remover',
+  'content.moveUp': 'Subir',
+  'content.moveDown': 'Descer',
+  'content.close': 'Fechar',
+  'content.slug.label': 'Identificador (slug)',
+  'content.slug.hint':
+    'Letras minúsculas, números e hífen. Não muda depois de criado.',
+  'content.level.label': 'Nível',
+  'content.loadError': 'Não conseguimos carregar esta tela.',
+
+  // --- Árvore do curso ---
+  'tree.title': 'Conteúdo',
+  'tree.subtitle':
+    'Níveis, unidades e lições do curso, com o estado de cada uma.',
+  'tree.characters': 'Personagens',
+  'tree.level.heading': 'Nível {level}',
+  'tree.level.unitCount': '{count} unidades',
+  'tree.noCourse.title': 'Nenhum curso cadastrado',
+  'tree.noCourse.description':
+    'Crie o curso e os níveis pelo servidor antes de montar as unidades.',
+  'tree.unit.new': 'Nova unidade',
+  'tree.unit.empty': 'Nenhuma unidade neste nível ainda.',
+  'tree.unit.moveUp': 'Subir a unidade {title}',
+  'tree.unit.moveDown': 'Descer a unidade {title}',
+  'tree.unit.actions': 'Ações da unidade {title}',
+  'tree.unit.transitionError': 'Não conseguimos mudar o estado da unidade.',
+  'tree.unit.action.submit': 'Enviar para revisão',
+  'tree.unit.action.approve': 'Aprovar',
+  'tree.unit.action.reject': 'Devolver',
+  'tree.unit.action.publish': 'Publicar',
+  'tree.unit.action.archive': 'Arquivar',
+  'tree.unit.confirm.publish.title': 'Publicar a unidade?',
+  'tree.unit.confirm.publish.description':
+    'A unidade "{title}" passa a aparecer no catálogo do aluno, com as lições que estiverem publicadas.',
+  'tree.unit.confirm.archive.title': 'Arquivar a unidade?',
+  'tree.unit.confirm.archive.description':
+    'A unidade "{title}" sai do catálogo do aluno. As lições dela não são apagadas.',
+  'tree.lesson.new': 'Nova lição',
+  'tree.lesson.empty': 'Nenhuma lição nesta unidade.',
+  'tree.lesson.open': 'Abrir {title}',
+  'tree.lesson.moveUp': 'Subir a lição {title}',
+  'tree.lesson.moveDown': 'Descer a lição {title}',
+  'tree.lesson.published': 'v{version} publicada',
+  'tree.lesson.notPublished': 'Sem versão publicada',
+  'tree.lesson.latest': 'Última versão: v{version}',
+  'tree.reorderError': 'Não conseguimos reordenar. A lista voltou como estava.',
+
+  'tree.unitDialog.title': 'Nova unidade',
+  'tree.unitDialog.description':
+    'A unidade nasce em rascunho, no nível {level}.',
+  'tree.unitDialog.name': 'Título',
+  'tree.unitDialog.synopsis': 'Sinopse (opcional)',
+  'tree.unitDialog.error': 'Não conseguimos criar a unidade.',
+
+  'tree.lessonDialog.title': 'Nova lição',
+  'tree.lessonDialog.description':
+    'A lição nasce com a versão 1 em rascunho, na unidade {unit}.',
+  'tree.lessonDialog.name': 'Título',
+  'tree.lessonDialog.objective': 'Objetivo (o que o aluno consegue fazer)',
+  'tree.lessonDialog.error': 'Não conseguimos criar a lição.',
+
+  // --- Personagens ---
+  'characters.title': 'Personagens',
+  'characters.subtitle':
+    'O elenco fixo da série. O aluno acompanha as mesmas pessoas ao longo do curso.',
+  'characters.back': 'Voltar ao conteúdo',
+  'characters.new': 'Novo personagem',
+  'characters.edit': 'Editar {name}',
+  'characters.empty.title': 'Nenhum personagem ainda',
+  'characters.empty.description':
+    'Cadastre quem aparece nas cenas e nas conversas.',
+  'characters.voice': 'Voz: {voice}',
+  'characters.noVoice': 'Sem voz definida',
+  'characters.dialog.createTitle': 'Novo personagem',
+  'characters.dialog.editTitle': 'Editar {name}',
+  'characters.dialog.name': 'Nome',
+  'characters.dialog.bio': 'Bio (quem é, como fala)',
+  'characters.dialog.voice': 'Voz (voiceId)',
+  'characters.dialog.voiceHint': 'O identificador da voz no serviço de áudio.',
+  'characters.dialog.avatar': 'Avatar',
+  'characters.dialog.chooseImage': 'Escolher imagem',
+  'characters.dialog.replaceImage': 'Trocar imagem',
+  'characters.dialog.removeImage': 'Tirar imagem',
+  'characters.dialog.imageHint': 'JPEG, PNG ou WebP, até 2 MB.',
+  'characters.dialog.uploading': 'Enviando a imagem…',
+  'characters.dialog.imageType': 'Envie uma imagem JPEG, PNG ou WebP.',
+  'characters.dialog.imageSize': 'A imagem passa de 2 MB. Envie uma menor.',
+  'characters.dialog.imageError': 'Não conseguimos enviar a imagem.',
+  'characters.dialog.error': 'Não conseguimos salvar o personagem.',
+  'characters.dialog.slugLocked': 'O identificador não muda depois de criado.',
+
+  // --- Lição: versões e fluxo ---
+  'lesson.back': 'Voltar ao conteúdo',
+  'lesson.versions': 'Versões',
+  'lesson.versionRow': 'Versão {version}',
+  'lesson.published': 'No ar',
+  'lesson.createdAt': 'Criada em {date}',
+  'lesson.publishedAt': 'Publicada em {date}',
+  'lesson.approvedAt': 'Aprovada em {date}',
+  'lesson.open': 'Abrir',
+  'lesson.newVersion': 'Criar nova versão',
+  'lesson.newVersionHint':
+    'Copia a versão publicada para um rascunho. O aluno continua vendo a publicada até você publicar a nova.',
+  'lesson.newVersionError': 'Não conseguimos criar a nova versão.',
+  'lesson.draftOpen':
+    'A versão {version} ainda está aberta. Publique ou arquive ela antes de começar outra.',
+  'lesson.compare': 'Comparar versões',
+  'lesson.compare.from': 'De',
+  'lesson.compare.to': 'Para',
+  'lesson.compare.empty': 'As duas versões são iguais.',
+  'lesson.compare.pick': 'Escolha duas versões diferentes para comparar.',
+  'lesson.compare.meta': 'Metadados',
+  'lesson.compare.skills': 'Skills-alvo',
+  'lesson.compare.skillsAdded': 'Adicionadas: {list}',
+  'lesson.compare.skillsRemoved': 'Removidas: {list}',
+  'lesson.compare.steps': 'Etapas',
+  'lesson.compare.stepAdded': 'Etapa {position}: {type} adicionada',
+  'lesson.compare.stepRemoved': 'Etapa {position}: {type} removida',
+  'lesson.compare.stepChanged': 'Etapa {position}: {type} alterada',
+  'lesson.compare.typeChanged': 'O tipo mudou de {from} para {to}',
+  'lesson.compare.unchanged': '{count} etapas sem mudança',
+  'lesson.compare.before': 'Antes',
+  'lesson.compare.after': 'Depois',
+  'lesson.compare.blank': '—',
+  'lesson.compare.meta.title': 'Título',
+  'lesson.compare.meta.objective': 'Objetivo',
+  'lesson.compare.meta.cefrLevel': 'Nível',
+  'lesson.compare.meta.estimatedMinutes': 'Tempo estimado (min)',
+  // --- Seletores (skill, nota de registro, erro típico) ---
+  'picker.skill.search': 'Buscar skill por nome ou código',
+  'picker.skill.results': 'Resultados da busca de skill',
+  'picker.skill.none': 'Nenhuma skill encontrada.',
+  'picker.skill.loading': 'Buscando…',
+  'picker.skill.error': 'Não conseguimos buscar as skills.',
+  'picker.skill.clear': 'Tirar {skill}',
+  'picker.skill.noneSelected': 'Nenhuma skill escolhida.',
+  'picker.skill.selected': 'Escolhida: {skill}',
+  'picker.note.placeholder': 'Escolha a nota de registro',
+  'picker.note.error': 'Não conseguimos carregar as notas de registro.',
+  'picker.errorPattern.placeholder': 'Nenhum erro típico',
+  'picker.character.placeholder': 'Escolha o personagem',
+
+  // --- Editor da versão ---
+  'editor.back': 'Voltar à lição',
+  'editor.heading': 'Versão {version}',
+  'editor.loadError': 'Não conseguimos abrir esta versão.',
+  'editor.readOnly.published':
+    'Esta versão está publicada e não pode ser editada. Para mudar algo, crie uma nova versão a partir dela.',
+  'editor.readOnly.archived':
+    'Esta versão está arquivada e não pode ser editada.',
+  'editor.readOnly.action': 'Criar nova versão',
+  'editor.readOnly.error': 'Não conseguimos criar a nova versão.',
+  'editor.returnedToDraft':
+    'Esta versão estava em revisão ou aprovada e voltou para rascunho porque você a editou. Envie para revisão de novo quando terminar.',
+  'editor.save.clean': 'Tudo salvo',
+  'editor.save.saved': 'Salvo às {time}',
+  'editor.save.saving': 'Salvando…',
+  'editor.save.dirty': 'Alterações não salvas',
+  'editor.save.error': 'Não conseguimos salvar',
+  'editor.save.retry': 'Tentar de novo',
+  'editor.save.invalidMeta':
+    'Estes campos têm erro e ainda não foram salvos: {fields}.',
+  'editor.save.readOnly': 'Somente leitura',
+  'editor.validation.ok': 'Nenhum problema encontrado.',
+  'editor.validation.one': '1 problema para corrigir antes de enviar.',
+  'editor.validation.many': '{count} problemas para corrigir antes de enviar.',
+  'editor.tab.meta': 'Metadados',
+  'editor.steps': 'Etapas',
+  'editor.stepList': 'Etapas da lição',
+  'editor.steps.empty': 'Esta lição ainda não tem etapas. Adicione a primeira.',
+  'editor.step.title': '{position}. {type}',
+  'editor.step.errors.one': '1 erro',
+  'editor.step.errors.many': '{count} erros',
+  'editor.step.add': 'Adicionar etapa',
+  'editor.step.addType': 'Adicionar etapa: {type}',
+  'editor.step.moveUp': 'Subir a etapa {position}',
+  'editor.step.moveDown': 'Descer a etapa {position}',
+  'editor.step.remove': 'Remover a etapa {position}',
+  'editor.step.removeConfirm.title': 'Remover esta etapa?',
+  'editor.step.removeConfirm.description':
+    'A etapa {position} ({type}) e tudo que foi escrito nela serão apagados.',
+  'editor.step.removeConfirm.action': 'Remover etapa',
+  'editor.step.invalidHint':
+    'Corrija os campos marcados para o aluno ver esta etapa.',
+  'editor.meta.title': 'Título',
+  'editor.meta.objective': 'Objetivo (o que o aluno consegue fazer)',
+  'editor.meta.cefrLevel': 'Nível',
+  'editor.meta.estimatedMinutes': 'Tempo estimado (minutos)',
+  'editor.meta.skills': 'Skills-alvo',
+  'editor.meta.skillsHint':
+    'As skills que a lição ensina. A ordem é a da lista.',
+  'editor.list.moveUp': 'Subir',
+  'editor.list.moveDown': 'Descer',
+  'editor.list.remove': 'Remover',
+  'editor.preview.show': 'Mostrar o preview',
+  'editor.preview.hide': 'Esconder o preview',
+
+  // --- Marcações (spans) ---
+  'spans.selected': 'Trecho selecionado: "{text}"',
+  'spans.selectHint': 'Selecione um trecho do texto para marcá-lo.',
+  'spans.kind': 'Tipo da marcação',
+  'spans.skill': 'Skill da marcação',
+  'spans.skillOptional': 'Skill da marcação (opcional)',
+  'spans.note': 'Nota de registro',
+  'spans.add': 'Marcar trecho',
+  'spans.needReference': 'Escolha a skill ou a nota de registro para marcar.',
+  'spans.list': 'Marcações',
+  'spans.empty': 'Sem marcações neste texto.',
+  'spans.remove': 'Remover marcação {n}',
+  'spans.row': '"{text}" · {kind}',
+  'spans.preview': 'Como fica',
+  'spans.dropped.one':
+    '1 marcação foi removida porque o texto dela foi cortado.',
+  'spans.dropped.many':
+    '{count} marcações foram removidas porque o texto delas foi cortado.',
+
+  // --- Editores de etapa ---
+  'scene.location': 'Onde a cena acontece',
+  'scene.summary': 'Resumo da cena (opcional)',
+  'scene.cast': 'Quem aparece na cena',
+  'scene.lines': 'Falas',
+  'scene.line': 'fala {n}',
+  'scene.line.character': 'Quem fala',
+  'scene.line.text': 'Fala em inglês (como se fala)',
+  'scene.line.standardText': 'Estrutura gramatical (opcional)',
+  'scene.line.translation': 'Tradução em português',
+  'scene.line.add': 'Adicionar fala',
+
+  'cards.card': 'card {n}',
+  'cards.title': 'Título do card',
+  'cards.body': 'Texto do card (markdown)',
+  'cards.bodyHint':
+    'Aceita **negrito**, `código`, ~~riscado~~ e listas com "- ".',
+  'cards.bodyPreview': 'Como o aluno vê o texto',
+  'cards.table.add': 'Adicionar tabela',
+  'cards.table.remove': 'Remover a tabela',
+  'cards.table.header': 'Cabeçalho da coluna {n}',
+  'cards.table.cell': 'Linha {row}, coluna {col}',
+  'cards.table.addColumn': 'Adicionar coluna',
+  'cards.table.addRow': 'Adicionar linha',
+  'cards.table.removeColumn': 'Remover a coluna {n}',
+  'cards.table.removeRow': 'Remover a linha {n}',
+  'cards.examples': 'Exemplos',
+  'cards.example': 'exemplo {n}',
+  'cards.example.text': 'Exemplo em inglês',
+  'cards.example.translation': 'Tradução (opcional)',
+  'cards.example.add': 'Adicionar exemplo',
+  'cards.add': 'Adicionar card',
+
+  'practice.items': 'Questões da prática',
+  'practice.empty': 'Nenhuma questão escolhida ainda.',
+  'practice.item': 'questão {n}',
+  'practice.loading': 'Carregando a questão…',
+  'practice.itemMissing': 'Questão não encontrada ({id}).',
+  'practice.shuffle': 'Embaralhar a ordem para o aluno',
+  'practice.pick.title': 'Escolher do banco de questões',
+  'practice.pick.level': 'Nível',
+  'practice.pick.levelAny': 'Todos os níveis',
+  'practice.pick.status': 'Situação',
+  'practice.pick.skill': 'Filtrar por skill',
+  'practice.pick.add': 'Adicionar {prompt}',
+  'practice.pick.added': 'Já está na prática',
+  'practice.pick.none': 'Nenhuma questão encontrada com esses filtros.',
+  'practice.pick.error': 'Não conseguimos buscar as questões.',
+  'practice.pick.loading': 'Buscando questões…',
+  'practice.pick.results': 'Questões encontradas',
+
+  'production.prompt': 'Enunciado (em português)',
+  'production.helpers': 'Chips de ajuda (em inglês)',
+  'production.helper': 'chip {n}',
+  'production.helper.label': 'Chip {n}',
+  'production.helper.add': 'Adicionar chip',
+  'production.rubric': 'Rubrica de correção',
+  'production.criterion': 'critério {n}',
+  'production.criterion.description': 'O que a correção precisa checar',
+  'production.criterion.skill': 'Skill do critério (opcional)',
+  'production.criterion.error': 'Erro típico que a correção vigia (opcional)',
+  'production.criterion.add': 'Adicionar critério',
+  'production.targetSkills': 'Skills trabalhadas',
+  'production.minWords': 'Mínimo de palavras (opcional)',
+
+  'roleplay.character': 'Personagem que conversa com o aluno',
+  'roleplay.scenario': 'Cenário (em português)',
+  'roleplay.openingLine': 'Primeira fala do personagem (opcional, em inglês)',
+  'roleplay.goals': 'Metas da conversa',
+  'roleplay.goal': 'meta {n}',
+  'roleplay.goal.description': 'O que o aluno precisa conseguir fazer',
+  'roleplay.goal.skills': 'Skills da meta',
+  'roleplay.goal.add': 'Adicionar meta',
+  'roleplay.maxTurns': 'Máximo de turnos',
+  'roleplay.level': 'Nível do vocabulário do personagem',
+
+  'summary.takeaways': 'O que o aluno leva da lição',
+  'summary.takeaway': 'item {n}',
+  'summary.takeaway.label': 'Item {n}',
+  'summary.takeaway.add': 'Adicionar item',
+  'summary.skills': 'Skills da lição',
+  'summary.notes': 'Notas de registro vistas na lição',
+
+  // --- Preview ---
+  'preview.title': 'Preview',
+  'preview.devices': 'Tamanho da tela',
+  'preview.device.phone': 'Celular',
+  'preview.device.desktop': 'Desktop',
+  'preview.steps': 'Etapas do preview',
+  'preview.step': '{position}. {type}',
+  'preview.refreshing': 'Atualizando o preview…',
+  'preview.loadError': 'Não conseguimos carregar o preview.',
+  'preview.empty': 'Sem etapas para mostrar ainda.',
+  'preview.invalid.title': 'Esta etapa ainda tem erros',
+  'preview.invalid.description':
+    'Corrija os campos marcados no editor para ver como o aluno enxerga esta etapa.',
+  'preview.aiNote':
+    'Prévia: a correção por IA não roda aqui, para não gastar crédito nem criar resposta de aluno.',
+  'preview.roleplayNote':
+    'Prévia: a conversa com a IA não roda aqui. É assim que ela começa para o aluno.',
+  'preview.summaryNote': 'Prévia: a lição não é concluída aqui.',
+  'preview.practice.note':
+    'Prévia: a resposta não é corrigida aqui. Use "Ver gabarito" para conferir a questão.',
+  'preview.continue': 'Continuar',
+  'preview.practice.answerKey': 'Ver gabarito',
+  'preview.practice.hideKey': 'Esconder o gabarito',
+  'preview.practice.prev': 'Questão anterior',
+  'preview.practice.next': 'Próxima questão',
+  'preview.practice.position': 'Questão {position} de {total}',
+  'preview.practice.missing': 'Esta questão não veio no preview.',
+  'preview.practice.empty': 'A prática ainda não tem questões.',
+
+  // --- Fluxo editorial ---
+  'editorial.action.submit-for-review': 'Enviar para revisão',
+  'editorial.action.approve': 'Aprovar',
+  'editorial.action.reject': 'Devolver para rascunho',
+  'editorial.action.publish': 'Publicar',
+  'editorial.action.archive': 'Arquivar',
+  'editorial.done.submit-for-review': 'Enviada para revisão.',
+  'editorial.done.approve':
+    'Aprovada. O áudio da lição começa a ser gerado agora.',
+  'editorial.done.reject': 'Devolvida para rascunho.',
+  'editorial.done.publish': 'Publicada. O aluno já vê esta versão.',
+  'editorial.done.archive': 'Versão arquivada.',
+  'editorial.confirm.publish.title': 'Publicar esta versão?',
+  'editorial.confirm.publish.description':
+    'A versão {version} passa a ser a que o aluno vê, e a anterior vai para o histórico.',
+  'editorial.confirm.archive.title': 'Arquivar esta versão?',
+  'editorial.confirm.archive.description':
+    'A versão {version} sai de circulação e não pode mais ser editada.',
+  'editorial.problem.title': 'Não deu para continuar',
+  'editorial.problem.validation': 'Corrija estes pontos e tente de novo:',
+  'editorial.problem.validationStep': 'Etapa {position} · {type}',
+  'editorial.problem.lessonLevel': 'Lição',
+  'editorial.problem.goToField': 'Ir para o campo',
+  'editorial.problem.openEditor': 'Abrir no editor',
+  'editorial.problem.references':
+    'Estas referências não existem ou não estão publicadas:',
+  'editorial.problem.reference.skills': 'Skills',
+  'editorial.problem.reference.registerNotes': 'Notas de registro',
+  'editorial.problem.reference.errorPatterns': 'Erros típicos',
+  'editorial.problem.reference.characters': 'Personagens',
+  'editorial.problem.reference.assets': 'Arquivos de mídia',
+  'editorial.problem.reference.items': 'Questões',
+  'editorial.problem.qa':
+    'A revisão automática encontrou problemas que travam a aprovação:',
+  'editorial.problem.audio':
+    'O áudio é gerado quando a versão é aprovada. Tente publicar de novo em instantes.',
+  'editorial.problem.audioMissing': 'Ainda sem áudio: {list}',
+  'editorial.problem.dismiss': 'Dispensar',
 } as const;
 
-type MessageKey = keyof typeof messages;
+export type MessageKey = keyof typeof messages;
 
-export function t(key: MessageKey): string {
-  return messages[key];
+/** Troca `{nome}` pelo valor de `params.nome` — ainda sem lib de i18n. */
+export function t(
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): string {
+  const text: string = messages[key];
+
+  if (params === undefined) {
+    return text;
+  }
+
+  return text.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in params ? String(params[name]) : match,
+  );
 }

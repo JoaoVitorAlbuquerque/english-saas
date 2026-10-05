@@ -1,25 +1,36 @@
+import { createHash } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
-import type {
-  CefrLevel,
-  ContentStatus,
+import {
   MediaKind,
-  Prisma,
+  type CefrLevel,
+  type ContentStatus,
+  type Prisma,
 } from '@prisma/client';
 
 import { NotFoundError } from 'src/common/errors/app.exception';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
-import { STORAGE_PREFIXES } from 'src/infra/storage/storage-keys';
+import {
+  STORAGE_PREFIXES,
+  buildStorageKey,
+} from 'src/infra/storage/storage-keys';
+import { StorageService } from 'src/infra/storage/storage.service';
 
 import {
+  InvalidImageError,
   InvalidTransitionError,
   MissingReferencesError,
+  ReorderMismatchError,
   SlugInUseError,
 } from '../curriculum.errors';
+import { checkImage } from '../domain/image-upload';
+import { planReorder, temporaryOrderBase } from '../domain/reorder';
 import {
   isEditable,
   nextStatus,
   type ContentAction,
 } from '../domain/versioning';
+import { AssetUrlService } from './asset-url.service';
 import { CatalogCacheService } from './catalog-cache.service';
 
 /**
@@ -86,6 +97,8 @@ export class StructureService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CatalogCacheService,
+    private readonly storage: StorageService,
+    private readonly assetUrls: AssetUrlService,
   ) {}
 
   // -------------------------------------------------------------------
@@ -260,6 +273,53 @@ export class StructureService {
     return this.findUnit(id);
   }
 
+  /**
+   * Reordena as unidades de um nível. `ids` é o conjunto atual na ordem
+   * nova; a escrita é em duas fases por causa do `@@unique([levelId, order])`.
+   */
+  async reorderUnits(levelId: string, ids: readonly string[]) {
+    await this.findLevel(levelId);
+
+    await this.prisma.$transaction(async (tx) => {
+      const current = await tx.unit.findMany({
+        where: { levelId },
+        select: { id: true, order: true },
+      });
+      const plan = planReorder(
+        current.map((unit) => unit.id),
+        ids,
+      );
+
+      if (!plan.ok) {
+        throw new ReorderMismatchError({
+          reason: plan.reason,
+          missing: plan.missing,
+          unknown: plan.unknown,
+        });
+      }
+
+      const base = temporaryOrderBase(current.map((unit) => unit.order));
+
+      for (const step of plan.steps) {
+        await tx.unit.update({
+          where: { id: step.id },
+          data: { order: base + step.order },
+        });
+      }
+
+      for (const step of plan.steps) {
+        await tx.unit.update({
+          where: { id: step.id },
+          data: { order: step.order },
+        });
+      }
+    });
+
+    await this.cache.invalidateLists();
+
+    return this.listUnits(levelId);
+  }
+
   /** Move a unidade no fluxo editorial. Publicar libera ela no catálogo. */
   async transitionUnit(id: string, action: ContentAction) {
     const unit = await this.prisma.unit.findUnique({
@@ -287,8 +347,36 @@ export class StructureService {
   // Personagem
   // -------------------------------------------------------------------
 
+  /** O elenco, com a URL assinada do avatar (a tela de personagens mostra). */
   async listCharacters() {
-    return this.prisma.character.findMany({ orderBy: { slug: 'asc' } });
+    const characters = await this.prisma.character.findMany({
+      orderBy: { slug: 'asc' },
+    });
+    const assets = await this.prisma.mediaAsset.findMany({
+      where: {
+        id: {
+          in: characters.flatMap((c) =>
+            c.avatarAssetId === null ? [] : [c.avatarAssetId],
+          ),
+        },
+      },
+      select: {
+        id: true,
+        kind: true,
+        storageKey: true,
+        mimeType: true,
+        durationMs: true,
+      },
+    });
+    const resolved = await this.assetUrls.resolveMap(assets);
+
+    return characters.map((character) => ({
+      ...character,
+      avatarUrl:
+        character.avatarAssetId === null
+          ? null
+          : (resolved[character.avatarAssetId]?.url ?? null),
+    }));
   }
 
   async createCharacter(input: CharacterInput) {
@@ -365,6 +453,46 @@ export class StructureService {
         meta: (input.meta ?? {}) as Prisma.InputJsonValue,
       },
     });
+  }
+
+  /**
+   * Recebe uma imagem do editor, grava sob `content/images/` e registra o
+   * `MediaAsset`. A chave leva o hash do conteúdo: o mesmo arquivo enviado
+   * duas vezes é um asset só, e o objeto nunca muda (cache longo).
+   */
+  async uploadImage(file: { buffer: Buffer } | undefined) {
+    const check = checkImage(file?.buffer);
+
+    if (!check.ok || file === undefined) {
+      throw new InvalidImageError(check.ok ? 'MISSING' : check.reason);
+    }
+
+    const hash = createHash('sha256').update(file.buffer).digest('hex');
+    const key = buildStorageKey(
+      STORAGE_PREFIXES.CONTENT,
+      'images',
+      `${hash.slice(0, 24)}.${check.type.extension}`,
+    );
+
+    await this.storage.putObject({
+      key,
+      body: file.buffer,
+      contentType: check.type.mimeType,
+      cacheControl: 'public, max-age=31536000, immutable',
+    });
+
+    const asset = await this.prisma.mediaAsset.upsert({
+      where: { storageKey: key },
+      create: {
+        kind: MediaKind.IMAGE,
+        storageKey: key,
+        mimeType: check.type.mimeType,
+        sizeBytes: file.buffer.byteLength,
+      },
+      update: {},
+    });
+
+    return { ...asset, url: (await this.assetUrls.resolve(asset)).url };
   }
 
   async listMediaAssets(kind?: MediaKind) {
