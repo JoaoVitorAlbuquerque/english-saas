@@ -3,6 +3,7 @@ import type {
   CefrLevel,
   Competency,
   LearningGoal,
+  MediaKind,
   Prisma,
   RegisterLevel,
   SkillType,
@@ -18,11 +19,16 @@ import {
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 
 import {
+  InvalidPrerequisitesError,
   MissingReferencesError,
+  RegisterSkillTakenError,
   SlugInUseError,
   TaxonomySlugIsImmutableError,
 } from '../curriculum.errors';
 import { matchesSearch } from '../domain/search';
+import { findPrerequisiteCycle } from '../domain/skill-graph';
+
+import { AssetUrlService } from './asset-url.service';
 
 /**
  * Autoria da taxonomia: Skill, ErrorPattern e RegisterNote.
@@ -95,22 +101,89 @@ const skillSelect = {
   commonErrors: { select: { errorPatternId: true } },
 } satisfies Prisma.SkillSelect;
 
+/** Mesmo contrato de `skillSelect`, para erro típico. */
+const errorPatternSelect = {
+  id: true,
+  description: true,
+  example: true,
+  correction: true,
+  explanation: true,
+  deprecatedAt: true,
+  replacedById: true,
+  skills: { select: { skillId: true } },
+} satisfies Prisma.ErrorPatternSelect;
+
+const registerNoteSelect = {
+  id: true,
+  spokenForm: true,
+  standardForm: true,
+  register: true,
+  explanation: true,
+  whenToAvoid: true,
+  cefrLevel: true,
+  skillId: true,
+  audioAssetId: true,
+  deprecatedAt: true,
+  replacedById: true,
+  createdAt: true,
+  updatedAt: true,
+  audioAsset: {
+    select: {
+      id: true,
+      kind: true,
+      storageKey: true,
+      mimeType: true,
+      durationMs: true,
+    },
+  },
+} satisfies Prisma.RegisterNoteSelect;
+
+type ListQuery = {
+  cursor?: string | undefined;
+  limit: number;
+  includeDeprecated?: boolean | undefined;
+  q?: string | undefined;
+};
+
 @Injectable()
 export class TaxonomyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly assets: AssetUrlService,
+  ) {}
 
   // -------------------------------------------------------------------
   // Skill
   // -------------------------------------------------------------------
 
-  async listSkills(query: {
-    cursor?: string | undefined;
-    limit: number;
-    includeDeprecated?: boolean | undefined;
-    q?: string | undefined;
-  }): Promise<Paginated<unknown>> {
+  async listSkills(
+    query: ListQuery & {
+      level?: CefrLevel | undefined;
+      competency?: Competency | undefined;
+      type?: SkillType | undefined;
+    },
+  ): Promise<Paginated<unknown>> {
+    const where: Prisma.SkillWhereInput = {
+      ...(query.includeDeprecated === true ? {} : { deprecatedAt: null }),
+      ...(query.level === undefined ? {} : { cefrLevel: query.level }),
+      ...(query.competency === undefined
+        ? {}
+        : { competency: query.competency }),
+      ...(query.type === undefined ? {} : { type: query.type }),
+    };
+
     if (query.q !== undefined) {
-      return this.searchSkills(query.q, query);
+      const rows = await this.prisma.skill.findMany({
+        where,
+        orderBy: { id: 'asc' },
+        select: skillSelect,
+      });
+      const q = query.q;
+      const page = this.pageInMemory(rows, query, (row) =>
+        matchesSearch([row.id, row.title], q),
+      );
+
+      return { ...page, data: page.data.map((row) => this.flattenSkill(row)) };
     }
 
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
@@ -118,7 +191,7 @@ export class TaxonomyService {
     const rows = await this.prisma.skill.findMany({
       take,
       ...cursorArgs,
-      where: query.includeDeprecated === true ? {} : { deprecatedAt: null },
+      where,
       orderBy: { id: 'asc' },
       select: skillSelect,
     });
@@ -129,40 +202,28 @@ export class TaxonomyService {
   }
 
   /**
-   * Busca por texto no id e no título, sem acento nem caixa. Lê a taxonomia
-   * inteira e filtra em memória (ver `domain/search.ts`), paginando pelo
+   * Busca por texto sem acento nem caixa: lê o conjunto inteiro e filtra em
+   * memória (ver `domain/search.ts`; a taxonomia é pequena), paginando pelo
    * mesmo cursor opaco da listagem comum.
    */
-  private async searchSkills(
-    q: string,
-    query: {
-      cursor?: string | undefined;
-      limit: number;
-      includeDeprecated?: boolean | undefined;
-    },
-  ): Promise<Paginated<unknown>> {
-    const rows = await this.prisma.skill.findMany({
-      where: query.includeDeprecated === true ? {} : { deprecatedAt: null },
-      orderBy: { id: 'asc' },
-      select: skillSelect,
-    });
-
-    const matching = rows.filter((row) =>
-      matchesSearch([row.id, row.title], q),
-    );
+  private pageInMemory<T extends { id: string }>(
+    rows: readonly T[],
+    query: { cursor?: string | undefined; limit: number },
+    matches: (row: T) => boolean,
+  ): Paginated<T> {
+    const matching = rows.filter(matches);
     const after =
       query.cursor === undefined ? undefined : decodeCursor(query.cursor);
     const start =
       after === undefined
         ? 0
         : matching.findIndex((row) => row.id === after) + 1;
-    const page = buildPage(
+
+    return buildPage(
       matching.slice(start, start + query.limit + 1),
       query.limit,
       (row) => row.id,
     );
-
-    return { ...page, data: page.data.map((row) => this.flattenSkill(row)) };
   }
 
   async findSkill(id: string) {
@@ -188,6 +249,8 @@ export class TaxonomyService {
       throw new SlugInUseError(input.id);
     }
 
+    // A auto-referência vem antes da existência: a skill ainda não existe.
+    await this.assertPrerequisitesValid(input.id, input.prerequisites ?? []);
     await this.assertSkillsExist(input.prerequisites ?? []);
     await this.assertErrorPatternsExist(input.commonErrors ?? []);
 
@@ -215,8 +278,18 @@ export class TaxonomyService {
       throw new TaxonomySlugIsImmutableError(id);
     }
 
-    await this.findSkill(id);
+    const current = await this.findSkill(id);
+
     await this.assertSkillsExist(input.prerequisites ?? []);
+
+    if (input.prerequisites !== undefined) {
+      await this.assertPrerequisitesValid(
+        id,
+        input.prerequisites,
+        current.prerequisites,
+      );
+    }
+
     await this.assertErrorPatternsExist(input.commonErrors ?? []);
 
     await this.prisma.$transaction(async (tx) => {
@@ -257,6 +330,18 @@ export class TaxonomyService {
       }
 
       await this.assertSkillsExist([replacedById]);
+
+      const replacement = await this.prisma.skill.findUnique({
+        where: { id: replacedById },
+        select: { deprecatedAt: true },
+      });
+
+      if (replacement?.deprecatedAt != null) {
+        throw new MissingReferencesError({
+          skills: [replacedById],
+          reason: 'A skill substituta já está obsoleta.',
+        });
+      }
     }
 
     await this.prisma.skill.update({
@@ -271,52 +356,57 @@ export class TaxonomyService {
   // ErrorPattern
   // -------------------------------------------------------------------
 
-  async listErrorPatterns(query: {
-    cursor?: string | undefined;
-    limit: number;
-  }): Promise<Paginated<unknown>> {
+  async listErrorPatterns(
+    query: ListQuery & { skillId?: string | undefined },
+  ): Promise<Paginated<unknown>> {
+    const where: Prisma.ErrorPatternWhereInput = {
+      ...(query.includeDeprecated === true ? {} : { deprecatedAt: null }),
+      ...(query.skillId === undefined
+        ? {}
+        : { skills: { some: { skillId: query.skillId } } }),
+    };
+    const flatten = <T extends { skills: { skillId: string }[] }>(row: T) => {
+      const { skills, ...rest } = row;
+
+      return { ...rest, skillIds: skills.map((link) => link.skillId) };
+    };
+
+    if (query.q !== undefined) {
+      const rows = await this.prisma.errorPattern.findMany({
+        where,
+        orderBy: { id: 'asc' },
+        select: errorPatternSelect,
+      });
+      const q = query.q;
+      const page = this.pageInMemory(rows, query, (row) =>
+        matchesSearch(
+          [row.id, row.description, row.example, row.correction],
+          q,
+        ),
+      );
+
+      return { ...page, data: page.data.map(flatten) };
+    }
+
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
 
     const rows = await this.prisma.errorPattern.findMany({
       take,
       ...cursorArgs,
+      where,
       orderBy: { id: 'asc' },
-      select: {
-        id: true,
-        description: true,
-        example: true,
-        correction: true,
-        explanation: true,
-        deprecatedAt: true,
-        replacedById: true,
-        skills: { select: { skillId: true } },
-      },
+      select: errorPatternSelect,
     });
 
     const page = buildPage(rows, query.limit, (row) => row.id);
 
-    return {
-      ...page,
-      data: page.data.map(({ skills, ...row }) => ({
-        ...row,
-        skillIds: skills.map((link) => link.skillId),
-      })),
-    };
+    return { ...page, data: page.data.map(flatten) };
   }
 
   async findErrorPattern(id: string) {
     const pattern = await this.prisma.errorPattern.findUnique({
       where: { id },
-      select: {
-        id: true,
-        description: true,
-        example: true,
-        correction: true,
-        explanation: true,
-        deprecatedAt: true,
-        replacedById: true,
-        skills: { select: { skillId: true } },
-      },
+      select: errorPatternSelect,
     });
 
     if (pattern === null) {
@@ -326,6 +416,22 @@ export class TaxonomyService {
     const { skills, ...rest } = pattern;
 
     return { ...rest, skillIds: skills.map((link) => link.skillId) };
+  }
+
+  /** Tira de circulação sem renomear. O substituto é opcional. */
+  async deprecateErrorPattern(id: string, replacedById?: string | null) {
+    await this.findErrorPattern(id);
+
+    if (replacedById != null) {
+      await this.assertReplacement('errorPatterns', id, replacedById);
+    }
+
+    await this.prisma.errorPattern.update({
+      where: { id },
+      data: { deprecatedAt: new Date(), replacedById: replacedById ?? null },
+    });
+
+    return this.findErrorPattern(id);
   }
 
   async createErrorPattern(input: ErrorPatternInput) {
@@ -397,29 +503,62 @@ export class TaxonomyService {
   // RegisterNote
   // -------------------------------------------------------------------
 
-  async listRegisterNotes(query: {
-    cursor?: string | undefined;
-    limit: number;
-  }): Promise<Paginated<unknown>> {
+  async listRegisterNotes(
+    query: ListQuery & {
+      level?: CefrLevel | undefined;
+      register?: RegisterLevel | undefined;
+      skillId?: string | undefined;
+    },
+  ): Promise<Paginated<unknown>> {
+    const where: Prisma.RegisterNoteWhereInput = {
+      ...(query.includeDeprecated === true ? {} : { deprecatedAt: null }),
+      ...(query.level === undefined ? {} : { cefrLevel: query.level }),
+      ...(query.register === undefined ? {} : { register: query.register }),
+      ...(query.skillId === undefined ? {} : { skillId: query.skillId }),
+    };
+
+    if (query.q !== undefined) {
+      const rows = await this.prisma.registerNote.findMany({
+        where,
+        orderBy: { id: 'asc' },
+        select: registerNoteSelect,
+      });
+      const q = query.q;
+      const page = this.pageInMemory(rows, query, (row) =>
+        matchesSearch([row.id, row.spokenForm, row.standardForm], q),
+      );
+
+      return { ...page, data: await this.withAudio(page.data) };
+    }
+
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
 
     const rows = await this.prisma.registerNote.findMany({
       take,
       ...cursorArgs,
+      where,
       orderBy: { id: 'asc' },
+      select: registerNoteSelect,
     });
 
-    return buildPage(rows, query.limit, (row) => row.id);
+    const page = buildPage(rows, query.limit, (row) => row.id);
+
+    return { ...page, data: await this.withAudio(page.data) };
   }
 
   async findRegisterNote(id: string) {
-    const note = await this.prisma.registerNote.findUnique({ where: { id } });
+    const note = await this.prisma.registerNote.findUnique({
+      where: { id },
+      select: registerNoteSelect,
+    });
 
     if (note === null) {
       throw new NotFoundError('Não encontramos esta nota de registro.');
     }
 
-    return note;
+    const [withAudio] = await this.withAudio([note]);
+
+    return withAudio as NonNullable<typeof withAudio>;
   }
 
   async createRegisterNote(input: RegisterNoteInput) {
@@ -433,8 +572,10 @@ export class TaxonomyService {
     }
 
     await this.assertRegisterSkill(input.skillId);
+    await this.assertSkillFree(input.skillId, input.id);
+    await this.assertAudioAsset(input.audioAssetId);
 
-    return this.prisma.registerNote.create({
+    await this.prisma.registerNote.create({
       data: {
         id: input.id,
         spokenForm: input.spokenForm,
@@ -447,6 +588,8 @@ export class TaxonomyService {
         audioAssetId: input.audioAssetId ?? null,
       },
     });
+
+    return this.findRegisterNote(input.id);
   }
 
   async updateRegisterNote(id: string, input: Partial<RegisterNoteInput>) {
@@ -458,9 +601,12 @@ export class TaxonomyService {
 
     if (input.skillId !== undefined) {
       await this.assertRegisterSkill(input.skillId);
+      await this.assertSkillFree(input.skillId, id);
     }
 
-    return this.prisma.registerNote.update({
+    await this.assertAudioAsset(input.audioAssetId);
+
+    await this.prisma.registerNote.update({
       where: { id },
       data: {
         ...(input.spokenForm === undefined
@@ -485,6 +631,24 @@ export class TaxonomyService {
           : { audioAssetId: input.audioAssetId }),
       },
     });
+
+    return this.findRegisterNote(id);
+  }
+
+  /** Tira de circulação sem renomear. O substituto é opcional. */
+  async deprecateRegisterNote(id: string, replacedById?: string | null) {
+    await this.findRegisterNote(id);
+
+    if (replacedById != null) {
+      await this.assertReplacement('registerNotes', id, replacedById);
+    }
+
+    await this.prisma.registerNote.update({
+      where: { id },
+      data: { deprecatedAt: new Date(), replacedById: replacedById ?? null },
+    });
+
+    return this.findRegisterNote(id);
   }
 
   // -------------------------------------------------------------------
@@ -715,6 +879,170 @@ export class TaxonomyService {
         reason: 'A skill de uma nota de registro precisa ser do tipo REGISTER.',
       });
     }
+  }
+
+  /**
+   * Os pré-requisitos propostos para `skillId` formam um grafo válido?
+   * Recusa auto-referência, ciclo e skill obsoleta — esta só entre as que
+   * entram agora (`current` são as que já estavam): quem já estava ligada
+   * não trava a edição de outro campo.
+   */
+  private async assertPrerequisitesValid(
+    skillId: string,
+    prerequisiteIds: readonly string[],
+    current: readonly string[] = [],
+  ): Promise<void> {
+    if (prerequisiteIds.length === 0) {
+      return;
+    }
+
+    if (prerequisiteIds.includes(skillId)) {
+      throw new InvalidPrerequisitesError('SELF', { skills: [skillId] });
+    }
+
+    const links = await this.prisma.skillPrerequisite.findMany({
+      select: { skillId: true, prerequisiteId: true },
+    });
+    const edges = new Map<string, string[]>();
+
+    for (const link of links) {
+      edges.set(link.skillId, [
+        ...(edges.get(link.skillId) ?? []),
+        link.prerequisiteId,
+      ]);
+    }
+
+    const cycle = findPrerequisiteCycle(skillId, prerequisiteIds, edges);
+
+    if (cycle !== null) {
+      throw new InvalidPrerequisitesError('CYCLE', {
+        skills: [...new Set(cycle)],
+        cycle,
+      });
+    }
+
+    const entering = prerequisiteIds.filter((id) => !current.includes(id));
+    const deprecated =
+      entering.length === 0
+        ? []
+        : await this.prisma.skill.findMany({
+            where: { id: { in: entering }, deprecatedAt: { not: null } },
+            select: { id: true },
+          });
+
+    if (deprecated.length > 0) {
+      throw new InvalidPrerequisitesError('DEPRECATED', {
+        skills: deprecated.map((row) => row.id),
+      });
+    }
+  }
+
+  /** O substituto existe, não é o próprio e não está obsoleto. */
+  private async assertReplacement(
+    kind: 'errorPatterns' | 'registerNotes',
+    id: string,
+    replacedById: string,
+  ): Promise<void> {
+    if (replacedById === id) {
+      throw new MissingReferencesError({
+        [kind]: [replacedById],
+        reason: 'Não dá para substituir por ele mesmo.',
+      });
+    }
+
+    const row =
+      kind === 'errorPatterns'
+        ? await this.prisma.errorPattern.findUnique({
+            where: { id: replacedById },
+            select: { deprecatedAt: true },
+          })
+        : await this.prisma.registerNote.findUnique({
+            where: { id: replacedById },
+            select: { deprecatedAt: true },
+          });
+
+    if (row === null) {
+      throw new MissingReferencesError({ [kind]: [replacedById] });
+    }
+
+    if (row.deprecatedAt !== null) {
+      throw new MissingReferencesError({
+        [kind]: [replacedById],
+        reason: 'O substituto já está obsoleto.',
+      });
+    }
+  }
+
+  /** `RegisterNote.skillId` é único: outra nota já usa esta skill? */
+  private async assertSkillFree(
+    skillId: string | null | undefined,
+    noteId: string,
+  ): Promise<void> {
+    if (skillId == null) {
+      return;
+    }
+
+    const taken = await this.prisma.registerNote.findFirst({
+      where: { skillId, id: { not: noteId } },
+      select: { id: true },
+    });
+
+    if (taken !== null) {
+      throw new RegisterSkillTakenError(skillId, taken.id);
+    }
+  }
+
+  /** O asset de áudio de uma nota existe e é mesmo áudio. */
+  private async assertAudioAsset(
+    assetId: string | null | undefined,
+  ): Promise<void> {
+    if (assetId == null) {
+      return;
+    }
+
+    const asset = await this.prisma.mediaAsset.findUnique({
+      where: { id: assetId },
+      select: { kind: true },
+    });
+
+    if (asset?.kind !== 'AUDIO') {
+      throw new MissingReferencesError({
+        assets: [assetId],
+        reason: 'O arquivo de áudio da nota não existe ou não é um áudio.',
+      });
+    }
+  }
+
+  /**
+   * Troca o `audioAsset` cru pela URL assinada, que nasce na resposta
+   * (nunca é guardada). `audioAssetId` continua na linha.
+   */
+  private async withAudio<
+    T extends {
+      audioAsset: {
+        id: string;
+        kind: MediaKind;
+        storageKey: string;
+        mimeType: string;
+        durationMs: number | null;
+      } | null;
+    },
+  >(rows: readonly T[]) {
+    const resolved = await this.assets.resolveMap(
+      rows.flatMap((row) => (row.audioAsset === null ? [] : [row.audioAsset])),
+    );
+
+    return rows.map(({ audioAsset, ...row }) => ({
+      ...row,
+      audio:
+        audioAsset === null
+          ? null
+          : {
+              url: resolved[audioAsset.id]?.url ?? '',
+              mimeType: audioAsset.mimeType,
+              durationMs: audioAsset.durationMs,
+            },
+    }));
   }
 
   // -------------------------------------------------------------------

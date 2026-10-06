@@ -11,13 +11,8 @@ import * as service from './service';
 import type {
   AdminCharacter,
   AdminCourse,
-  AdminErrorPatternPage,
-  AdminItem,
-  AdminItemPage,
   AdminLesson,
   AdminLessonSummary,
-  AdminRegisterNotePage,
-  AdminSkillPage,
   AdminUnit,
   AdminVersion,
   CreateCharacterRequest,
@@ -328,51 +323,5 @@ export function useUpdateCharacter() {
 export function useUploadImage() {
   return useMutation<UploadedImage, ApiError, File>({
     mutationFn: (file) => service.uploadImage(file),
-  });
-}
-
-// --- Taxonomia e banco de questões ---
-
-/** Busca de skill por texto; `q` vazio lista as primeiras. */
-export function useSkillSearch(q: string, enabled = true) {
-  return useQuery<AdminSkillPage, ApiError>({
-    queryKey: queryKeys.adminSkills(q),
-    queryFn: () => service.listSkills({ q, limit: 30 }),
-    enabled,
-    staleTime: 60_000,
-  });
-}
-
-export function useRegisterNotes() {
-  return useQuery<AdminRegisterNotePage, ApiError>({
-    queryKey: queryKeys.adminRegisterNotes,
-    queryFn: () => service.listRegisterNotes({ limit: 100 }),
-    staleTime: 60_000,
-  });
-}
-
-export function useErrorPatterns() {
-  return useQuery<AdminErrorPatternPage, ApiError>({
-    queryKey: queryKeys.adminErrorPatterns,
-    queryFn: () => service.listErrorPatterns({ limit: 100 }),
-    staleTime: 60_000,
-  });
-}
-
-export function useAdminItems(filter: service.AdminItemFilter, enabled = true) {
-  return useQuery<AdminItemPage, ApiError>({
-    queryKey: queryKeys.adminItems(filter),
-    queryFn: () => service.listItems({ limit: 30, ...filter }),
-    enabled,
-    staleTime: 30_000,
-  });
-}
-
-export function useAdminItem(id: string | null) {
-  return useQuery<AdminItem, ApiError>({
-    queryKey: queryKeys.adminItem(id ?? ''),
-    queryFn: () => service.getItem(id ?? ''),
-    enabled: id !== null,
-    staleTime: 60_000,
   });
 }

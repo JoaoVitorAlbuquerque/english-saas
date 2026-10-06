@@ -352,6 +352,52 @@ assinatura vence e a URL nasce na resposta.
 chamam as mesmas funções. As mensagens do zod saem em pt-BR (`issueMessage`),
 porque quem lê é o editor, no campo.
 
+**O mesmo vale para a questão e para a taxonomia.** `item-validation.ts`
+(`validateItem`, `immutableFieldChanges`, `requiresNewItem`), `answer-normalization.ts`
+(contração, caixa, pontuação), `student-view.ts` (`toStudentItem`: o que o aluno
+recebe, sem gabarito — o preview do admin usa a mesma função) e os limites dos
+campos em `item-authoring.ts` e `taxonomy-authoring.ts`. Os arquivos antigos da
+API (`domain/item-rules.ts`, `answer-normalization.ts`, `student-view.ts`) só
+re-exportam. `validateItem` também confere as marcações de um texto de leitura
+contra o próprio texto.
+
+**A autoria de taxonomia e do banco de questões tem rotas e regras a mais**
+(todas `EDITOR`/`ADMIN`):
+
+- **Listas filtráveis.** `GET skills?level&competency&type&q&includeDeprecated`,
+  `GET error-patterns?q&skillId&includeDeprecated`,
+  `GET register-notes?q&level&register&skillId&includeDeprecated` e
+  `GET items?status&level&skillId&type&source&q`. **`includeDeprecated` é `false`
+  por padrão nas três** — quem lista para escolher (picker) vê só o que está em
+  circulação; a tela de taxonomia manda `true` em "mostrar obsoletas". A lista de
+  itens vai do mais novo para o mais antigo (`createdAt desc, id`; ordenar por UUID
+  daria ordem arbitrária), e `q` olha enunciado e slug sem diferença de caixa (no
+  banco, sem acento: é tabela grande demais para filtrar em memória).
+- **Pré-requisitos têm regra de grafo**: a skill não pode exigir a si mesma, fechar
+  ciclo nem exigir skill obsoleta (422 `INVALID_PREREQUISITES`, `details.reason`
+  `SELF | CYCLE | DEPRECATED`; a função pura é `findPrerequisiteCycle`, em
+  `domain/skill-graph.ts`). Só o que **entra agora** é conferido contra "obsoleta":
+  quem já estava ligada não trava a edição de outro campo.
+- **Obsoleta** (`POST …/deprecate`) existe nos três (`skills`, `error-patterns`,
+  `register-notes`) e não tem volta pela API. A substituta, se vier, precisa existir,
+  não ser a própria nem já estar obsoleta. O slug nunca é apagado.
+- **Nota de registro** devolve `audio: {url, mimeType, durationMs} | null` (URL
+  assinada na resposta; `audioAssetId` continua na linha e é conferido: existe e é
+  `AUDIO`). A skill ligada precisa ser `REGISTER` e cada skill serve a **uma** nota
+  só (409 `REGISTER_SKILL_TAKEN`).
+- **Item**: `POST items/:id/reject` (IN_REVIEW/APPROVED → DRAFT); **editar item em
+  IN_REVIEW/APPROVED o devolve a DRAFT** (como na versão da lição); arquivar uma
+  **revisão que nunca foi ao ar** solta o original (`replacedById = null`), senão ele
+  ficaria sem aceitar outra revisão. `GET items/:id` traz `replaces` (o que esta
+  revisão substitui), `audioUrl` e `usedIn`. **`usedIn` só conta lições no ar**: o
+  índice de uso (`LessonVersionItem`) nasce no publish, então rascunho de lição que
+  ainda não publicou não aparece. `registerNoteId` (REGISTER_SWAP) e `audioAssetId`
+  precisam existir; skill ou erro **obsoleto não é recusado** (corrigir a explicação de
+  item publicado não pode travar por isso — a tela avisa).
+- **O mapa de erros do item** (`errorPatternMap`) tem como chave o **texto** da
+  alternativa errada nos itens de escolha e uma resposta errada típica nos digitados;
+  em MATCH a correção não olha o mapa.
+
 ### Autoria com IA (content-studio)
 
 **Nada gerado por IA chega ao aluno sem um humano aprovar.** O rascunho
@@ -489,6 +535,17 @@ Os parâmetros saíram de simulação — mudar exige rodar
 - Checkpoint é diagnóstico: nunca trava nada, pode ser refeito à vontade.
 - A calibração semanal anda no máximo 0.5 logit por rodada e usa o theta
   **atual** de quem respondeu (aproximação consciente).
+- **Item problemático = marcação da calibração ainda não resolvida**
+  (`ItemCalibration.flags`: `TOO_EASY`, `TOO_HARD`, `LOW_DISCRIMINATION`).
+  `GET admin/assessment/flagged-items?flag&level&type` devolve **uma linha por item**
+  (a calibração aberta mais recente) com o resumo do item — o filtro "problemáticos"
+  mora aqui, e não no módulo 4, porque o 4 não pode importar o 8. É a mesma lista que
+  `GET /admin/metrics` (14) devolve em `items`.
+  `GET admin/assessment/items/:itemId/stats` traz exposição, acerto, dificuldade
+  **inicial × atual** e o histórico. A inicial é o `previousDifficulty` da **primeira**
+  calibração (`initialDifficultyOf`): `Item.difficulty` é sobrescrita a cada rodada, e
+  sem calibração a atual é a inicial. `POST …/resolve` fecha as marcações abertas do
+  item; a história fica.
 - A escrita do nivelamento é um gancho (`WritingAssessor`, `@Optional()`)
   que o tutor (12) implementa.
 
@@ -993,9 +1050,10 @@ valida a mensagem.
 
 **Estado atual: o app do aluno tem as telas de negócio (lição, hoje,
 catálogo, ferramentas do Plus, progresso, perfil); o admin tem o Conteúdo
-(árvore do curso, personagens, versões e editor de lição). Alunos,
-assinaturas e métricas do admin ainda são placeholders** — cada tela entra
-como um módulo à parte, igual ao back-end.
+(árvore do curso, personagens, versões e editor de lição) e a Taxonomia e o
+banco de questões (skills, erros típicos, notas de registro, editor de
+item). Alunos, assinaturas e métricas do admin ainda são placeholders** —
+cada tela entra como um módulo à parte, igual ao back-end.
 
 ### Pacotes
 
@@ -1218,10 +1276,76 @@ teste montar o painel inteiro num `MemoryRouter`.
   `failNext('rota', {...})` faz o próximo pedido falhar; `mockState.calls` registra o
   que foi enviado. No jsdom o `fetch` do Node não serializa o `FormData` do jsdom, então
   `setup-tests.ts` monta o multipart na mão — num navegador isso não existe.
-- Fora do escopo desta tela: banco de questões (criar/editar item), taxonomia (CRUD de
-  skills, erros típicos e notas), apostilas, criação de curso e nível, e as telas do
-  módulo 5 (rascunho por IA, relatório de QA, gerar áudio, comentários). Duas pessoas
-  editando a mesma versão: vence quem salvar por último.
+- Fora do escopo desta tela: apostilas, criação de curso e nível, e as telas do módulo 5
+  (rascunho por IA, relatório de QA, gerar áudio, comentários). Duas pessoas editando a
+  mesma versão: vence quem salvar por último.
+
+### Admin → Taxonomia e banco de questões (`apps/admin/src/features/{taxonomy,items}`)
+
+| Rota                               | Tela                                                                                             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `/conteudo/taxonomia/skills`       | `Skills`: filtros (nível, competência, tipo, busca, "mostrar obsoletas"), diálogo, obsoleta.     |
+| `/conteudo/taxonomia/erros`        | `ErrorPatterns`: descrição, forma errada, forma certa, explicação, skills; obsoleto.             |
+| `/conteudo/taxonomia/registro`     | `RegisterNotes`: falado × padrão, registro, nível, skill `REGISTER`, áudio (só ouvir); obsoleta. |
+| `/conteudo/questoes`               | `ItemBank`: tabela com filtros e "Só os problemáticos".                                          |
+| `/conteudo/questoes/nova` e `/:id` | `ItemEditor`: formulário, editor por tipo, preview, estatísticas e fluxo editorial.              |
+
+As três listas da taxonomia dividem a moldura `TaxonomyLayout` (abas); atalhos para elas e
+para o banco ficam no topo de `/conteudo`. Todas moram no layout largo (`width="wide"`).
+
+- **Skills**: o identificador (`taxonomySlugSchema`, aceita ponto) é travado depois de
+  criado; pré-requisitos com `SkillMultiPicker` (sem a própria), erros comuns com
+  `ErrorPatternChips`, objetivos em caixas. O erro `INVALID_PREREQUISITES` aparece **no
+  campo**, com o caminho do ciclo. "Marcar como obsoleta" (`DeprecateDialog`) aceita uma
+  substituta opcional e **não tem desfazer** (a API não oferece).
+- **O áudio não é editado nem gerado aqui.** Nota, item de escuta e ditado só **tocam o que
+  existe** (URL assinada na resposta); sem áudio, o texto diz que ele nasce quando a lição que
+  usa a questão é aprovada (TTS, módulo 5).
+- **O editor de item salva com botão, não com autosave** (diferente da lição): `POST/PATCH
+items` valida tudo-ou-nada, então um autosave só gravaria o que já passa. Validação **ao
+  vivo** com o código do servidor (`lib/item-validation.ts`: `itemAuthoringSchema` +
+  `validateItem` do `packages/shared`), erro no campo pelo caminho (`content.options.0.text`,
+  `acceptedAnswers.1`, `errorPatternMap.0`), e o item **novo** só pinta de vermelho depois da
+  primeira tentativa de salvar. `PATCH` leva **só o que mudou** (`toPatch`): mandar
+  `difficulty` sem ter mexido apagaria a dificuldade calibrada.
+- **Estado do item** (`lib/item-form.ts` + `item-reducer.ts`, puros): tudo em texto no
+  formulário (dificuldade inclusive); trocar o tipo recomeça o conteúdo em branco e pede
+  confirmação se há algo escrito; **mudar `audioText` solta o `audioAssetId`**, senão o áudio
+  velho ficaria ligado a texto novo e o TTS (que só gera para `null`) não corrigiria.
+- **Item publicado ou arquivado**: tipo, enunciado, conteúdo e respostas aceitas ficam
+  travados; o botão vira **"Criar nova versão do item"** (`POST revisions`, abre o rascunho).
+  Explicação, mapa de erros, nível, skills e dificuldade seguem editáveis (é o que a API
+  permite), e a validação ao vivo só olha esses campos. Com a revisão já aberta
+  (`replacedById`), mostra "Já existe uma nova versão". **A lição continua apontando para o
+  item antigo** depois de criar a nova versão: a ficha lista as lições no ar que o usam
+  (`usedIn`) para o editor trocar a referência na prática.
+- **Preview** (`ItemPreview`): o `ItemRenderer` do app, desenhado **no navegador** a partir do
+  formulário (sem ida ao servidor) e só quando o conteúdo passa no schema do tipo. A visão do
+  aluno sai de `toStudentItem` (sem gabarito); "Ver gabarito" usa o modo `preview` com o
+  feedback montado do próprio formulário (`buildPreviewFeedback`). Responder não corrige.
+- **Mapa de erros** (`ErrorPatternMapEditor`): em escolha, a chave é o texto de uma alternativa
+  **errada** (um `select`); nos digitados, uma resposta errada escrita à mão; em MATCH não se aplica.
+- **Estatísticas** (`ItemStats`): exposição, % de acerto (`null` = "poucos dados", menos de 10
+  respostas), dificuldade **inicial × atual**, histórico de calibrações e o **alerta de item
+  problemático** com as marcas em texto e "Marcar como resolvido". **"Problemáticos" na lista**
+  troca a fonte para `flagged-items` (filtra por marca, nível e tipo; os outros filtros
+  desligam); na lista comum o item marcado leva a marca escrita ao lado.
+- **Fluxo editorial do item** (`ItemEditorial`): os mesmos botões da versão de lição
+  (`lib/editorial.ts` do curriculum), com confirmação em publicar e arquivar. O que a API recusar
+  vira `ItemProblemPanel` (`lib/item-editorial.ts`): `CONTENT_VALIDATION_FAILED` (com link ao
+  campo), `MISSING_REFERENCES`, `ITEM_IS_IMMUTABLE`, `ITEM_IN_USE` (lista as lições) e
+  `INVALID_CONTENT_TRANSITION`. Antes de qualquer ação o formulário é salvo; se não passa, nada
+  é movido.
+- **Mocks com estado** do banco em `src/mocks/bank-mock.ts` (lê o `mockState` de
+  `curriculum-mock.ts`): escrita de skills, erros, notas e itens, `deprecate`, `revisions`, `reject`,
+  transições, `flagged-items`, `stats`; seeds dos nove tipos de item, de uma nota com áudio e de
+  itens com marcação. O mock valida com o `validateItem` real do shared. Chaves de `failNext`:
+  `skills`, `items-list`, `save-skill`, `save-error-pattern`, `save-register-note`, `save-item`,
+  `create-item`, `create-item-revision`, `item-action:<ação>`, `item-stats`, `resolve-flagged`.
+- Fora do escopo: gerar áudio pelo admin, reativar skill/erro/nota obsoletos (a API não tem a
+  rota), trocar a referência do item nas lições depois de criar a nova versão, excluir item,
+  operações em lote, busca de item sem acento, análise de distratores por alternativa, disparar a
+  calibração à mão e edição simultânea (vence quem salvar por último).
 
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 

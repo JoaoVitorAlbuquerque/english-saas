@@ -1376,4 +1376,868 @@ describe('Curriculum (e2e)', () => {
         .expect(403);
     });
   });
+
+  // -------------------------------------------------------------------
+  // Taxonomia e banco de questões (admin)
+  // -------------------------------------------------------------------
+
+  describe('taxonomia e banco de questões', () => {
+    const asEditor = (fixture: Fixture) => ({
+      Authorization: `Bearer ${fixture.editor}`,
+    });
+
+    async function createSkill(
+      fixture: Fixture,
+      id: string,
+      overrides: Record<string, unknown> = {},
+    ) {
+      return http()
+        .post('/admin/curriculum/skills')
+        .set(asEditor(fixture))
+        .send({
+          id,
+          type: 'GRAMMAR',
+          competency: 'GRAMMAR',
+          cefrLevel: 'A1',
+          title: `Skill ${id}`,
+          ...overrides,
+        });
+    }
+
+    async function createPattern(
+      fixture: Fixture,
+      id: string,
+      overrides: Record<string, unknown> = {},
+    ) {
+      return http()
+        .post('/admin/curriculum/error-patterns')
+        .set(asEditor(fixture))
+        .send({
+          id,
+          description: 'Usa "have" para falar a idade.',
+          example: 'I have 20 years.',
+          correction: "I'm 20 years old.",
+          explanation: 'Em inglês a idade usa o verbo to be.',
+          ...overrides,
+        });
+    }
+
+    async function createNote(
+      fixture: Fixture,
+      id: string,
+      overrides: Record<string, unknown> = {},
+    ) {
+      return http()
+        .post('/admin/curriculum/register-notes')
+        .set(asEditor(fixture))
+        .send({
+          id,
+          spokenForm: `${id}-falado`,
+          standardForm: `${id}-padrão`,
+          register: 'INFORMAL_SPOKEN',
+          explanation: 'Forma falada, no dia a dia.',
+          cefrLevel: 'A2',
+          ...overrides,
+        });
+    }
+
+    const CHOICE = {
+      options: [
+        { id: 'a', text: 'am' },
+        { id: 'b', text: 'is' },
+      ],
+      correctOptionIds: ['a'],
+    };
+
+    async function createItem(
+      fixture: Fixture,
+      overrides: Record<string, unknown> = {},
+    ) {
+      return http()
+        .post('/admin/curriculum/items')
+        .set(asEditor(fixture))
+        .send({
+          type: 'MULTIPLE_CHOICE',
+          prompt: 'I ___ a student.',
+          content: CHOICE,
+          explanation: 'Com "I", o verbo é "am".',
+          cefrLevel: 'A1',
+          skillIds: ['grammar.be.present.affirmative'],
+          ...overrides,
+        });
+    }
+
+    // --- Skills ---------------------------------------------------
+
+    it('filtra skills por nível, competência e tipo', async () => {
+      const fixture = await buildFixture();
+
+      await createSkill(fixture, 'vocab.food', {
+        type: 'VOCAB_SET',
+        competency: 'VOCABULARY',
+        cefrLevel: 'A2',
+      }).then((response) => expect(response.status).toBe(201));
+      await createSkill(fixture, 'chunk.hello', {
+        type: 'CHUNK',
+        competency: 'SPEAKING',
+        cefrLevel: 'A1',
+      }).then((response) => expect(response.status).toBe(201));
+
+      const ids = async (query: string): Promise<string[]> => {
+        const response = await http()
+          .get(`/admin/curriculum/skills?${query}`)
+          .set(asEditor(fixture))
+          .expect(200);
+
+        return response.body.data.map((skill: { id: string }) => skill.id);
+      };
+
+      expect(await ids('level=A2')).toEqual(['vocab.food']);
+      expect(await ids('competency=SPEAKING')).toEqual(['chunk.hello']);
+      expect(await ids('type=GRAMMAR')).toEqual([
+        'grammar.be.present.affirmative',
+      ]);
+      expect(await ids('level=A1&type=CHUNK')).toEqual(['chunk.hello']);
+      // Os filtros convivem com a busca por texto.
+      expect(await ids('level=A1&q=hello')).toEqual(['chunk.hello']);
+      expect(await ids('level=C1')).toEqual([]);
+    });
+
+    describe('pré-requisitos', () => {
+      const prerequisites = (fixture: Fixture, id: string, ids: string[]) =>
+        http()
+          .patch(`/admin/curriculum/skills/${id}`)
+          .set(asEditor(fixture))
+          .send({ prerequisites: ids });
+
+      it('recusa a skill como pré-requisito de si mesma', async () => {
+        const fixture = await buildFixture();
+
+        const response = await prerequisites(
+          fixture,
+          'grammar.be.present.affirmative',
+          ['grammar.be.present.affirmative'],
+        );
+
+        expect(response.status).toBe(422);
+        expect(response.body.error.code).toBe('INVALID_PREREQUISITES');
+        expect(response.body.error.details.reason).toBe('SELF');
+      });
+
+      it('recusa o ciclo e devolve o caminho', async () => {
+        const fixture = await buildFixture();
+
+        await createSkill(fixture, 'grammar.a');
+        await createSkill(fixture, 'grammar.b', {
+          prerequisites: ['grammar.a'],
+        });
+        await createSkill(fixture, 'grammar.c', {
+          prerequisites: ['grammar.b'],
+        });
+
+        const response = await prerequisites(fixture, 'grammar.a', [
+          'grammar.c',
+        ]);
+
+        expect(response.status).toBe(422);
+        expect(response.body.error.details.reason).toBe('CYCLE');
+        expect(response.body.error.details.cycle).toEqual([
+          'grammar.a',
+          'grammar.c',
+          'grammar.b',
+          'grammar.a',
+        ]);
+
+        // O que foi recusado não ficou gravado.
+        const after = await http()
+          .get('/admin/curriculum/skills/grammar.a')
+          .set(asEditor(fixture))
+          .expect(200);
+
+        expect(after.body.prerequisites).toEqual([]);
+      });
+
+      it('aceita pré-requisitos que não fecham ciclo', async () => {
+        const fixture = await buildFixture();
+
+        await createSkill(fixture, 'grammar.a');
+        await createSkill(fixture, 'grammar.b');
+
+        const response = await prerequisites(fixture, 'grammar.b', [
+          'grammar.a',
+          'grammar.be.present.affirmative',
+        ]);
+
+        expect(response.status).toBe(200);
+        expect(response.body.prerequisites.sort()).toEqual([
+          'grammar.a',
+          'grammar.be.present.affirmative',
+        ]);
+      });
+
+      it('recusa skill obsoleta como pré-requisito novo, mas não trava quem já estava ligada', async () => {
+        const fixture = await buildFixture();
+
+        await createSkill(fixture, 'grammar.old');
+        await createSkill(fixture, 'grammar.user', {
+          prerequisites: ['grammar.old'],
+        });
+        await http()
+          .post('/admin/curriculum/skills/grammar.old/deprecate')
+          .set(asEditor(fixture))
+          .send({})
+          .expect(201);
+
+        // Nova ligação com obsoleta: recusa.
+        await createSkill(fixture, 'grammar.other');
+
+        const refused = await prerequisites(fixture, 'grammar.other', [
+          'grammar.old',
+        ]);
+
+        expect(refused.status).toBe(422);
+        expect(refused.body.error.details.reason).toBe('DEPRECATED');
+
+        // Quem já exigia a obsoleta segue editável, e a lista pode ser reenviada.
+        const kept = await prerequisites(fixture, 'grammar.user', [
+          'grammar.old',
+        ]);
+
+        expect(kept.status).toBe(200);
+      });
+
+      it('recusa criar skill que já nasce com ciclo consigo mesma', async () => {
+        const fixture = await buildFixture();
+
+        const response = await createSkill(fixture, 'grammar.loop', {
+          prerequisites: ['grammar.loop'],
+        });
+
+        expect(response.status).toBe(422);
+        expect(response.body.error.details.reason).toBe('SELF');
+      });
+    });
+
+    it('não aceita como substituta uma skill já obsoleta', async () => {
+      const fixture = await buildFixture();
+
+      await createSkill(fixture, 'grammar.old');
+      await createSkill(fixture, 'grammar.older');
+      await http()
+        .post('/admin/curriculum/skills/grammar.older/deprecate')
+        .set(asEditor(fixture))
+        .send({})
+        .expect(201);
+
+      const response = await http()
+        .post('/admin/curriculum/skills/grammar.old/deprecate')
+        .set(asEditor(fixture))
+        .send({ replacedById: 'grammar.older' })
+        .expect(422);
+
+      expect(response.body.error.code).toBe('MISSING_REFERENCES');
+      expect(response.body.error.details.reason).toContain('obsoleta');
+    });
+
+    // --- Erros típicos --------------------------------------------
+
+    it('lista erros típicos com busca, skill e obsoletos opcionais', async () => {
+      const fixture = await buildFixture();
+
+      await createPattern(fixture, 'l1.have-for-age', {
+        skillIds: ['grammar.be.present.affirmative'],
+      }).then((response) => expect(response.status).toBe(201));
+      await createPattern(fixture, 'l1.missing-subject', {
+        description: 'Esquece o sujeito: "Is raining".',
+        example: 'Is raining.',
+        correction: 'It is raining.',
+      }).then((response) => expect(response.status).toBe(201));
+      await createPattern(fixture, 'article.country-the').then((response) =>
+        expect(response.status).toBe(201),
+      );
+      await http()
+        .post('/admin/curriculum/error-patterns/article.country-the/deprecate')
+        .set(asEditor(fixture))
+        .send({ replacedById: 'l1.have-for-age' })
+        .expect(201);
+
+      const ids = async (query = ''): Promise<string[]> => {
+        const response = await http()
+          .get(`/admin/curriculum/error-patterns?${query}`)
+          .set(asEditor(fixture))
+          .expect(200);
+
+        return response.body.data.map((row: { id: string }) => row.id);
+      };
+
+      // Padrão: só o que está em circulação.
+      expect(await ids()).toEqual(['l1.have-for-age', 'l1.missing-subject']);
+      expect(await ids('includeDeprecated=true')).toHaveLength(3);
+      expect(await ids('skillId=grammar.be.present.affirmative')).toEqual([
+        'l1.have-for-age',
+      ]);
+      expect(await ids('q=SUJEITO')).toEqual(['l1.missing-subject']);
+    });
+
+    it('deprecia erro típico com substituto, e recusa a si mesmo', async () => {
+      const fixture = await buildFixture();
+
+      await createPattern(fixture, 'l1.a');
+      await createPattern(fixture, 'l1.b');
+
+      const self = await http()
+        .post('/admin/curriculum/error-patterns/l1.a/deprecate')
+        .set(asEditor(fixture))
+        .send({ replacedById: 'l1.a' })
+        .expect(422);
+
+      expect(self.body.error.code).toBe('MISSING_REFERENCES');
+
+      const ok = await http()
+        .post('/admin/curriculum/error-patterns/l1.a/deprecate')
+        .set(asEditor(fixture))
+        .send({ replacedById: 'l1.b' })
+        .expect(201);
+
+      expect(ok.body.deprecatedAt).not.toBeNull();
+      expect(ok.body.replacedById).toBe('l1.b');
+    });
+
+    // --- Notas de registro ----------------------------------------
+
+    it('lista notas de registro com filtros e devolve a URL do áudio quando existe', async () => {
+      const fixture = await buildFixture();
+
+      await createNote(fixture, 'gonna', {
+        spokenForm: 'gonna',
+        standardForm: 'going to',
+        audioAssetId: fixture.assetId,
+      }).then((response) => expect(response.status).toBe(201));
+      await createNote(fixture, 'wanna', {
+        spokenForm: 'wanna',
+        standardForm: 'want to',
+        cefrLevel: 'B1',
+        register: 'NEUTRAL',
+      }).then((response) => expect(response.status).toBe(201));
+
+      const list = async (query = '') => {
+        const response = await http()
+          .get(`/admin/curriculum/register-notes?${query}`)
+          .set(asEditor(fixture))
+          .expect(200);
+
+        return response.body.data as {
+          id: string;
+          audioAssetId: string | null;
+          audio: { url: string; mimeType: string } | null;
+        }[];
+      };
+
+      const all = await list();
+      const gonna = all.find((note) => note.id === 'gonna');
+      const wanna = all.find((note) => note.id === 'wanna');
+
+      expect(gonna?.audioAssetId).toBe(fixture.assetId);
+      expect(gonna?.audio?.url).toContain('X-Amz-Signature');
+      expect(gonna?.audio?.mimeType).toBe('audio/mpeg');
+      expect(wanna?.audio).toBeNull();
+      // A chave crua não vaza.
+      expect(JSON.stringify(all)).not.toContain('storageKey');
+
+      expect((await list('level=B1')).map((note) => note.id)).toEqual([
+        'wanna',
+      ]);
+      expect((await list('register=NEUTRAL')).map((note) => note.id)).toEqual([
+        'wanna',
+      ]);
+      expect((await list('q=going')).map((note) => note.id)).toEqual(['gonna']);
+
+      const one = await http()
+        .get('/admin/curriculum/register-notes/gonna')
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(one.body.audio.url).toContain('X-Amz-Signature');
+    });
+
+    it('recusa como áudio de nota um asset que não é áudio', async () => {
+      const fixture = await buildFixture();
+
+      const image = await context.prisma.mediaAsset.create({
+        data: {
+          kind: 'IMAGE',
+          storageKey: 'content/images/x.png',
+          mimeType: 'image/png',
+          sizeBytes: 10,
+        },
+      });
+
+      const response = await createNote(fixture, 'gonna', {
+        audioAssetId: image.id,
+      });
+
+      expect(response.status).toBe(422);
+      expect(response.body.error.code).toBe('MISSING_REFERENCES');
+    });
+
+    it('explica quando a skill REGISTER já está ligada a outra nota', async () => {
+      const fixture = await buildFixture();
+
+      await createSkill(fixture, 'register.gonna', {
+        type: 'REGISTER',
+        competency: 'SPEAKING',
+      });
+      await createNote(fixture, 'gonna', { skillId: 'register.gonna' }).then(
+        (response) => expect(response.status).toBe(201),
+      );
+
+      const response = await createNote(fixture, 'wanna', {
+        skillId: 'register.gonna',
+      });
+
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe('REGISTER_SKILL_TAKEN');
+      expect(response.body.error.details.noteId).toBe('gonna');
+
+      // Reenviar a própria skill na mesma nota não conta como colisão.
+      await http()
+        .patch('/admin/curriculum/register-notes/gonna')
+        .set(asEditor(fixture))
+        .send({ skillId: 'register.gonna', explanation: 'Texto novo aqui.' })
+        .expect(200);
+    });
+
+    it('deprecia nota de registro e tira da lista padrão', async () => {
+      const fixture = await buildFixture();
+
+      await createNote(fixture, 'gonna');
+      await createNote(fixture, 'wanna');
+      await http()
+        .post('/admin/curriculum/register-notes/gonna/deprecate')
+        .set(asEditor(fixture))
+        .send({ replacedById: 'wanna' })
+        .expect(201);
+
+      const list = await http()
+        .get('/admin/curriculum/register-notes')
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(list.body.data.map((note: { id: string }) => note.id)).toEqual([
+        'wanna',
+      ]);
+
+      const withOld = await http()
+        .get('/admin/curriculum/register-notes?includeDeprecated=true')
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(withOld.body.data).toHaveLength(2);
+    });
+
+    it('taxonomia é coisa de editor: aluno recebe 403 nas rotas novas', async () => {
+      const fixture = await buildFixture();
+      const student = { Authorization: `Bearer ${fixture.student}` };
+
+      await http()
+        .post('/admin/curriculum/error-patterns/x/deprecate')
+        .set(student)
+        .send({})
+        .expect(403);
+      await http()
+        .post('/admin/curriculum/register-notes/x/deprecate')
+        .set(student)
+        .send({})
+        .expect(403);
+      await http()
+        .get('/admin/curriculum/register-notes?level=A1')
+        .set(student)
+        .expect(403);
+    });
+
+    // --- Itens ----------------------------------------------------
+
+    it('lista os itens do mais novo para o mais antigo, com filtros de tipo, origem e texto', async () => {
+      const fixture = await buildFixture();
+
+      await createItem(fixture, { prompt: 'Primeiro enunciado.' }).then(
+        (response) => expect(response.status).toBe(201),
+      );
+      await createItem(fixture, {
+        type: 'TYPE_ANSWER',
+        prompt: 'Traduza: Ela é de Austin',
+        content: {},
+        acceptedAnswers: ["She's from Austin"],
+        source: 'AI_DRAFT_REVIEWED',
+      }).then((response) => expect(response.status).toBe(201));
+      await createItem(fixture, { prompt: 'Terceiro, sobre CAFÉ.' }).then(
+        (response) => expect(response.status).toBe(201),
+      );
+
+      const prompts = async (query = ''): Promise<string[]> => {
+        const response = await http()
+          .get(`/admin/curriculum/items?${query}`)
+          .set(asEditor(fixture))
+          .expect(200);
+
+        return response.body.data.map(
+          (item: { prompt: string }) => item.prompt,
+        );
+      };
+
+      // O da fixture (publicado) é o mais antigo.
+      expect((await prompts()).slice(0, 3)).toEqual([
+        'Terceiro, sobre CAFÉ.',
+        'Traduza: Ela é de Austin',
+        'Primeiro enunciado.',
+      ]);
+      expect(await prompts('type=TYPE_ANSWER')).toEqual([
+        'Traduza: Ela é de Austin',
+      ]);
+      expect(await prompts('source=AI_DRAFT_REVIEWED')).toEqual([
+        'Traduza: Ela é de Austin',
+      ]);
+      expect(await prompts('source=HUMAN')).toHaveLength(3);
+      expect(await prompts('q=terceiro')).toEqual(['Terceiro, sobre CAFÉ.']);
+      // A busca olha o slug também.
+      expect(await prompts('q=a1-be-i-am')).toEqual(['I ___ Maya.']);
+      expect(await prompts('status=PUBLISHED&type=MULTIPLE_CHOICE')).toEqual([
+        'I ___ Maya.',
+      ]);
+    });
+
+    it('pagina a lista nova sem repetir nem pular item', async () => {
+      const fixture = await buildFixture();
+
+      for (const n of [1, 2, 3, 4]) {
+        await createItem(fixture, { prompt: `Enunciado ${String(n)}.` });
+      }
+
+      const seen: string[] = [];
+      let cursor: string | undefined;
+
+      for (let page = 0; page < 5; page += 1) {
+        const response = await http()
+          .get(
+            `/admin/curriculum/items?limit=2${
+              cursor === undefined ? '' : `&cursor=${cursor}`
+            }`,
+          )
+          .set(asEditor(fixture))
+          .expect(200);
+
+        seen.push(...response.body.data.map((item: { id: string }) => item.id));
+
+        if (!response.body.hasMore) break;
+
+        cursor = response.body.nextCursor as string;
+      }
+
+      expect(seen).toHaveLength(5);
+      expect(new Set(seen).size).toBe(5);
+    });
+
+    it('a ficha do item traz as lições no ar que o usam, o áudio e a revisão', async () => {
+      const fixture = await buildFixture();
+
+      await http()
+        .put(`/admin/curriculum/lesson-versions/${fixture.versionId}/steps`)
+        .set(asEditor(fixture))
+        .send({ steps: steps(fixture) })
+        .expect(200);
+
+      const listen = await createItem(fixture, {
+        type: 'LISTEN_CHOOSE',
+        prompt: 'O que a Maya disse?',
+        content: {
+          ...CHOICE,
+          audioText: 'I am Maya.',
+          audioAssetId: fixture.assetId,
+        },
+      }).then((response) => {
+        expect(response.status).toBe(201);
+
+        return response;
+      });
+
+      expect(listen.body.audioUrl).toContain('X-Amz-Signature');
+      expect(listen.body.usedIn).toEqual([]);
+      expect(listen.body.replaces).toBeNull();
+
+      // Rascunho de lição ainda não conta: o índice de uso nasce no publish.
+      const beforePublish = await http()
+        .get(`/admin/curriculum/items/${fixture.itemId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(beforePublish.body.audioUrl).toBeNull();
+      expect(beforePublish.body.usedIn).toEqual([]);
+
+      await publish(fixture, fixture.versionId);
+
+      const used = await http()
+        .get(`/admin/curriculum/items/${fixture.itemId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(used.body.usedIn).toEqual([
+        expect.objectContaining({
+          lessonId: fixture.lessonId,
+          lessonSlug: 'nice-to-meet-you',
+          versionId: fixture.versionId,
+          version: 1,
+          status: 'PUBLISHED',
+          title: 'Nice to meet you',
+        }),
+      ]);
+
+      const revision = await http()
+        .post(`/admin/curriculum/items/${fixture.itemId}/revisions`)
+        .set(asEditor(fixture))
+        .send({ prompt: 'I ___ Maya. (novo)' })
+        .expect(201);
+
+      expect(revision.body.replaces).toBe(fixture.itemId);
+      expect(revision.body.usedIn).toEqual([]);
+    });
+
+    it('devolve a questão em revisão ou aprovada para rascunho', async () => {
+      const fixture = await buildFixture();
+      const created = await createItem(fixture).then((response) => {
+        expect(response.status).toBe(201);
+
+        return response.body.id as string;
+      });
+      const action = (name: string) =>
+        http()
+          .post(`/admin/curriculum/items/${created}/${name}`)
+          .set(asEditor(fixture));
+
+      // Rascunho não se devolve.
+      expect((await action('reject')).status).toBe(409);
+
+      await action('submit-for-review').expect(201);
+
+      const rejected = await action('reject').expect(201);
+
+      expect(rejected.body.status).toBe('DRAFT');
+
+      await action('submit-for-review').expect(201);
+      await action('approve').expect(201);
+
+      expect((await action('reject').expect(201)).body.status).toBe('DRAFT');
+
+      // Publicada não se devolve.
+      await action('submit-for-review').expect(201);
+      await action('approve').expect(201);
+      await action('publish').expect(201);
+
+      expect((await action('reject')).status).toBe(409);
+    });
+
+    it('editar uma questão aprovada devolve ela para rascunho', async () => {
+      const fixture = await buildFixture();
+      const id = (await createItem(fixture)).body.id as string;
+
+      for (const name of ['submit-for-review', 'approve']) {
+        await http()
+          .post(`/admin/curriculum/items/${id}/${name}`)
+          .set(asEditor(fixture))
+          .expect(201);
+      }
+
+      const edited = await http()
+        .patch(`/admin/curriculum/items/${id}`)
+        .set(asEditor(fixture))
+        .send({ explanation: 'Explicação revisada de novo.' })
+        .expect(200);
+
+      expect(edited.body.status).toBe('DRAFT');
+    });
+
+    it('editar a explicação de questão publicada não a tira do ar', async () => {
+      const fixture = await buildFixture();
+
+      const edited = await http()
+        .patch(`/admin/curriculum/items/${fixture.itemId}`)
+        .set(asEditor(fixture))
+        .send({ explanation: 'Explicação melhor ainda.' })
+        .expect(200);
+
+      expect(edited.body.status).toBe('PUBLISHED');
+    });
+
+    it('arquivar a revisão que nunca foi ao ar solta o item original', async () => {
+      const fixture = await buildFixture();
+
+      const revision = await http()
+        .post(`/admin/curriculum/items/${fixture.itemId}/revisions`)
+        .set(asEditor(fixture))
+        .send({ prompt: 'I ___ Maya. (revisão 1)' })
+        .expect(201);
+
+      // Preso: com a revisão aberta não cabe outra.
+      await http()
+        .post(`/admin/curriculum/items/${fixture.itemId}/revisions`)
+        .set(asEditor(fixture))
+        .send({})
+        .expect(409);
+
+      await http()
+        .post(`/admin/curriculum/items/${revision.body.id}/archive`)
+        .set(asEditor(fixture))
+        .expect(201);
+
+      const original = await http()
+        .get(`/admin/curriculum/items/${fixture.itemId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(original.body.replacedById).toBeNull();
+      expect(original.body.status).toBe('PUBLISHED');
+
+      // Solto: agora aceita a revisão seguinte.
+      await http()
+        .post(`/admin/curriculum/items/${fixture.itemId}/revisions`)
+        .set(asEditor(fixture))
+        .send({ prompt: 'I ___ Maya. (revisão 2)' })
+        .expect(201);
+    });
+
+    it('arquivar a revisão depois de publicada não desfaz a aposentadoria do original', async () => {
+      const fixture = await buildFixture();
+      const revision = await http()
+        .post(`/admin/curriculum/items/${fixture.itemId}/revisions`)
+        .set(asEditor(fixture))
+        .send({ prompt: 'I ___ Maya. (revisão)' })
+        .expect(201);
+
+      for (const name of ['submit-for-review', 'approve', 'publish']) {
+        await http()
+          .post(`/admin/curriculum/items/${revision.body.id}/${name}`)
+          .set(asEditor(fixture))
+          .expect(201);
+      }
+
+      await http()
+        .post(`/admin/curriculum/items/${revision.body.id}/archive`)
+        .set(asEditor(fixture))
+        .expect(201);
+
+      const original = await http()
+        .get(`/admin/curriculum/items/${fixture.itemId}`)
+        .set(asEditor(fixture))
+        .expect(200);
+
+      expect(original.body.status).toBe('ARCHIVED');
+      expect(original.body.replacedById).toBe(revision.body.id);
+    });
+
+    it('recusa REGISTER_SWAP que aponta para nota inexistente', async () => {
+      const fixture = await buildFixture();
+      const swap = (registerNoteId: string) =>
+        createItem(fixture, {
+          type: 'REGISTER_SWAP',
+          prompt: 'Passe para a forma padrão.',
+          content: {
+            source: "I'm gonna call you.",
+            direction: 'SPOKEN_TO_STANDARD',
+            registerNoteId,
+          },
+          acceptedAnswers: ["I'm going to call you"],
+        });
+
+      const missing = await swap('register.nao-existe');
+
+      expect(missing.status).toBe(422);
+      expect(missing.body.error.code).toBe('MISSING_REFERENCES');
+      expect(missing.body.error.details.registerNotes).toEqual([
+        'register.nao-existe',
+      ]);
+
+      await createNote(fixture, 'register.gonna');
+
+      expect((await swap('register.gonna')).status).toBe(201);
+    });
+
+    it('recusa áudio de questão que não existe ou não é áudio', async () => {
+      const fixture = await buildFixture();
+
+      const missing = await createItem(fixture, {
+        type: 'DICTATION',
+        prompt: 'Escreva o que ouvir.',
+        content: {
+          audioText: 'Nice to meet you.',
+          audioAssetId: '11111111-1111-4111-8111-111111111111',
+        },
+        acceptedAnswers: ['Nice to meet you'],
+      });
+
+      expect(missing.status).toBe(422);
+      expect(missing.body.error.code).toBe('MISSING_REFERENCES');
+
+      const ok = await createItem(fixture, {
+        type: 'DICTATION',
+        prompt: 'Escreva o que ouvir.',
+        content: {
+          audioText: 'Nice to meet you.',
+          audioAssetId: fixture.assetId,
+        },
+        acceptedAnswers: ['Nice to meet you'],
+      });
+
+      expect(ok.status).toBe(201);
+    });
+
+    it('as mensagens de validação do item saem em pt-BR, no campo', async () => {
+      const fixture = await buildFixture();
+
+      const response = await createItem(fixture, {
+        content: { ...CHOICE, options: [{ id: 'a', text: 'am' }] },
+      });
+
+      expect(response.status).toBe(422);
+      expect(response.body.error.details.issues).toEqual([
+        { path: 'options', message: 'Adicione ao menos 2 itens.' },
+      ]);
+    });
+
+    it('rascunho de IA com marcação fora do texto não passa na leitura', async () => {
+      const fixture = await buildFixture();
+
+      const response = await createItem(fixture, {
+        type: 'READING_COMPREHENSION',
+        prompt: 'Onde o Lucas mora?',
+        content: {
+          ...CHOICE,
+          passage: 'Lucas is from Brazil and lives in Austin.',
+          spans: [
+            {
+              start: 0,
+              end: 500,
+              kind: 'GRAMMAR',
+              skillId: 'grammar.be.present.affirmative',
+            },
+          ],
+        },
+      });
+
+      expect(response.status).toBe(422);
+      expect(response.body.error.details.issues[0].path).toBe('spans.0');
+    });
+
+    it('as rotas novas de item são coisa de editor: aluno recebe 403', async () => {
+      const fixture = await buildFixture();
+      const student = { Authorization: `Bearer ${fixture.student}` };
+
+      await http()
+        .post(`/admin/curriculum/items/${fixture.itemId}/reject`)
+        .set(student)
+        .expect(403);
+      await http()
+        .get('/admin/curriculum/items?type=MATCH')
+        .set(student)
+        .expect(403);
+    });
+  });
 });

@@ -1,6 +1,9 @@
 import {
   answerResponseSchema,
+  cefrLevelSchema,
   cursorPaginationQuerySchema,
+  itemCalibrationFlagSchema,
+  itemTypeSchema,
 } from '@english-saas/shared';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -20,5 +23,9 @@ export class AssessmentAnswerDto extends createZodDto(
 ) {}
 
 export class FlaggedItemsQueryDto extends createZodDto(
-  cursorPaginationQuerySchema,
+  cursorPaginationQuerySchema.extend({
+    flag: itemCalibrationFlagSchema.optional(),
+    level: cefrLevelSchema.optional(),
+    type: itemTypeSchema.optional(),
+  }),
 ) {}

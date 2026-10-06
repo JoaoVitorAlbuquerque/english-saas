@@ -151,3 +151,37 @@ export class InvalidImageError extends AppException {
     );
   }
 }
+
+/**
+ * Os pré-requisitos propostos não formam um grafo válido. `reason` é o
+ * identificador estável; `details` diz quais skills estão no problema.
+ */
+export class InvalidPrerequisitesError extends AppException {
+  constructor(
+    reason: 'SELF' | 'CYCLE' | 'DEPRECATED',
+    details: { skills: string[]; cycle?: string[] },
+  ) {
+    super(
+      'INVALID_PREREQUISITES',
+      reason === 'SELF'
+        ? 'Uma skill não pode ser pré-requisito de si mesma.'
+        : reason === 'CYCLE'
+          ? 'Esses pré-requisitos formam um ciclo: uma skill acabaria exigindo a si mesma.'
+          : 'Skill obsoleta não pode ser pré-requisito. Use a que a substituiu.',
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      { reason, ...details },
+    );
+  }
+}
+
+/** Cada skill do tipo REGISTER liga a uma nota só. */
+export class RegisterSkillTakenError extends AppException {
+  constructor(skillId: string, noteId: string) {
+    super(
+      'REGISTER_SKILL_TAKEN',
+      `A skill "${skillId}" já está ligada à nota "${noteId}". Cada skill serve a uma nota só.`,
+      HttpStatus.CONFLICT,
+      { skillId, noteId },
+    );
+  }
+}

@@ -14,6 +14,7 @@ import {
   type CheckpointCandidate,
   type CheckpointResponse,
 } from './domain/checkpoint';
+import { initialDifficultyOf, latestPerItem } from './domain/flagged';
 import { difficultyForP, estimateEap, probability } from './domain/irt';
 import {
   canRetake,
@@ -640,5 +641,55 @@ describe('calibration', () => {
     expect(
       pointBiserialOf(responsesOf(10, (ability) => ability > 0)),
     ).toBeGreaterThan(0.7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Itens problemáticos
+// ---------------------------------------------------------------------------
+
+describe('latestPerItem', () => {
+  const row = (itemId: string, day: number, previousDifficulty = 0) => ({
+    itemId,
+    calibratedAt: new Date(Date.UTC(2026, 0, day)),
+    flags: ['TOO_HARD' as const],
+    previousDifficulty,
+  });
+
+  it('fica com a calibração mais recente de cada item', () => {
+    const rows = latestPerItem([row('a', 1), row('a', 8), row('b', 3)]);
+
+    expect(rows.map((r) => [r.itemId, r.calibratedAt.getUTCDate()])).toEqual([
+      ['a', 8],
+      ['b', 3],
+    ]);
+  });
+
+  it('ordena do mais recente para o mais antigo, e o itemId desempata', () => {
+    const rows = latestPerItem([row('c', 5), row('a', 5), row('b', 9)]);
+
+    expect(rows.map((r) => r.itemId)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('devolve vazio quando não há marcação', () => {
+    expect(latestPerItem([])).toEqual([]);
+  });
+});
+
+describe('initialDifficultyOf', () => {
+  const day = (n: number) => new Date(Date.UTC(2026, 0, n));
+
+  it('sem calibração, a atual é a inicial', () => {
+    expect(initialDifficultyOf(1.5, [])).toBe(1.5);
+  });
+
+  it('é o valor anterior à primeira calibração, não à última', () => {
+    expect(
+      initialDifficultyOf(0.4, [
+        { calibratedAt: day(15), previousDifficulty: -0.1 },
+        { calibratedAt: day(1), previousDifficulty: -0.6 },
+        { calibratedAt: day(8), previousDifficulty: -0.35 },
+      ]),
+    ).toBe(-0.6);
   });
 });

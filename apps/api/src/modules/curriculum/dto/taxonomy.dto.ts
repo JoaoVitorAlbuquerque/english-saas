@@ -2,8 +2,14 @@ import {
   cefrLevelSchema,
   competencySchema,
   cursorPaginationQuerySchema,
-  learningGoalSchema,
+  deprecateSchema,
+  errorPatternAuthoringPatchSchema,
+  errorPatternAuthoringSchema,
   registerLevelSchema,
+  registerNoteAuthoringPatchSchema,
+  registerNoteAuthoringSchema,
+  skillAuthoringPatchSchema,
+  skillAuthoringSchema,
   skillTypeSchema,
   taxonomySlugSchema,
 } from '@english-saas/shared';
@@ -11,90 +17,72 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 /**
- * Entrada da autoria de taxonomia.
+ * Entrada da autoria de taxonomia. Os limites moram em `packages/shared`
+ * (`taxonomy-authoring.ts`), porque os formulários do admin conferem os
+ * mesmos ao vivo.
  *
  * O `id` só aparece na criação: slug de taxonomia não se renomeia (ver
  * `TaxonomyService`).
  */
 
-export class CreateSkillDto extends createZodDto(
-  z.object({
-    id: taxonomySlugSchema,
-    type: skillTypeSchema,
-    competency: competencySchema,
-    cefrLevel: cefrLevelSchema,
-    title: z.string().trim().min(2).max(160),
-    description: z.string().trim().max(1_000).nullable().optional(),
-    prerequisites: z.array(taxonomySlugSchema).max(20).optional(),
-    commonErrors: z.array(taxonomySlugSchema).max(20).optional(),
-    goals: z.array(learningGoalSchema).max(7).optional(),
-  }),
-) {}
+export class CreateSkillDto extends createZodDto(skillAuthoringSchema) {}
 
-export class UpdateSkillDto extends createZodDto(
-  z.object({
-    type: skillTypeSchema.optional(),
-    competency: competencySchema.optional(),
-    cefrLevel: cefrLevelSchema.optional(),
-    title: z.string().trim().min(2).max(160).optional(),
-    description: z.string().trim().max(1_000).nullable().optional(),
-    prerequisites: z.array(taxonomySlugSchema).max(20).optional(),
-    commonErrors: z.array(taxonomySlugSchema).max(20).optional(),
-    goals: z.array(learningGoalSchema).max(7).optional(),
-  }),
-) {}
+export class UpdateSkillDto extends createZodDto(skillAuthoringPatchSchema) {}
 
-export class DeprecateDto extends createZodDto(
-  z.object({ replacedById: taxonomySlugSchema.nullable().optional() }),
-) {}
+export class DeprecateDto extends createZodDto(deprecateSchema) {}
 
 export class CreateErrorPatternDto extends createZodDto(
-  z.object({
-    id: taxonomySlugSchema,
-    description: z.string().trim().min(4).max(500),
-    example: z.string().trim().min(1).max(500),
-    correction: z.string().trim().min(1).max(500),
-    explanation: z.string().trim().min(4).max(2_000),
-    skillIds: z.array(taxonomySlugSchema).max(20).optional(),
-  }),
+  errorPatternAuthoringSchema,
 ) {}
 
 export class UpdateErrorPatternDto extends createZodDto(
-  z.object({
-    description: z.string().trim().min(4).max(500).optional(),
-    example: z.string().trim().min(1).max(500).optional(),
-    correction: z.string().trim().min(1).max(500).optional(),
-    explanation: z.string().trim().min(4).max(2_000).optional(),
-    skillIds: z.array(taxonomySlugSchema).max(20).optional(),
-  }),
+  errorPatternAuthoringPatchSchema,
 ) {}
 
-const registerNoteFields = {
-  spokenForm: z.string().trim().min(1).max(300),
-  standardForm: z.string().trim().min(1).max(300),
-  register: registerLevelSchema,
-  explanation: z.string().trim().min(4).max(2_000),
-  whenToAvoid: z.string().trim().max(500).nullable().optional(),
-  cefrLevel: cefrLevelSchema,
-  skillId: taxonomySlugSchema.nullable().optional(),
-  audioAssetId: z.uuid().nullable().optional(),
-};
-
 export class CreateRegisterNoteDto extends createZodDto(
-  z.object({ id: taxonomySlugSchema, ...registerNoteFields }),
+  registerNoteAuthoringSchema,
 ) {}
 
 export class UpdateRegisterNoteDto extends createZodDto(
-  z.object(registerNoteFields).partial(),
+  registerNoteAuthoringPatchSchema,
 ) {}
 
-export class TaxonomyListQueryDto extends createZodDto(
+/** `includeDeprecated` chega como texto na query string. */
+const includeDeprecatedSchema = z
+  .enum(['true', 'false'])
+  .transform((value) => value === 'true')
+  .optional();
+
+/** Busca por texto, sem acento nem caixa (ver `domain/search.ts`). */
+const searchSchema = z.string().trim().min(1).max(80).optional();
+
+export class SkillListQueryDto extends createZodDto(
   cursorPaginationQuerySchema.extend({
-    includeDeprecated: z
-      .enum(['true', 'false'])
-      .transform((value) => value === 'true')
-      .optional(),
-    /** Busca por texto no id e no título (só em `skills`). */
-    q: z.string().trim().min(1).max(80).optional(),
+    includeDeprecated: includeDeprecatedSchema,
+    /** Busca por texto no id e no título. */
+    q: searchSchema,
+    level: cefrLevelSchema.optional(),
+    competency: competencySchema.optional(),
+    type: skillTypeSchema.optional(),
+  }),
+) {}
+
+export class ErrorPatternListQueryDto extends createZodDto(
+  cursorPaginationQuerySchema.extend({
+    includeDeprecated: includeDeprecatedSchema,
+    /** Busca no id, na descrição, no exemplo e na correção. */
+    q: searchSchema,
+    skillId: taxonomySlugSchema.optional(),
+  }),
+) {}
+
+export class RegisterNoteListQueryDto extends createZodDto(
+  cursorPaginationQuerySchema.extend({
+    includeDeprecated: includeDeprecatedSchema,
+    /** Busca no id e nas duas formas (falada e padrão). */
+    q: searchSchema,
+    level: cefrLevelSchema.optional(),
+    register: registerLevelSchema.optional(),
+    skillId: taxonomySlugSchema.optional(),
   }),
 ) {}

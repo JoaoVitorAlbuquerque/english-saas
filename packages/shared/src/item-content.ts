@@ -60,6 +60,38 @@ export const ITEM_SOURCES = ['HUMAN', 'AI_DRAFT_REVIEWED'] as const;
 export const itemSourceSchema = z.enum(ITEM_SOURCES);
 export type ItemSource = z.infer<typeof itemSourceSchema>;
 
+/**
+ * Origens que o banco lista. `AI_GENERATED` (exercício de material do Plus) é
+ * privado do aluno e nunca aparece; `AI_DRAFT` é o rascunho da IA ainda sem
+ * revisão — só o fluxo de `content-studio` o cria, por isso não está em
+ * `ITEM_SOURCES` (o que o editor pode gravar).
+ */
+export const LISTED_ITEM_SOURCES = [
+  'HUMAN',
+  'AI_DRAFT',
+  'AI_DRAFT_REVIEWED',
+] as const;
+export const listedItemSourceSchema = z.enum(LISTED_ITEM_SOURCES);
+export type ListedItemSource = z.infer<typeof listedItemSourceSchema>;
+
+/**
+ * O que a calibração semanal marca num item (módulo 8): fácil demais, difícil
+ * demais ou que não separa quem sabe de quem não sabe.
+ */
+export const ITEM_CALIBRATION_FLAGS = [
+  'TOO_EASY',
+  'TOO_HARD',
+  'LOW_DISCRIMINATION',
+] as const;
+export const itemCalibrationFlagSchema = z.enum(ITEM_CALIBRATION_FLAGS);
+export type ItemCalibrationFlag = z.infer<typeof itemCalibrationFlagSchema>;
+
+export const ITEM_SOURCE_LABELS: Record<ListedItemSource, string> = {
+  HUMAN: 'Autoria humana',
+  AI_DRAFT: 'Rascunho de IA',
+  AI_DRAFT_REVIEWED: 'IA revisada por pessoa',
+};
+
 // ---------------------------------------------------------------------------
 // Peças reaproveitadas
 // ---------------------------------------------------------------------------

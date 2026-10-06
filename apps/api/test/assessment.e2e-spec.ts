@@ -390,13 +390,63 @@ describe('Assessment (e2e)', () => {
       .get('/admin/assessment/flagged-items')
       .set(auth)
       .expect(200);
+    // Uma linha por item, com o resumo dele — a tabela do admin não precisa
+    // buscar o item de novo.
     expect(flagged.body.data).toEqual([
       expect.objectContaining({
-        itemId: item.id,
+        item: expect.objectContaining({
+          id: item.id,
+          type: 'MULTIPLE_CHOICE',
+          prompt: 'Fácil demais',
+          cefrLevel: 'B1',
+          status: 'PUBLISHED',
+          exposureCount: 60,
+          skillIds: ['sim.grammar'],
+        }),
         flags: ['TOO_EASY'],
         responses: 60,
+        previousDifficulty: 0,
       }),
     ]);
+    // O gabarito não é parte do resumo.
+    expect(JSON.stringify(flagged.body)).not.toContain('correctOptionIds');
+
+    const filtered = async (query: string): Promise<number> => {
+      const response = await http()
+        .get(`/admin/assessment/flagged-items?${query}`)
+        .set(auth)
+        .expect(200);
+
+      return response.body.data.length as number;
+    };
+
+    expect(await filtered('flag=TOO_EASY')).toBe(1);
+    expect(await filtered('flag=TOO_HARD')).toBe(0);
+    expect(await filtered('level=B1&type=MULTIPLE_CHOICE')).toBe(1);
+    expect(await filtered('level=A1')).toBe(0);
+    expect(await filtered('type=MATCH')).toBe(0);
+
+    // A ficha: a dificuldade com que o item começou sobrevive à calibração.
+    const stats = await http()
+      .get(`/admin/assessment/items/${item.id}/stats`)
+      .set(auth)
+      .expect(200);
+
+    expect(stats.body).toMatchObject({
+      itemId: item.id,
+      exposureCount: 60,
+      initialDifficulty: 0,
+      flags: ['TOO_EASY'],
+    });
+    expect(stats.body.difficulty).toBeLessThan(0);
+    expect(stats.body.history).toHaveLength(1);
+    expect(stats.body.history[0]).toMatchObject({
+      responses: 60,
+      previousDifficulty: 0,
+      flags: ['TOO_EASY'],
+      resolvedAt: null,
+    });
+    expect(stats.body.lastCalibratedAt).not.toBeNull();
 
     await http()
       .post(`/admin/assessment/flagged-items/${item.id}/resolve`)
@@ -407,6 +457,74 @@ describe('Assessment (e2e)', () => {
       .set(auth)
       .expect(200);
     expect(after.body.data).toEqual([]);
+
+    // Resolvido: sai da fila e do alerta, mas a história continua na ficha.
+    const resolvedStats = await http()
+      .get(`/admin/assessment/items/${item.id}/stats`)
+      .set(auth)
+      .expect(200);
+
+    expect(resolvedStats.body.flags).toEqual([]);
+    expect(resolvedStats.body.history).toHaveLength(1);
+    expect(resolvedStats.body.history[0].resolvedAt).not.toBeNull();
+  });
+
+  it('a ficha de um item sem calibração mostra a dificuldade atual como inicial', async () => {
+    await context.prisma.skill.create({
+      data: {
+        id: 'sim.grammar',
+        type: 'GRAMMAR',
+        competency: 'GRAMMAR',
+        cefrLevel: 'A1',
+        title: 'Simulada',
+      },
+    });
+    const item = await context.prisma.item.create({
+      data: {
+        type: 'TYPE_ANSWER',
+        prompt: 'Sem calibração',
+        content: {} as Prisma.InputJsonValue,
+        acceptedAnswers: ['yes'],
+        explanation: 'Simulada.',
+        cefrLevel: 'A1',
+        difficulty: -1.2,
+        status: ContentStatus.PUBLISHED,
+        skills: { create: { skillId: 'sim.grammar', position: 0 } },
+      },
+    });
+    const auth = { Authorization: `Bearer ${await editorToken()}` };
+
+    const stats = await http()
+      .get(`/admin/assessment/items/${item.id}/stats`)
+      .set(auth)
+      .expect(200);
+
+    expect(stats.body).toMatchObject({
+      initialDifficulty: -1.2,
+      difficulty: -1.2,
+      correctRate: null,
+      flags: [],
+      history: [],
+      lastCalibratedAt: null,
+    });
+
+    await http()
+      .get('/admin/assessment/items/11111111-1111-4111-8111-111111111111/stats')
+      .set(auth)
+      .expect(404);
+  });
+
+  it('a ficha e a fila de itens problemáticos são coisa de editor', async () => {
+    const student = await signup('aluno-ficha@exemplo.com');
+
+    await http()
+      .get('/admin/assessment/items/11111111-1111-4111-8111-111111111111/stats')
+      .set('Authorization', `Bearer ${student.token}`)
+      .expect(403);
+    await http()
+      .get('/admin/assessment/flagged-items?flag=TOO_EASY')
+      .set('Authorization', `Bearer ${student.token}`)
+      .expect(403);
   });
 });
 

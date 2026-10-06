@@ -26,12 +26,15 @@ export function RegisterNoteSelect({
   error,
   disabled,
   fieldPath,
-}: SelectProps) {
+  exclude = [],
+}: SelectProps & { exclude?: readonly string[] }) {
   const notes = useRegisterNotes();
-  const options = (notes.data?.data ?? []).map((note) => ({
-    value: note.id,
-    label: `${note.spokenForm} → ${note.standardForm}`,
-  }));
+  const options = (notes.data?.data ?? [])
+    .filter((note) => !exclude.includes(note.id))
+    .map((note) => ({
+      value: note.id,
+      label: `${note.spokenForm} → ${note.standardForm}`,
+    }));
 
   // Nota que já está escolhida mas não veio na lista (descontinuada): mantém.
   if (value !== '' && !options.some((option) => option.value === value)) {
@@ -114,17 +117,21 @@ export function ErrorPatternSelect({
   value,
   onChange,
   disabled,
+  error,
   fieldPath,
-}: SelectProps) {
+  exclude = [],
+}: SelectProps & { exclude?: readonly string[] }) {
   const patterns = useErrorPatterns();
   const options = [
     { value: '', label: t('picker.errorPattern.placeholder') },
-    ...(patterns.data?.data ?? []).map((pattern) => ({
-      value: pattern.id,
-      label: pattern.example
-        ? `${pattern.example} → ${pattern.correction}`
-        : pattern.id,
-    })),
+    ...(patterns.data?.data ?? [])
+      .filter((pattern) => !exclude.includes(pattern.id))
+      .map((pattern) => ({
+        value: pattern.id,
+        label: pattern.example
+          ? `${pattern.example} → ${pattern.correction}`
+          : pattern.id,
+      })),
   ];
 
   if (value !== '' && !options.some((option) => option.value === value)) {
@@ -137,6 +144,7 @@ export function ErrorPatternSelect({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       options={options}
+      error={error}
       disabled={disabled}
       data-field={fieldPath}
     />

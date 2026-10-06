@@ -583,8 +583,13 @@ describe('Progress (e2e)', () => {
 
     const res = await http().get('/admin/metrics').set(adminAuth).expect(200);
 
+    // Mesma forma da fila do admin (`flagged-items`): um item por linha, com o
+    // resumo dele — a tela de métricas não precisa buscar o item de novo.
     expect(res.body.items).toEqual([
-      expect.objectContaining({ itemId: maya.id, flags: ['TOO_EASY'] }),
+      expect.objectContaining({
+        item: expect.objectContaining({ id: maya.id }),
+        flags: ['TOO_EASY'],
+      }),
     ]);
   });
 

@@ -1,8 +1,9 @@
-import { useAdminItem, useAdminItems } from '@english-saas/api-client';
+import { useAdminItem, useAdminItemList } from '@english-saas/api-client';
 import {
   CEFR_LEVELS,
   CONTENT_STATUSES,
   ITEM_TYPE_LABELS,
+  type CefrLevel,
   type ContentStatus,
   type PracticeContent,
 } from '@english-saas/shared';
@@ -86,11 +87,12 @@ function ItemPicker({
   const [status, setStatus] = useState<ContentStatus>('PUBLISHED');
   const [level, setLevel] = useState('');
   const [skillId, setSkillId] = useState<string | null>(null);
-  const items = useAdminItems({
+  const items = useAdminItemList({
     status,
-    ...(level === '' ? {} : { level }),
+    ...(level === '' ? {} : { level: level as CefrLevel }),
     ...(skillId === null ? {} : { skillId }),
   });
+  const pickable = items.data?.pages.flatMap((page) => page.data) ?? [];
 
   return (
     <section className="space-y-3 rounded-xl border border-dashed border-line p-3">
@@ -129,14 +131,14 @@ function ItemPicker({
         <p role="alert" className="text-sm text-error">
           {t('practice.pick.error')}
         </p>
-      ) : items.data.data.length === 0 ? (
+      ) : pickable.length === 0 ? (
         <p className="text-sm text-muted">{t('practice.pick.none')}</p>
       ) : (
         <ul
           aria-label={t('practice.pick.results')}
           className="max-h-64 space-y-1 overflow-y-auto"
         >
-          {items.data.data.map((item) => {
+          {pickable.map((item) => {
             const added = chosen.includes(item.id);
 
             return (

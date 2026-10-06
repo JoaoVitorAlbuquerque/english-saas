@@ -10,14 +10,15 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { Roles } from 'src/common/decorators/roles.decorator';
-import { CursorPaginationQueryDto } from 'src/common/pagination/cursor-pagination.dto';
 
 import {
   CreateErrorPatternDto,
   CreateRegisterNoteDto,
   CreateSkillDto,
   DeprecateDto,
-  TaxonomyListQueryDto,
+  ErrorPatternListQueryDto,
+  RegisterNoteListQueryDto,
+  SkillListQueryDto,
   UpdateErrorPatternDto,
   UpdateRegisterNoteDto,
   UpdateSkillDto,
@@ -39,8 +40,10 @@ export class TaxonomyAdminController {
   // --- Skill ---
 
   @Get('skills')
-  @ApiOperation({ summary: 'Lista skills, inclusive as descontinuadas' })
-  async listSkills(@Query() query: TaxonomyListQueryDto) {
+  @ApiOperation({
+    summary: 'Lista skills, com filtro por nível, competência, tipo e busca',
+  })
+  async listSkills(@Query() query: SkillListQueryDto) {
     return this.taxonomy.listSkills(query);
   }
 
@@ -72,7 +75,7 @@ export class TaxonomyAdminController {
 
   @Get('error-patterns')
   @ApiOperation({ summary: 'Lista os erros típicos catalogados' })
-  async listErrorPatterns(@Query() query: CursorPaginationQueryDto) {
+  async listErrorPatterns(@Query() query: ErrorPatternListQueryDto) {
     return this.taxonomy.listErrorPatterns(query);
   }
 
@@ -97,11 +100,20 @@ export class TaxonomyAdminController {
     return this.taxonomy.updateErrorPattern(id, body);
   }
 
+  @Post('error-patterns/:id/deprecate')
+  @ApiOperation({ summary: 'Tira de circulação e aponta o substituto' })
+  async deprecateErrorPattern(
+    @Param('id') id: string,
+    @Body() body: DeprecateDto,
+  ) {
+    return this.taxonomy.deprecateErrorPattern(id, body.replacedById ?? null);
+  }
+
   // --- RegisterNote ---
 
   @Get('register-notes')
   @ApiOperation({ summary: 'Lista as notas de registro falado' })
-  async listRegisterNotes(@Query() query: CursorPaginationQueryDto) {
+  async listRegisterNotes(@Query() query: RegisterNoteListQueryDto) {
     return this.taxonomy.listRegisterNotes(query);
   }
 
@@ -124,5 +136,14 @@ export class TaxonomyAdminController {
     @Body() body: UpdateRegisterNoteDto,
   ) {
     return this.taxonomy.updateRegisterNote(id, body);
+  }
+
+  @Post('register-notes/:id/deprecate')
+  @ApiOperation({ summary: 'Tira de circulação e aponta o substituto' })
+  async deprecateRegisterNote(
+    @Param('id') id: string,
+    @Body() body: DeprecateDto,
+  ) {
+    return this.taxonomy.deprecateRegisterNote(id, body.replacedById ?? null);
   }
 }

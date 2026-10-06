@@ -25,10 +25,20 @@ export class AssessmentAdminController {
 
   @Get('flagged-items')
   @ApiOperation({
-    summary: 'Itens fáceis demais, difíceis demais ou que discriminam mal',
+    summary:
+      'Itens fáceis demais, difíceis demais ou que discriminam mal, um por linha',
   })
   async flagged(@Query() query: FlaggedItemsQueryDto) {
     return this.calibration.listFlagged(query);
+  }
+
+  @Get('items/:itemId/stats')
+  @ApiOperation({
+    summary:
+      'Ficha do item: exposição, acerto, dificuldade inicial × atual e calibrações',
+  })
+  async stats(@Param('itemId', ParseUUIDPipe) itemId: string) {
+    return this.calibration.itemStats(itemId);
   }
 
   @Post('flagged-items/:itemId/resolve')

@@ -39,9 +39,18 @@ export const queryKeys = {
   adminVersion: (id: string) => ['admin', 'version', id] as const,
   adminPreview: (id: string) => ['admin', 'preview', id] as const,
   adminCharacters: ['admin', 'characters'] as const,
-  adminSkills: (q: string) => ['admin', 'skills', q] as const,
+  adminSkills: (q: string, type?: string) =>
+    ['admin', 'skills', q, type ?? 'all'] as const,
   adminRegisterNotes: ['admin', 'register-notes'] as const,
   adminErrorPatterns: ['admin', 'error-patterns'] as const,
-  adminItems: (filter: object) => ['admin', 'items', filter] as const,
+  adminSkillList: (filter: object) => ['admin', 'skill-list', filter] as const,
+  adminErrorPatternList: (filter: object) =>
+    ['admin', 'error-pattern-list', filter] as const,
+  adminRegisterNoteList: (filter: object) =>
+    ['admin', 'register-note-list', filter] as const,
+  adminItemList: (filter: object) => ['admin', 'item-list', filter] as const,
   adminItem: (id: string) => ['admin', 'item', id] as const,
+  adminItemStats: (id: string) => ['admin', 'item-stats', id] as const,
+  adminFlaggedItems: (filter: object) =>
+    ['admin', 'flagged-items', filter] as const,
 };

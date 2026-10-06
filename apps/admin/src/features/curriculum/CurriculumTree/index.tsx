@@ -6,7 +6,14 @@ import {
   ErrorState,
   Skeleton,
 } from '@english-saas/ui';
-import { ArrowDown, ArrowUp, Plus, Users } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ListChecks,
+  Plus,
+  Tags,
+  Users,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { t } from '../../../messages/pt-BR';
@@ -216,13 +223,32 @@ export function CurriculumTree() {
           <h1 className="font-display text-2xl text-ink">{t('tree.title')}</h1>
           <p className="mt-1 text-sm text-muted">{t('tree.subtitle')}</p>
         </div>
-        <Link
-          to="/conteudo/personagens"
-          className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-4 text-base font-medium text-ink hover:bg-ground"
+        <nav
+          aria-label={t('tree.related')}
+          className="flex flex-wrap items-center gap-2"
         >
-          <Users className="size-5" aria-hidden="true" />
-          {t('tree.characters')}
-        </Link>
+          <Link
+            to="/conteudo/questoes"
+            className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-4 text-base font-medium text-ink hover:bg-ground"
+          >
+            <ListChecks className="size-5" aria-hidden="true" />
+            {t('tree.items')}
+          </Link>
+          <Link
+            to="/conteudo/taxonomia/skills"
+            className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-4 text-base font-medium text-ink hover:bg-ground"
+          >
+            <Tags className="size-5" aria-hidden="true" />
+            {t('tree.taxonomy')}
+          </Link>
+          <Link
+            to="/conteudo/personagens"
+            className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-4 text-base font-medium text-ink hover:bg-ground"
+          >
+            <Users className="size-5" aria-hidden="true" />
+            {t('tree.characters')}
+          </Link>
+        </nav>
       </header>
 
       {controller.isLoading ? (

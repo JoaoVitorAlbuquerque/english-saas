@@ -5,8 +5,6 @@ import { configureApiClient } from '../../http/config';
 import { clearAccessToken, setAccessToken } from '../../http/token-store';
 import {
   getPreview,
-  listItems,
-  listSkills,
   reorderLessons,
   reorderUnits,
   saveDraftSteps,
@@ -169,71 +167,6 @@ describe('reordenar', () => {
 
     await expect(reorderLessons('unit-1', [])).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('busca', () => {
-  it('skills: manda q e limit na query, e ignora o que vier vazio', async () => {
-    // Uma `Response` nova a cada chamada: o corpo só se lê uma vez.
-    const fetchMock = vi.fn().mockImplementation(() =>
-      Promise.resolve(
-        jsonResponse({
-          data: [
-            {
-              id: 'grammar.be.present',
-              type: 'GRAMMAR',
-              competency: 'GRAMMAR',
-              cefrLevel: 'A1',
-              title: 'Verbo to be',
-              description: null,
-              prerequisites: [],
-              commonErrors: [],
-              goals: [],
-              deprecatedAt: null,
-              replacedById: null,
-            },
-          ],
-          nextCursor: null,
-          hasMore: false,
-        }),
-      ),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const page = await listSkills({ q: 'verbo to be', limit: 30 });
-
-    expect(page.data[0]?.title).toBe('Verbo to be');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://api.local/admin/curriculum/skills?q=verbo+to+be&limit=30',
-      expect.anything(),
-    );
-
-    await listSkills({ q: '' });
-
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      'http://api.local/admin/curriculum/skills',
-      expect.anything(),
-    );
-  });
-
-  it('itens: filtra por status, nível e skill', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse({ data: [], nextCursor: null, hasMore: false }),
-      );
-    vi.stubGlobal('fetch', fetchMock);
-
-    await listItems({
-      status: 'PUBLISHED',
-      level: 'A1',
-      skillId: 'grammar.be.present',
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://api.local/admin/curriculum/items?status=PUBLISHED&level=A1&skillId=grammar.be.present',
-      expect.anything(),
-    );
   });
 });
 

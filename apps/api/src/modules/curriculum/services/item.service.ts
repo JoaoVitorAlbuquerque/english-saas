@@ -23,10 +23,17 @@ import {
 import { resolveDifficulty } from '../domain/difficulty';
 import {
   immutableFieldChanges,
+  parseItemContent,
   requiresNewItem,
   validateItem,
 } from '../domain/item-rules';
-import { nextStatus, type ContentAction } from '../domain/versioning';
+import {
+  nextStatus,
+  statusAfterEdit,
+  type ContentAction,
+} from '../domain/versioning';
+
+import { AssetUrlService } from './asset-url.service';
 import { TaxonomyService } from './taxonomy.service';
 
 export type ItemInput = {
@@ -80,10 +87,22 @@ const itemSelect = {
   status: true,
   source: true,
   replacedById: true,
+  /** O item que esta revisão substitui (a relação inversa de `replacedById`). */
+  replaces: { select: { id: true }, take: 1 },
   createdAt: true,
   updatedAt: true,
   skills: { orderBy: { position: 'asc' as const }, select: { skillId: true } },
 } satisfies Prisma.ItemSelect;
+
+/** Onde um item está em uso — o que impede arquivar e onde trocar a referência. */
+export type ItemUsage = {
+  lessonId: string;
+  lessonSlug: string;
+  versionId: string;
+  version: number;
+  status: ContentStatus;
+  title: string;
+};
 
 /**
  * Banco de questões.
@@ -98,14 +117,22 @@ export class ItemService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly taxonomy: TaxonomyService,
+    private readonly assets: AssetUrlService,
   ) {}
 
+  /**
+   * Mais recentes primeiro (`id` desempata): ordenar por `id` — um UUID — daria
+   * uma ordem arbitrária, e o editor procura o que acabou de criar.
+   */
   async list(query: {
     cursor?: string | undefined;
     limit: number;
     status?: ContentStatus | undefined;
     level?: CefrLevel | undefined;
     skillId?: string | undefined;
+    type?: ItemType | undefined;
+    source?: ItemSource | undefined;
+    q?: string | undefined;
   }): Promise<Paginated<unknown>> {
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
 
@@ -113,14 +140,26 @@ export class ItemService {
       take,
       ...cursorArgs,
       where: {
-        ...NOT_GENERATED,
+        // `source` pedido substitui o filtro de "não gerado": quem o escolhe
+        // só pode escolher uma origem que a listagem mostra.
+        ...(query.source === undefined ? NOT_GENERATED : {}),
         ...(query.status === undefined ? {} : { status: query.status }),
         ...(query.level === undefined ? {} : { cefrLevel: query.level }),
+        ...(query.type === undefined ? {} : { type: query.type }),
+        ...(query.source === undefined ? {} : { source: query.source }),
         ...(query.skillId === undefined
           ? {}
           : { skills: { some: { skillId: query.skillId } } }),
+        ...(query.q === undefined
+          ? {}
+          : {
+              OR: [
+                { prompt: { contains: query.q, mode: 'insensitive' } },
+                { slug: { contains: query.q, mode: 'insensitive' } },
+              ],
+            }),
       },
-      orderBy: { id: 'asc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       select: itemSelect,
     });
 
@@ -140,6 +179,118 @@ export class ItemService {
     }
 
     return this.flatten(item);
+  }
+
+  /**
+   * O item como o editor do admin lê: a questão com gabarito mais o que o
+   * banco sozinho não mostra — a URL do áudio (quando o conteúdo tem
+   * `audioAssetId`) e as versões de lição que usam o item.
+   */
+  async withAdminExtras(item: Awaited<ReturnType<ItemService['findById']>>) {
+    const [audioUrl, usedIn] = await Promise.all([
+      this.audioUrlOf(item.content),
+      this.usages(item.id),
+    ]);
+
+    return { ...item, audioUrl, usedIn };
+  }
+
+  /** Atalho para `findById` + `withAdminExtras`. */
+  async findForAdmin(id: string) {
+    return this.withAdminExtras(await this.findById(id));
+  }
+
+  /**
+   * O resumo de itens para quem lista os que precisam de atenção (8): o
+   * suficiente para uma linha de tabela, sem conteúdo nem gabarito.
+   */
+  async findSummaries(ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.prisma.item.findMany({
+      where: { id: { in: [...ids] } },
+      select: {
+        id: true,
+        type: true,
+        prompt: true,
+        cefrLevel: true,
+        status: true,
+        source: true,
+        difficulty: true,
+        discrimination: true,
+        exposureCount: true,
+        correctRate: true,
+        skills: { orderBy: { position: 'asc' }, select: { skillId: true } },
+      },
+    });
+
+    return rows.map(({ skills, ...row }) => ({
+      ...row,
+      skillIds: skills.map((link) => link.skillId),
+    }));
+  }
+
+  /**
+   * Lições no ar que usam o item — as que o aluno vê hoje e as que barram o
+   * arquivamento. O índice de uso nasce no publish, então rascunho que ainda
+   * não foi publicado não aparece aqui.
+   */
+  async usages(itemId: string): Promise<ItemUsage[]> {
+    const rows = await this.prisma.lessonVersionItem.findMany({
+      where: { itemId, lessonVersion: { status: ContentStatus.PUBLISHED } },
+      select: {
+        lessonVersion: {
+          select: {
+            id: true,
+            version: true,
+            status: true,
+            title: true,
+            lesson: { select: { id: true, slug: true } },
+          },
+        },
+      },
+    });
+
+    return rows
+      .map((row) => ({
+        lessonId: row.lessonVersion.lesson.id,
+        lessonSlug: row.lessonVersion.lesson.slug,
+        versionId: row.lessonVersion.id,
+        version: row.lessonVersion.version,
+        status: row.lessonVersion.status,
+        title: row.lessonVersion.title,
+      }))
+      .sort(
+        (a, b) =>
+          a.lessonSlug.localeCompare(b.lessonSlug) || b.version - a.version,
+      );
+  }
+
+  /** URL assinada do áudio do item, se o conteúdo aponta para um. */
+  private async audioUrlOf(content: unknown): Promise<string | null> {
+    const assetId =
+      content !== null && typeof content === 'object'
+        ? (content as { audioAssetId?: unknown }).audioAssetId
+        : undefined;
+
+    if (typeof assetId !== 'string') {
+      return null;
+    }
+
+    const asset = await this.prisma.mediaAsset.findUnique({
+      where: { id: assetId },
+      select: {
+        id: true,
+        kind: true,
+        storageKey: true,
+        mimeType: true,
+        durationMs: true,
+      },
+    });
+
+    return asset === null ? null : (await this.assets.resolve(asset)).url;
   }
 
   async create(input: ItemInput) {
@@ -209,10 +360,14 @@ export class ItemService {
 
     await this.assertValid(merged);
 
+    // Editar derruba a revisão: o que foi revisado deixou de ser o que está aí.
+    const statusAfter = statusAfterEdit(current.status);
+
     await this.prisma.$transaction(async (tx) => {
       await tx.item.update({
         where: { id },
         data: {
+          ...(statusAfter === current.status ? {} : { status: statusAfter }),
           ...(input.type === undefined ? {} : { type: input.type }),
           ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
           ...(input.content === undefined
@@ -361,6 +516,20 @@ export class ItemService {
         await tx.item.updateMany({
           where: { replacedById: id, status: ContentStatus.PUBLISHED },
           data: { status: ContentStatus.ARCHIVED },
+        });
+      }
+
+      // Arquivar uma revisão que nunca foi ao ar solta o item que ela ia
+      // substituir — senão ele ficaria preso a `replacedById` e não aceitaria
+      // outra revisão. O que já foi aposentado (a revisão chegou a publicar)
+      // continua apontando para ela.
+      if (target === ContentStatus.ARCHIVED) {
+        await tx.item.updateMany({
+          where: {
+            replacedById: id,
+            status: { not: ContentStatus.ARCHIVED },
+          },
+          data: { replacedById: null },
         });
       }
     });
@@ -598,6 +767,49 @@ export class ItemService {
     if (missingPatterns.length > 0) {
       throw new MissingReferencesError({ errorPatterns: missingPatterns });
     }
+
+    await this.assertContentReferences(input.type, input.content);
+  }
+
+  /**
+   * O que o próprio conteúdo referencia por id: a nota de registro de um
+   * REGISTER_SWAP e o áudio de um item de escuta. Obsoleto não é recusado —
+   * corrigir a explicação de um item publicado não pode travar por isso.
+   */
+  private async assertContentReferences(
+    type: ItemType,
+    content: unknown,
+  ): Promise<void> {
+    const parsed = parseItemContent(type, content) as {
+      registerNoteId?: string;
+      audioAssetId?: string | null;
+    };
+
+    if (type === 'REGISTER_SWAP' && parsed.registerNoteId !== undefined) {
+      const found = await this.taxonomy.existingRegisterNoteIds([
+        parsed.registerNoteId,
+      ]);
+
+      if (found.length === 0) {
+        throw new MissingReferencesError({
+          registerNotes: [parsed.registerNoteId],
+        });
+      }
+    }
+
+    if (parsed.audioAssetId != null) {
+      const asset = await this.prisma.mediaAsset.findUnique({
+        where: { id: parsed.audioAssetId },
+        select: { kind: true },
+      });
+
+      if (asset?.kind !== 'AUDIO') {
+        throw new MissingReferencesError({
+          assets: [parsed.audioAssetId],
+          reason: 'O áudio da questão não existe ou não é um áudio.',
+        });
+      }
+    }
   }
 
   private toCreateData(input: ItemInput): Prisma.ItemCreateInput {
@@ -642,9 +854,12 @@ export class ItemService {
     },
   >(item: T) {
     const { skills, errorPatternMap, ...rest } = item;
+    // `replaces` só vem no `itemSelect` do admin; as outras leituras não têm.
+    const replaces = (rest as { replaces?: { id: string }[] }).replaces;
 
     return {
       ...rest,
+      ...(replaces === undefined ? {} : { replaces: replaces[0]?.id ?? null }),
       errorPatternMap: toErrorPatternMap(errorPatternMap),
       skillIds: skills.map((link) => link.skillId),
     };

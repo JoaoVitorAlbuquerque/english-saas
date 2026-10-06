@@ -405,6 +405,382 @@ export const messages = {
     'O áudio é gerado quando a versão é aprovada. Tente publicar de novo em instantes.',
   'editorial.problem.audioMissing': 'Ainda sem áudio: {list}',
   'editorial.problem.dismiss': 'Dispensar',
+
+  // --- Banco de questões: formulário e validação ---
+  'items.map.needWrong': 'Escreva a resposta errada que revela este erro.',
+  'items.map.needPattern': 'Escolha o erro típico que esta resposta revela.',
+
+  // --- Árvore: atalhos para a taxonomia e o banco ---
+  'tree.related': 'Outras áreas do conteúdo',
+  'tree.items': 'Banco de questões',
+  'tree.taxonomy': 'Taxonomia',
+
+  // --- Taxonomia (compartilhado) ---
+  'taxonomy.title': 'Taxonomia',
+  'taxonomy.subtitle':
+    'As skills, os erros típicos de brasileiro e as notas de fala × estrutura. O que a lição e as questões apontam.',
+  'taxonomy.back': 'Voltar ao conteúdo',
+  'taxonomy.tabs': 'Listas da taxonomia',
+  'taxonomy.tab.skills': 'Skills',
+  'taxonomy.tab.errors': 'Erros típicos',
+  'taxonomy.tab.notes': 'Notas de registro',
+  'taxonomy.filters': 'Filtros',
+  'taxonomy.filter.search': 'Buscar',
+  'taxonomy.filter.any': 'Todos',
+  'taxonomy.filter.showObsolete': 'Mostrar obsoletas',
+  'taxonomy.filter.clear': 'Limpar filtros',
+  'taxonomy.empty.filtered': 'Nada bate com esses filtros.',
+  'taxonomy.loadMore': 'Carregar mais',
+  'taxonomy.slugHint':
+    'Letras minúsculas, números, ponto e hífen. Não muda depois de criado.',
+  'taxonomy.slugLocked':
+    'O identificador não muda: ele vive dentro de lições publicadas e do histórico dos alunos.',
+  'taxonomy.obsolete': 'Obsoleta',
+  'taxonomy.replacedBy': 'Substituída por',
+  'taxonomy.noReplacement': 'Sem substituta',
+  'taxonomy.errorsLoadFailed': 'Não conseguimos carregar os erros típicos.',
+  'taxonomy.errorsNone': 'Ainda não há erros típicos cadastrados.',
+  'taxonomy.deprecate.open': 'Marcar como obsoleta',
+  'taxonomy.deprecate.confirm': 'Marcar como obsoleta',
+  'taxonomy.deprecate.optional':
+    'A substituta é opcional. O que já aponta para esta continua funcionando: o identificador nunca é apagado.',
+  'taxonomy.deprecate.error': 'Não conseguimos marcar como obsoleta.',
+
+  // --- Skills ---
+  'skills.subtitle':
+    'Habilidades concretas e ensináveis. Cada uma tem nível, competência, pré-requisitos e os erros comuns de quem aprende.',
+  'skills.new': 'Nova skill',
+  'skills.list': 'Skills',
+  'skills.edit': 'Editar {title}',
+  'skills.type': 'Tipo',
+  'skills.competency': 'Competência',
+  'skills.filter.searchPlaceholder': 'Título ou identificador',
+  'skills.links':
+    '{prerequisites} pré-requisito(s) · {errors} erro(s) comum(ns)',
+  'skills.empty.title': 'Nenhuma skill por aqui',
+  'skills.empty.description': 'Crie a primeira skill para começar.',
+  'skills.deprecate': 'Marcar {title} como obsoleta',
+  'skills.deprecate.title': 'Marcar "{title}" como obsoleta?',
+  'skills.deprecate.description':
+    'Ela sai do catálogo e dos seletores. Lições e questões que já usam continuam funcionando.',
+  'skills.deprecate.replacement': 'Skill que a substitui',
+  'skills.dialog.createTitle': 'Nova skill',
+  'skills.dialog.editTitle': 'Editar "{title}"',
+  'skills.dialog.id': 'Identificador',
+  'skills.dialog.title': 'Título',
+  'skills.dialog.description': 'Descrição',
+  'skills.dialog.goals': 'Serve a quais objetivos',
+  'skills.dialog.goalsHint': 'Sem marcar nenhum, serve a todos igualmente.',
+  'skills.dialog.prerequisites': 'Pré-requisitos',
+  'skills.dialog.prerequisitesHint':
+    'O que o aluno precisa saber antes. Não vale apontar para si mesma, fechar um ciclo nem usar skill obsoleta.',
+  'skills.dialog.commonErrors': 'Erros comuns',
+  'skills.dialog.commonErrorsHint':
+    'Os erros típicos de brasileiro que esta skill costuma revelar.',
+  'skills.dialog.error': 'Não conseguimos salvar a skill.',
+
+  // --- Erros típicos ---
+  'errors.subtitle':
+    'O erro que o brasileiro costuma cometer, com a forma errada, a certa e por que acontece.',
+  'errors.new': 'Novo erro típico',
+  'errors.list': 'Erros típicos',
+  'errors.edit': 'Editar {id}',
+  'errors.skills': 'Ligado a {count} skill(s)',
+  'errors.filter.searchPlaceholder': 'Descrição, exemplo ou correção',
+  'errors.empty.title': 'Nenhum erro típico por aqui',
+  'errors.empty.description': 'Cadastre o primeiro erro típico.',
+  'errors.deprecate': 'Marcar {id} como obsoleto',
+  'errors.deprecate.title': 'Marcar "{id}" como obsoleto?',
+  'errors.deprecate.description':
+    'Ele sai dos seletores e do que o tutor pode citar. Questões que já o usam continuam funcionando.',
+  'errors.deprecate.replacement': 'Erro típico que o substitui',
+  'errors.dialog.createTitle': 'Novo erro típico',
+  'errors.dialog.editTitle': 'Editar "{id}"',
+  'errors.dialog.id': 'Identificador',
+  'errors.dialog.description': 'O que o aluno faz de errado',
+  'errors.dialog.descriptionHint':
+    'Em português: "Usa have para dizer a idade."',
+  'errors.dialog.example': 'Forma errada',
+  'errors.dialog.exampleHint': 'Em inglês: "I have 20 years."',
+  'errors.dialog.correction': 'Forma certa',
+  'errors.dialog.explanation': 'Por que acontece e como lembrar',
+  'errors.dialog.explanationHint': 'Em português, curto e direto.',
+  'errors.dialog.skills': 'Skills que ele afeta',
+  'errors.dialog.skillsHint': 'Onde este erro costuma aparecer.',
+  'errors.dialog.error': 'Não conseguimos salvar o erro típico.',
+
+  // --- Notas de registro ---
+  'notes.subtitle':
+    'A forma falada contra a estrutura gramatical: "I’m gonna" × "I’m going to".',
+  'notes.new': 'Nova nota',
+  'notes.list': 'Notas de registro',
+  'notes.edit': 'Editar {form}',
+  'notes.register': 'Registro',
+  'notes.skill': 'Skill:',
+  'notes.whenToAvoid': 'Evitar: {text}',
+  'notes.hasAudio': 'Com áudio',
+  'notes.noAudio':
+    'Sem áudio ainda — ele é gerado quando a lição que usa a nota é aprovada.',
+  'notes.listen': 'Ouvir "{form}"',
+  'notes.filter.searchPlaceholder': 'Forma falada, padrão ou identificador',
+  'notes.empty.title': 'Nenhuma nota por aqui',
+  'notes.empty.description': 'Cadastre a primeira nota de registro.',
+  'notes.deprecate': 'Marcar {form} como obsoleta',
+  'notes.deprecate.title': 'Marcar "{form}" como obsoleta?',
+  'notes.deprecate.description':
+    'Ela sai dos seletores e do catálogo do aluno. Lições e questões que já usam continuam funcionando.',
+  'notes.deprecate.replacement': 'Nota que a substitui',
+  'notes.dialog.createTitle': 'Nova nota de registro',
+  'notes.dialog.editTitle': 'Editar "{form}"',
+  'notes.dialog.id': 'Identificador',
+  'notes.dialog.spoken': 'Como se fala',
+  'notes.dialog.spokenHint': 'Ex.: gonna, You coming?',
+  'notes.dialog.standard': 'Estrutura completa',
+  'notes.dialog.standardHint': 'Ex.: going to, Are you coming?',
+  'notes.dialog.explanation': 'O que muda e quando usar',
+  'notes.dialog.explanationHint': 'Em português.',
+  'notes.dialog.whenToAvoid': 'Onde não cabe',
+  'notes.dialog.whenToAvoidHint': 'Opcional. Ex.: não use em e-mail formal.',
+  'notes.dialog.skill': 'Skill de registro ligada',
+  'notes.dialog.skillHint':
+    'Opcional. Só skills do tipo "Registro falado", e cada skill serve a uma nota só.',
+  'notes.dialog.audio': 'Áudio',
+  'notes.dialog.noAudio':
+    'Ainda não há áudio. Ele é gerado quando uma lição que usa a nota é aprovada.',
+  'notes.dialog.error': 'Não conseguimos salvar a nota.',
+
+  // --- Banco de questões: lista ---
+  'items.bank.title': 'Banco de questões',
+  'items.bank.subtitle':
+    'Todas as questões que lições, provas e revisões usam. Questão publicada não muda o enunciado: vira uma nova versão.',
+  'items.bank.back': 'Voltar ao conteúdo',
+  'items.bank.new': 'Nova questão',
+  'items.bank.caption': 'Questões do banco',
+  'items.bank.searchPlaceholder': 'Enunciado ou identificador',
+  'items.bank.status': 'Status',
+  'items.bank.source': 'Origem',
+  'items.bank.skill': 'Skill',
+  'items.bank.problematic': 'Só os problemáticos',
+  'items.bank.problematicHint':
+    'A fila de problemáticos (marcados pela calibração semanal) filtra por marca, nível e tipo. Os demais filtros ficam desligados enquanto ela está ativa.',
+  'items.bank.flag': 'Marca',
+  'items.bank.col.prompt': 'Enunciado',
+  'items.bank.col.rate': '% de acerto',
+  'items.bank.col.difficulty': 'Dificuldade',
+  'items.bank.col.alert': 'Alerta',
+  'items.bank.empty.title': 'Nenhuma questão por aqui',
+  'items.bank.empty.flagged': 'Nenhum item problemático',
+  'items.bank.empty.description': 'Crie a primeira questão do banco.',
+
+  // --- Banco de questões: editor ---
+  'items.editor.newTitle': 'Nova questão',
+  'items.editor.editTitle': 'Questão',
+  'items.editor.back': 'Voltar ao banco de questões',
+  'items.save.create': 'Criar questão',
+  'items.save.saving': 'Salvando…',
+  'items.save.dirty': 'Alterações não salvas',
+  'items.save.clean': 'Tudo salvo',
+  'items.save.savedAt': 'Salvo às {time}',
+  'items.save.problems': '{count} problema(s) a corrigir',
+  'items.banner.returnedToDraft':
+    'Esta questão voltou para rascunho porque você a editou: o que foi revisado deixou de ser o que está aqui.',
+  'items.banner.published':
+    'Esta questão está publicada. O enunciado, o conteúdo e as respostas não mudam: já foram respondidos por alunos. A explicação, o mapa de erros, o nível, as skills e a dificuldade ainda podem ser corrigidos.',
+  'items.banner.archived':
+    'Esta questão está arquivada. O enunciado, o conteúdo e as respostas não mudam. Para reaproveitá-la, crie uma nova versão.',
+  'items.revision.create': 'Criar nova versão do item',
+  'items.revision.exists': 'Já existe uma nova versão desta questão.',
+  'items.revision.open': 'Abrir',
+  'items.revision.replaces': 'Esta questão é a nova versão de outra.',
+
+  // --- Campos comuns ---
+  'items.field.type': 'Tipo de questão',
+  'items.field.skills': 'Skills que a questão mede',
+  'items.field.skillsHint':
+    'A primeira é a principal: é por ela que a questão entra em provas e revisões.',
+  'items.field.prompt': 'Enunciado',
+  'items.field.promptHint': 'O que o aluno lê antes de responder.',
+  'items.field.content': 'Conteúdo',
+  'items.field.acceptedAnswers': 'Respostas aceitas',
+  'items.field.slug': 'Identificador (slug, opcional)',
+  'items.field.slugHint':
+    'Letras minúsculas, números e hífen. Serve para importar e achar a questão depois.',
+  'items.field.slugLocked': 'O identificador não muda depois de criado.',
+  'items.field.explanation': 'Explicação',
+  'items.field.explanationHint':
+    'Em português. É o que o aluno lê depois de responder.',
+  'items.field.advanced': 'Dificuldade e discriminação',
+  'items.field.difficulty': 'Dificuldade (logit)',
+  'items.field.difficultyHint':
+    'De -4 a 4. Vazio usa o padrão do nível ({level}: {value}). A calibração semanal ajusta a partir das respostas.',
+  'items.field.discrimination': 'Discriminação',
+  'items.field.discriminationHint':
+    'De 0,1 a 3. Quanto separa quem sabe de quem não sabe. Vazio mantém o padrão (1).',
+
+  // --- Editores por tipo ---
+  'items.choice.title': 'Alternativas e gabarito',
+  'items.choice.hint':
+    'De 2 a 6 alternativas. Marque a(s) correta(s). Mover uma alternativa não muda o gabarito.',
+  'items.choice.option': 'Alternativa {position}',
+  'items.choice.optionLabel': 'alternativa {position}',
+  'items.choice.text': 'Texto',
+  'items.choice.translation': 'Tradução (opcional)',
+  'items.choice.correct': 'Correta',
+  'items.choice.add': 'Adicionar alternativa',
+  'items.choice.shuffle': 'Embaralhar as alternativas',
+  'items.order.title': 'Peças da frase',
+  'items.order.hint':
+    'As palavras ou blocos que o aluno coloca em ordem. A frase certa vai em "Respostas aceitas".',
+  'items.order.token': 'Peça {position}',
+  'items.order.tokenLabel': 'peça {position}',
+  'items.order.add': 'Adicionar peça',
+  'items.fill.title': 'Frase com lacuna',
+  'items.fill.sentence': 'Frase',
+  'items.fill.sentenceHint': 'Use ___ (três sublinhados) onde fica a lacuna.',
+  'items.fill.hint': 'Dica (opcional)',
+  'items.fill.choices': 'Alternativas para escolher (opcional)',
+  'items.fill.choicesHint':
+    'Sem alternativas, o aluno digita. Com elas, escolhe uma.',
+  'items.fill.choice': 'Opção {position}',
+  'items.fill.choiceLabel': 'opção {position}',
+  'items.fill.addChoice': 'Adicionar opção',
+  'items.type.title': 'Resposta digitada',
+  'items.type.source': 'Texto de origem (opcional)',
+  'items.type.sourceHint': 'Ex.: a frase em português que o aluno traduz.',
+  'items.type.hint': 'Dica (opcional)',
+  'items.match.title': 'Pares para ligar',
+  'items.match.hint':
+    'De 2 a 8 pares. O lado esquerdo não se repete. O aluno liga cada esquerdo ao seu direito.',
+  'items.match.pair': 'Par {position}',
+  'items.match.pairLabel': 'par {position}',
+  'items.match.left': 'Lado esquerdo',
+  'items.match.right': 'Lado direito',
+  'items.match.add': 'Adicionar par',
+  'items.audio.title': 'Áudio',
+  'items.audio.text': 'Texto que a voz fala',
+  'items.audio.textHint':
+    'Em inglês. A voz é gerada quando a lição que usa a questão é aprovada. Mudar o texto refaz o áudio.',
+  'items.audio.has': 'Com áudio',
+  'items.audio.listen': 'Ouvir o áudio da questão',
+  'items.audio.none':
+    'Sem áudio ainda — ele é gerado quando a lição que usa a questão é aprovada.',
+  'items.dictation.maxPlays': 'Quantas vezes pode ouvir',
+  'items.dictation.maxPlaysHint':
+    'De 0 a 10. Zero deixa ouvir quantas vezes quiser.',
+  'items.reading.title': 'Texto para ler',
+  'items.reading.passage': 'Texto da leitura',
+  'items.reading.translation': 'Tradução do texto (opcional)',
+  'items.reading.translationHint':
+    'Só o editor vê: não vai para o aluno junto com a questão.',
+  'items.swap.title': 'Fala × estrutura padrão',
+  'items.swap.source': 'Frase de partida',
+  'items.swap.sourceHint': 'Ex.: I’m gonna call you.',
+  'items.swap.direction': 'Direção',
+  'items.swap.note': 'Nota de registro',
+  'items.accepted.title': 'Respostas aceitas',
+  'items.accepted.hint':
+    'A primeira é a resposta de referência (a do gabarito). As outras são variações. Maiúscula, pontuação e contração ("she’s" = "she is") o servidor já trata: não precisa repetir.',
+  'items.accepted.reference': 'Resposta de referência',
+  'items.accepted.variation': 'Variação {position}',
+  'items.accepted.label': 'resposta aceita {position}',
+  'items.accepted.add': 'Adicionar variação',
+  'items.map.title': 'Mapa de erros típicos',
+  'items.map.hintChoice':
+    'Se o aluno escolher uma alternativa errada, qual erro típico ela revela? Escolha a alternativa e o erro.',
+  'items.map.hintTyped':
+    'Se o aluno escrever esta resposta errada, qual erro típico ela revela? Escreva a resposta errada comum e escolha o erro.',
+  'items.map.notForMatch':
+    'Questão de ligar pares não usa o mapa de erros: a correção só olha os pares.',
+  'items.map.empty': 'Nenhum erro mapeado. É opcional.',
+  'items.map.wrongOption': 'Alternativa errada',
+  'items.map.chooseOption': 'Escolha uma alternativa',
+  'items.map.wrongAnswer': 'Resposta errada comum',
+  'items.map.pattern': 'Erro típico',
+  'items.map.add': 'Adicionar erro mapeado',
+  'items.map.remove': 'Remover erro mapeado {position}',
+  'items.type.confirm.title': 'Trocar o tipo da questão?',
+  'items.type.confirm.description':
+    'O conteúdo do tipo atual (alternativas, peças, pares…) e o mapa de erros são descartados. O enunciado, a explicação e as skills ficam.',
+  'items.type.confirm.action': 'Trocar o tipo',
+
+  // --- Preview ---
+  'items.preview.title': 'Como o aluno vê',
+  'items.preview.incomplete':
+    'Complete os campos obrigatórios do conteúdo para ver a questão desenhada.',
+  'items.preview.note':
+    'Prévia: a resposta não é corrigida aqui. "Ver gabarito" mostra a resposta certa e a explicação.',
+  'items.preview.noAudio':
+    'O áudio ainda não existe: ele é gerado quando a lição que usa a questão é aprovada.',
+  'items.preview.showKey': 'Ver gabarito',
+  'items.preview.hideKey': 'Esconder o gabarito',
+
+  // --- Estatísticas ---
+  'items.stats.title': 'Estatísticas',
+  'items.stats.newItem':
+    'As estatísticas aparecem quando a questão for publicada e os alunos começarem a responder.',
+  'items.stats.loadError': 'Não conseguimos carregar as estatísticas.',
+  'items.stats.exposure': 'Respostas (1ª tentativa)',
+  'items.stats.correctRate': '% de acerto',
+  'items.stats.fewData': 'Poucos dados (menos de {min} respostas)',
+  'items.stats.difficulty': 'Dificuldade',
+  'items.stats.initial': 'inicial',
+  'items.stats.current': 'atual',
+  'items.stats.delta': 'variou {delta} pela calibração',
+  'items.stats.notCalibrated': 'ainda sem calibração: a atual é a inicial',
+  'items.stats.discrimination': 'Discriminação',
+  'items.stats.lastCalibration': 'Última calibração',
+  'items.stats.never': 'Nunca calibrada',
+  'items.stats.problematic': 'Item problemático',
+  'items.stats.problematicHint': 'A calibração semanal marcou este item:',
+  'items.stats.flag.TOO_EASY': 'Fácil demais (mais de 95% acertam)',
+  'items.stats.flag.TOO_HARD': 'Difícil demais (menos de 10% acertam)',
+  'items.stats.flag.LOW_DISCRIMINATION': 'Discrimina mal',
+  'items.stats.resolve': 'Marcar como resolvido',
+  'items.stats.resolved': 'resolvido',
+  'items.stats.resolvedToast': 'Marcação resolvida.',
+  'items.stats.resolveError': 'Não conseguimos marcar como resolvido.',
+  'items.stats.history': 'Histórico de calibrações ({count})',
+  'items.stats.historyCaption': 'Rodadas da calibração semanal deste item',
+  'items.stats.col.date': 'Data',
+  'items.stats.col.responses': 'Respostas',
+  'items.stats.col.p': '% acerto',
+  'items.stats.col.estimated': 'Estimada',
+  'items.stats.col.applied': 'Aplicada',
+  'items.stats.col.pb': 'Ponto-bisserial',
+  'items.stats.col.flags': 'Marcas',
+  'items.usedIn.title': 'Usada em',
+  'items.usedIn.none': 'Nenhuma lição no ar usa esta questão.',
+  'items.usedIn.lesson': '{title} (versão {version})',
+  'items.usedIn.hint':
+    'Depois de criar uma nova versão da questão, a lição continua apontando para a antiga: troque a referência na prática da lição.',
+
+  // --- Fluxo editorial do item ---
+  'items.editorial.group': 'Ações da questão',
+  'items.editorial.action.submit-for-review': 'Enviar para revisão',
+  'items.editorial.action.approve': 'Aprovar',
+  'items.editorial.action.reject': 'Devolver para rascunho',
+  'items.editorial.action.publish': 'Publicar',
+  'items.editorial.action.archive': 'Arquivar',
+  'items.editorial.done.submit-for-review': 'Enviada para revisão.',
+  'items.editorial.done.approve': 'Aprovada.',
+  'items.editorial.done.reject': 'Devolvida para rascunho.',
+  'items.editorial.done.publish':
+    'Publicada. Já pode entrar em lições e provas.',
+  'items.editorial.done.archive': 'Arquivada.',
+  'items.editorial.confirm.publish.title': 'Publicar esta questão?',
+  'items.editorial.confirm.publish.description':
+    'Depois de publicada, o enunciado, o conteúdo e as respostas não mudam mais. Para alterar, só criando uma nova versão.',
+  'items.editorial.confirm.publish.descriptionReplaces':
+    'Depois de publicada, o enunciado, o conteúdo e as respostas não mudam mais. Esta questão é a nova versão de outra: ao publicar, a anterior é arquivada.',
+  'items.editorial.confirm.archive.title': 'Arquivar esta questão?',
+  'items.editorial.confirm.archive.description':
+    'Ela sai do banco e deixa de entrar em provas e revisões. Não dá para arquivar uma questão que está numa lição no ar.',
+  'items.problem.title': 'Não deu para continuar',
+  'items.problem.validation': 'Corrija estes pontos e tente de novo:',
+  'items.problem.goToField': 'Ir para o campo',
+  'items.problem.immutableFields': 'Campos que não mudam: {fields}.',
+  'items.problem.inUse':
+    'Tire a questão da prática destas lições (ou publique uma nova versão delas) antes de arquivar:',
 } as const;
 
 export type MessageKey = keyof typeof messages;

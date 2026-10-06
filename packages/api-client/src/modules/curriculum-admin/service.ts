@@ -1,17 +1,11 @@
-import type { ContentStatus } from '@english-saas/shared';
-
 import { apiFetch } from '../../http/fetch-client';
+import { withQuery } from '../../http/with-query';
 import {
   adminCharacterListSchema,
   adminCharacterSchema,
   adminCourseListSchema,
-  adminErrorPatternPageSchema,
-  adminItemPageSchema,
-  adminItemSchema,
   adminLessonSchema,
   adminLessonSummaryListSchema,
-  adminRegisterNotePageSchema,
-  adminSkillPageSchema,
   adminUnitListSchema,
   adminUnitSchema,
   adminVersionSchema,
@@ -29,13 +23,8 @@ import {
   uploadedImageSchema,
   type AdminCharacter,
   type AdminCourse,
-  type AdminErrorPatternPage,
-  type AdminItem,
-  type AdminItemPage,
   type AdminLesson,
   type AdminLessonSummary,
-  type AdminRegisterNotePage,
-  type AdminSkillPage,
   type AdminUnit,
   type AdminVersion,
   type CreateCharacterRequest,
@@ -53,23 +42,6 @@ import {
 } from './schemas';
 
 const BASE = '/admin/curriculum';
-
-function withQuery(
-  path: string,
-  query: Record<string, string | number | undefined>,
-): string {
-  const params = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== '') {
-      params.set(key, String(value));
-    }
-  }
-
-  const text = params.toString();
-
-  return text === '' ? path : `${path}?${text}`;
-}
 
 // --- Estrutura ---
 
@@ -256,54 +228,4 @@ export async function uploadImage(file: File): Promise<UploadedImage> {
     body,
     schema: uploadedImageSchema,
   });
-}
-
-// --- Taxonomia e banco de questões ---
-
-export async function listSkills(query: {
-  q?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<AdminSkillPage> {
-  return apiFetch(withQuery(`${BASE}/skills`, query), {
-    schema: adminSkillPageSchema,
-  });
-}
-
-export async function listRegisterNotes(query: {
-  cursor?: string;
-  limit?: number;
-}): Promise<AdminRegisterNotePage> {
-  return apiFetch(withQuery(`${BASE}/register-notes`, query), {
-    schema: adminRegisterNotePageSchema,
-  });
-}
-
-export async function listErrorPatterns(query: {
-  cursor?: string;
-  limit?: number;
-}): Promise<AdminErrorPatternPage> {
-  return apiFetch(withQuery(`${BASE}/error-patterns`, query), {
-    schema: adminErrorPatternPageSchema,
-  });
-}
-
-export type AdminItemFilter = {
-  status?: ContentStatus;
-  level?: string;
-  skillId?: string;
-  cursor?: string;
-  limit?: number;
-};
-
-export async function listItems(
-  filter: AdminItemFilter,
-): Promise<AdminItemPage> {
-  return apiFetch(withQuery(`${BASE}/items`, filter), {
-    schema: adminItemPageSchema,
-  });
-}
-
-export async function getItem(id: string): Promise<AdminItem> {
-  return apiFetch(`${BASE}/items/${id}`, { schema: adminItemSchema });
 }

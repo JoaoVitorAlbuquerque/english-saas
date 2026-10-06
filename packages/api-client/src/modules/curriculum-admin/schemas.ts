@@ -2,25 +2,18 @@ import {
   cefrLevelSchema,
   contentSlugSchema,
   contentStatusSchema,
-  errorPatternSchema,
-  itemTypeSchema,
   lessonStepTypeSchema,
   lessonVersionMetaSchema,
-  registerNoteSchema,
-  skillSchema,
   taxonomySlugSchema,
 } from '@english-saas/shared';
 import { z } from 'zod';
 
-import {
-  catalogLessonSchema,
-  lessonItemSchema,
-  resolvedAssetSchema,
-} from '../lesson/schemas';
+import { catalogLessonSchema, resolvedAssetSchema } from '../lesson/schemas';
 
 /**
  * Espelha `admin/curriculum/*` (módulo 4, só EDITOR/ADMIN): estrutura do
- * curso, lição versionada, elenco, taxonomia e banco de questões.
+ * curso, lição versionada e elenco. A taxonomia e o banco de questões estão
+ * em `../curriculum-bank`.
  *
  * A etapa chega como `{ order, type, content: unknown }`: o editor trabalha
  * com rascunho incompleto, então o `content` **não** passa pelo schema do
@@ -276,45 +269,6 @@ export const uploadedImageSchema = z.object({
   url: z.string(),
 });
 export type UploadedImage = z.infer<typeof uploadedImageSchema>;
-
-// ---------------------------------------------------------------------------
-// Taxonomia e banco de questões (só leitura, para o editor escolher)
-// ---------------------------------------------------------------------------
-
-function paginated<T extends z.ZodType>(item: T) {
-  return z.object({
-    data: z.array(item),
-    nextCursor: z.string().nullable(),
-    hasMore: z.boolean(),
-  });
-}
-
-export const adminSkillPageSchema = paginated(skillSchema);
-export type AdminSkillPage = z.infer<typeof adminSkillPageSchema>;
-export type AdminSkill = AdminSkillPage['data'][number];
-
-export const adminRegisterNotePageSchema = paginated(registerNoteSchema);
-export type AdminRegisterNotePage = z.infer<typeof adminRegisterNotePageSchema>;
-export type AdminRegisterNote = AdminRegisterNotePage['data'][number];
-
-export const adminErrorPatternPageSchema = paginated(errorPatternSchema);
-export type AdminErrorPatternPage = z.infer<typeof adminErrorPatternPageSchema>;
-export type AdminErrorPattern = AdminErrorPatternPage['data'][number];
-
-/** Item do banco, com o gabarito — só o editor vê. */
-export const adminItemSchema = lessonItemSchema.extend({
-  type: itemTypeSchema,
-  slug: z.string().nullable(),
-  acceptedAnswers: z.unknown(),
-  explanation: z.string().nullable(),
-  errorPatternMap: z.record(z.string(), z.string()),
-  status: contentStatusSchema,
-  source: z.string(),
-  difficulty: z.number(),
-});
-export type AdminItem = z.infer<typeof adminItemSchema>;
-export const adminItemPageSchema = paginated(adminItemSchema);
-export type AdminItemPage = z.infer<typeof adminItemPageSchema>;
 
 // ---------------------------------------------------------------------------
 // Preview

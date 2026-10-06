@@ -78,3 +78,6 @@ export * from './modules/learner-model/schemas';
 export * as curriculumAdminService from './modules/curriculum-admin/service';
 export * from './modules/curriculum-admin/hooks';
 export * from './modules/curriculum-admin/schemas';
+export * as curriculumBankService from './modules/curriculum-bank/service';
+export * from './modules/curriculum-bank/hooks';
+export * from './modules/curriculum-bank/schemas';

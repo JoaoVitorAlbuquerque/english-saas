@@ -1,4 +1,5 @@
 import { type AdminSkill, useSkillSearch } from '@english-saas/api-client';
+import type { SkillType } from '@english-saas/shared';
 import { Badge, Input } from '@english-saas/ui';
 import { X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
@@ -10,12 +11,12 @@ import { useDebouncedValue } from '../lib/useDebouncedValue';
  * Busca de skill por texto (nome ou código). O servidor ignora acento e
  * caixa; a busca roda 250 ms depois da última tecla.
  */
-function useSkillCatalog() {
+function useSkillCatalog(type?: SkillType) {
   const [query, setQuery] = useState('');
   const debounced = useDebouncedValue(query.trim());
-  const results = useSkillSearch(debounced);
+  const results = useSkillSearch(debounced, true, type);
   // As skills da busca vazia dão o título de quem já está escolhido.
-  const base = useSkillSearch('');
+  const base = useSkillSearch('', true, type);
   // Lembra o que já apareceu: o título da skill escolhida não some ao buscar outra.
   const known = useRef(new Map<string, AdminSkill>());
 
@@ -131,6 +132,8 @@ export type SkillPickerProps = {
   error?: string | undefined;
   disabled?: boolean;
   fieldPath?: string;
+  /** Só skills deste tipo (a de uma nota de registro é REGISTER). */
+  type?: SkillType;
 };
 
 /** Uma skill só (marcação, critério da rubrica). */
@@ -141,8 +144,9 @@ export function SkillPicker({
   error,
   disabled = false,
   fieldPath,
+  type,
 }: SkillPickerProps) {
-  const catalog = useSkillCatalog();
+  const catalog = useSkillCatalog(type);
   const groupId = useId();
 
   return (
@@ -198,6 +202,8 @@ export type SkillMultiPickerProps = {
   disabled?: boolean;
   max?: number;
   fieldPath?: string;
+  /** Skills que não podem ser escolhidas (a própria, nos pré-requisitos). */
+  exclude?: readonly string[];
 };
 
 /** Várias skills, na ordem escolhida (skills-alvo, metas, resumo). */
@@ -210,6 +216,7 @@ export function SkillMultiPicker({
   disabled = false,
   max,
   fieldPath,
+  exclude = [],
 }: SkillMultiPickerProps) {
   const catalog = useSkillCatalog();
   const groupId = useId();
@@ -251,7 +258,7 @@ export function SkillMultiPicker({
           />
           <SkillResults
             catalog={catalog}
-            chosen={value}
+            chosen={[...value, ...exclude]}
             disabled={disabled}
             onPick={(skill) => onChange([...value, skill.id])}
           />

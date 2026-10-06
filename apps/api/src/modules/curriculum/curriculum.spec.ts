@@ -1,26 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-  answerVariants,
-  findErrorPattern,
-  matchesAnswer,
-  normalizeAnswer,
-} from './domain/answer-normalization';
-import {
   clampDifficulty,
   initialDifficulty,
   resolveDifficulty,
 } from './domain/difficulty';
 import { checkImage } from './domain/image-upload';
-import {
-  immutableFieldChanges,
-  requiresNewItem,
-  validateItem,
-} from './domain/item-rules';
 import { collectStepReferences, missingReferences } from './domain/references';
 import { planReorder, temporaryOrderBase } from './domain/reorder';
 import { matchesSearch } from './domain/search';
-import { stripAnswerKey, toStudentItem } from './domain/student-view';
+import { findPrerequisiteCycle } from './domain/skill-graph';
 import {
   canPublish,
   clearsApproval,
@@ -34,106 +23,6 @@ const MAYA = randomUUID();
 const LUCAS = randomUUID();
 const AUDIO = randomUUID();
 const ITEM = randomUUID();
-
-// ---------------------------------------------------------------------------
-// Normalização de resposta
-// ---------------------------------------------------------------------------
-
-describe('normalizeAnswer', () => {
-  it('tira caixa, pontuação e espaço sobrando', () => {
-    expect(normalizeAnswer('  Nice to MEET you!  ')).toBe('nice to meet you');
-  });
-
-  it('aceita aspa curva no lugar do apóstrofo', () => {
-    expect(normalizeAnswer('She’s from Austin')).toBe(
-      normalizeAnswer("She's from Austin"),
-    );
-  });
-
-  it('trata hífen como separador', () => {
-    expect(normalizeAnswer('twenty-one')).toBe('twenty one');
-  });
-
-  it('devolve string vazia para entrada só de pontuação', () => {
-    expect(normalizeAnswer('!!!')).toBe('');
-  });
-});
-
-describe('answerVariants', () => {
-  it("gera as duas leituras de 's", () => {
-    expect(answerVariants("she's")).toEqual(['she is', 'she has']);
-  });
-
-  it('não expande possessivo', () => {
-    // `maya` não é pronome, então `maya's` continua inteiro.
-    expect(answerVariants("Maya's dog")).toEqual(["maya's dog"]);
-  });
-
-  it('expande contração de uma leitura só', () => {
-    expect(answerVariants("I'm Lucas")).toEqual(['i am lucas']);
-  });
-
-  it('não desmancha forma falada — é o que o REGISTER_SWAP mede', () => {
-    expect(answerVariants("I'm gonna call you")).toEqual([
-      'i am gonna call you',
-    ]);
-  });
-});
-
-describe('matchesAnswer', () => {
-  it('casa contração com forma expandida', () => {
-    expect(matchesAnswer("She's from Austin.", ['She is from Austin'])).toBe(
-      true,
-    );
-  });
-
-  it('casa a leitura com "has", não só com "is"', () => {
-    expect(
-      matchesAnswer("It's been a long day", ['It has been a long day']),
-    ).toBe(true);
-  });
-
-  it('casa nos dois sentidos', () => {
-    expect(matchesAnswer('She is from Austin', ["She's from Austin"])).toBe(
-      true,
-    );
-  });
-
-  it('recusa resposta diferente', () => {
-    expect(matchesAnswer('He is from Austin', ["She's from Austin"])).toBe(
-      false,
-    );
-  });
-
-  it('recusa resposta vazia', () => {
-    expect(matchesAnswer('   ', ['yes i am'])).toBe(false);
-  });
-
-  it('recusa quando não há gabarito', () => {
-    expect(matchesAnswer('anything', [])).toBe(false);
-  });
-
-  it('separa "Yes, I am" de "Yes, I\'m"', () => {
-    // Não são equivalentes em inglês, e a contração vira "i am" ao
-    // normalizar — então este par casa, e o item precisa ser de escolha.
-    expect(matchesAnswer("Yes, I'm", ['Yes, I am'])).toBe(true);
-  });
-});
-
-describe('findErrorPattern', () => {
-  const map = {
-    'I have 20 years': 'l1.have-for-age',
-    'Is raining': 'l1.missing-subject',
-  };
-
-  it('reconhece o erro mesmo com caixa e pontuação diferentes', () => {
-    expect(findErrorPattern('i have 20 years.', map)).toBe('l1.have-for-age');
-  });
-
-  it('devolve undefined quando nada casa', () => {
-    expect(findErrorPattern("I'm 20 years old", map)).toBeUndefined();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Dificuldade
@@ -307,216 +196,6 @@ describe('nextVersionNumber', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Item
-// ---------------------------------------------------------------------------
-
-describe('validateItem', () => {
-  it('aceita múltipla escolha com gabarito no conteúdo', () => {
-    expect(
-      validateItem({
-        type: 'MULTIPLE_CHOICE',
-        content: {
-          options: [
-            { id: 'a', text: 'am' },
-            { id: 'b', text: 'is' },
-          ],
-          correctOptionIds: ['a'],
-          shuffle: true,
-        },
-        acceptedAnswers: [],
-      }),
-    ).toEqual([]);
-  });
-
-  it('recusa gabarito apontando para alternativa inexistente', () => {
-    const issues = validateItem({
-      type: 'MULTIPLE_CHOICE',
-      content: {
-        options: [
-          { id: 'a', text: 'am' },
-          { id: 'b', text: 'is' },
-        ],
-        correctOptionIds: ['z'],
-      },
-      acceptedAnswers: [],
-    });
-
-    expect(issues.length).toBeGreaterThan(0);
-  });
-
-  it('exige acceptedAnswers em tipo digitado', () => {
-    const issues = validateItem({
-      type: 'ORDER_WORDS',
-      content: { tokens: ['I', 'am', 'Lucas'] },
-      acceptedAnswers: [],
-    });
-
-    expect(issues.some((issue) => issue.path === 'acceptedAnswers')).toBe(true);
-  });
-
-  it('recusa acceptedAnswers em tipo de escolha', () => {
-    const issues = validateItem({
-      type: 'MULTIPLE_CHOICE',
-      content: {
-        options: [
-          { id: 'a', text: 'am' },
-          { id: 'b', text: 'is' },
-        ],
-        correctOptionIds: ['a'],
-      },
-      acceptedAnswers: ['am'],
-    });
-
-    expect(issues.some((issue) => issue.path === 'acceptedAnswers')).toBe(true);
-  });
-
-  it('recusa duas respostas aceitas que são a mesma coisa', () => {
-    const issues = validateItem({
-      type: 'TYPE_ANSWER',
-      content: {},
-      acceptedAnswers: ["She's from Austin", 'she is from austin.'],
-    });
-
-    expect(issues.some((issue) => issue.message.includes('equivalentes'))).toBe(
-      true,
-    );
-  });
-
-  it('exige a lacuna marcada em FILL_BLANK', () => {
-    const issues = validateItem({
-      type: 'FILL_BLANK',
-      content: { sentence: 'Biscuit is a dog.' },
-      acceptedAnswers: ['is'],
-    });
-
-    expect(issues.length).toBeGreaterThan(0);
-  });
-});
-
-describe('imutabilidade do item', () => {
-  const current = {
-    type: 'TYPE_ANSWER' as const,
-    prompt: 'Traduza: Ela é de Austin',
-    content: { hint: 'contração' },
-    acceptedAnswers: ["She's from Austin", 'She is from Austin'],
-  };
-
-  it('não vê mudança quando o conteúdo é o mesmo com chaves fora de ordem', () => {
-    expect(
-      immutableFieldChanges(
-        { ...current, content: { a: 1, b: 2 } },
-        { content: { b: 2, a: 1 } },
-      ),
-    ).toEqual([]);
-  });
-
-  it('não vê mudança quando as respostas vêm em outra ordem', () => {
-    expect(
-      immutableFieldChanges(current, {
-        acceptedAnswers: ['She is from Austin', "She's from Austin"],
-      }),
-    ).toEqual([]);
-  });
-
-  it('aponta o enunciado alterado', () => {
-    expect(immutableFieldChanges(current, { prompt: 'Outro' })).toEqual([
-      'prompt',
-    ]);
-  });
-
-  it('exige item novo só depois de publicado', () => {
-    expect(requiresNewItem('PUBLISHED', ['prompt'])).toBe(true);
-    expect(requiresNewItem('ARCHIVED', ['prompt'])).toBe(true);
-    expect(requiresNewItem('DRAFT', ['prompt'])).toBe(false);
-    expect(requiresNewItem('APPROVED', ['prompt'])).toBe(false);
-  });
-
-  it('não exige item novo quando nada congelado mudou', () => {
-    expect(requiresNewItem('PUBLISHED', [])).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// O que o aluno pode ver
-// ---------------------------------------------------------------------------
-
-describe('stripAnswerKey', () => {
-  it('tira o gabarito da múltipla escolha', () => {
-    const content = stripAnswerKey('MULTIPLE_CHOICE', {
-      options: [{ id: 'a', text: 'am' }],
-      correctOptionIds: ['a'],
-      shuffle: true,
-    });
-
-    expect(content['correctOptionIds']).toBeUndefined();
-    expect(content['options']).toHaveLength(1);
-  });
-
-  it('tira a tradução do texto de interpretação', () => {
-    const content = stripAnswerKey('READING_COMPREHENSION', {
-      passage: 'Lucas is from Brazil.',
-      passageTranslation: 'Lucas é do Brasil.',
-      options: [{ id: 'a', text: 'Brazil' }],
-      correctOptionIds: ['a'],
-    });
-
-    expect(content['passageTranslation']).toBeUndefined();
-    expect(content['correctOptionIds']).toBeUndefined();
-  });
-
-  it('separa os lados do MATCH e ordena a direita', () => {
-    const content = stripAnswerKey('MATCH', {
-      pairs: [
-        { left: 'I', right: 'am' },
-        { left: 'he', right: 'is' },
-        { left: 'you', right: 'are' },
-      ],
-    });
-
-    expect(content['pairs']).toBeUndefined();
-    expect(content['lefts']).toEqual(['I', 'he', 'you']);
-    // Ordem alfabética: mandar na ordem de autoria entregaria a ligação.
-    expect(content['rights']).toEqual(['am', 'are', 'is']);
-  });
-
-  it('não mexe no que não tem gabarito embutido', () => {
-    const content = stripAnswerKey('ORDER_WORDS', {
-      tokens: ['I', 'am', 'Lucas'],
-    });
-
-    expect(content['tokens']).toEqual(['I', 'am', 'Lucas']);
-  });
-
-  it('sobrevive a conteúdo corrompido', () => {
-    expect(stripAnswerKey('MULTIPLE_CHOICE', null)).toEqual({});
-  });
-});
-
-describe('toStudentItem', () => {
-  it('não deixa passar resposta, explicação nem mapa de erro', () => {
-    const student = toStudentItem({
-      id: ITEM,
-      type: 'MULTIPLE_CHOICE',
-      prompt: 'I ___ Maya.',
-      content: {
-        options: [{ id: 'a', text: 'am' }],
-        correctOptionIds: ['a'],
-      },
-      cefrLevel: 'A1',
-      skillIds: ['grammar.be.present.affirmative'],
-    });
-
-    const serialized = JSON.stringify(student);
-
-    expect(serialized).not.toContain('correctOptionIds');
-    expect(serialized).not.toContain('acceptedAnswers');
-    expect(serialized).not.toContain('explanation');
-    expect(serialized).not.toContain('errorPatternMap');
-    expect(student.prompt).toBe('I ___ Maya.');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Reordenar
 // ---------------------------------------------------------------------------
 
@@ -654,5 +333,69 @@ describe('checkImage', () => {
       reason: 'MISSING',
     });
     expect(checkImage(png, 4)).toEqual({ ok: false, reason: 'TOO_LARGE' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pré-requisitos entre skills
+// ---------------------------------------------------------------------------
+
+describe('findPrerequisiteCycle', () => {
+  const edges = (entries: Record<string, string[]>) =>
+    new Map(Object.entries(entries));
+
+  it('aceita pré-requisitos que não voltam para a skill', () => {
+    expect(
+      findPrerequisiteCycle('c', ['b'], edges({ b: ['a'], a: [] })),
+    ).toBeNull();
+  });
+
+  it('aceita a lista vazia', () => {
+    expect(findPrerequisiteCycle('a', [], edges({}))).toBeNull();
+  });
+
+  it('pega a auto-referência', () => {
+    expect(findPrerequisiteCycle('a', ['a'], edges({}))).toEqual(['a', 'a']);
+  });
+
+  it('pega o ciclo direto (A exige B, B exige A)', () => {
+    expect(findPrerequisiteCycle('a', ['b'], edges({ b: ['a'] }))).toEqual([
+      'a',
+      'b',
+      'a',
+    ]);
+  });
+
+  it('pega o ciclo indireto e devolve o caminho todo', () => {
+    expect(
+      findPrerequisiteCycle(
+        'a',
+        ['b'],
+        edges({ b: ['c'], c: ['d'], d: ['a'] }),
+      ),
+    ).toEqual(['a', 'b', 'c', 'd', 'a']);
+  });
+
+  it('ignora o que a skill exige hoje: está sendo substituído', () => {
+    // `a` exige `b` agora; trocar por `c` não fecha ciclo, mesmo `b` exigindo `a`.
+    expect(
+      findPrerequisiteCycle('a', ['c'], edges({ a: ['b'], b: ['a'], c: [] })),
+    ).toBeNull();
+  });
+
+  it('não entra em laço quando o grafo já tem um ciclo antigo', () => {
+    expect(
+      findPrerequisiteCycle('z', ['x'], edges({ x: ['y'], y: ['x'] })),
+    ).toBeNull();
+  });
+
+  it('aceita um diamante (dois caminhos até a mesma skill)', () => {
+    expect(
+      findPrerequisiteCycle(
+        'top',
+        ['left', 'right'],
+        edges({ left: ['base'], right: ['base'], base: [] }),
+      ),
+    ).toBeNull();
   });
 });

@@ -107,3 +107,14 @@ afterEach(() => {
   cleanup();
 });
 afterAll(() => server.close());
+
+// O jsdom não implementa mídia: `pause()`/`play()` imprimiriam "Not implemented"
+// toda vez que um `AudioButton` desmonta.
+Object.defineProperty(window.HTMLMediaElement.prototype, 'pause', {
+  configurable: true,
+  value: () => undefined,
+});
+Object.defineProperty(window.HTMLMediaElement.prototype, 'play', {
+  configurable: true,
+  value: () => Promise.resolve(),
+});

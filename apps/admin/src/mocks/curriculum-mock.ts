@@ -17,8 +17,8 @@ import { http, HttpResponse } from 'msw';
  * funções reais do `packages/shared`.
  */
 
-const API_URL = 'http://localhost:3333';
-const BASE = `${API_URL}/admin/curriculum`;
+export const API_URL = 'http://localhost:3333';
+export const BASE = `${API_URL}/admin/curriculum`;
 
 export const MAYA_ID = '11111111-1111-4111-8111-111111111111';
 export const LUCAS_ID = '22222222-2222-4222-8222-222222222222';
@@ -26,6 +26,13 @@ export const ITEM_AM_ID = '44444444-4444-4444-8444-444444444444';
 export const ITEM_FILL_ID = '55555555-5555-4555-8555-555555555555';
 export const ITEM_MATCH_ID = '66666666-6666-4666-8666-666666666666';
 export const AUDIO_ID = '77777777-7777-4777-8777-777777777777';
+/** Itens dos outros tipos, para o banco de questões. */
+export const ITEM_ORDER_ID = '88888888-8888-4888-8888-888888888888';
+export const ITEM_TYPE_ID = '99999999-9999-4999-8999-999999999999';
+export const ITEM_LISTEN_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+export const ITEM_DICTATION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+export const ITEM_READING_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+export const ITEM_SWAP_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 type Json = Record<string, unknown>;
 
@@ -90,6 +97,19 @@ type Failure = {
   details?: unknown;
 };
 
+export type MockCalibration = {
+  itemId: string;
+  calibratedAt: string;
+  responses: number;
+  pValue: number;
+  estimatedDifficulty: number;
+  previousDifficulty: number;
+  appliedDifficulty: number;
+  pointBiserial: number | null;
+  flags: string[];
+  resolvedAt: string | null;
+};
+
 type MockState = {
   levels: { id: string; cefrLevel: string; title: string; order: number }[];
   units: MockUnit[];
@@ -101,6 +121,8 @@ type MockState = {
   registerNotes: Json[];
   errorPatterns: Json[];
   items: Json[];
+  /** Rodadas da calibração semanal (módulo 8), uma linha por item e rodada. */
+  calibrations: MockCalibration[];
   failures: Map<string, Failure[]>;
   calls: {
     reorderUnits: { levelId: string; ids: string[] }[];
@@ -114,18 +136,30 @@ type MockState = {
     previews: string[];
     skillQueries: string[];
     itemQueries: string[];
+    /** Query string inteira de cada listagem, por recurso. */
+    listQueries: { resource: string; search: string }[];
+    /** Escritas da taxonomia e do banco. */
+    bankWrites: {
+      resource: string;
+      action: string;
+      id?: string;
+      body?: Json;
+    }[];
+    resolvedFlags: string[];
   };
   counter: number;
 };
 
-function iso(day: number): string {
+export function iso(day: number): string {
   return new Date(Date.UTC(2026, 9, day, 12, 0, 0)).toISOString();
 }
 
-const SKILL_BE = 'grammar.be.present.affirmative';
+export const SKILL_BE = 'grammar.be.present.affirmative';
 const SKILL_CHUNK = 'chunk.nice-to-meet-you';
 const SKILL_VOCAB = 'vocab.cafe';
 const SKILL_GOING_TO = 'grammar.going-to-future';
+const SKILL_REGISTER = 'register.gonna';
+const SKILL_OLD = 'grammar.be.present.old';
 
 function sceneContent(): Json {
   return {
@@ -360,11 +394,36 @@ function initialState(): MockState {
       skill(SKILL_BE, 'GRAMMAR', 'GRAMMAR', 'A1', 'Verbo to be no presente'),
       skill(SKILL_CHUNK, 'CHUNK', 'SPEAKING', 'A1', 'Nice to meet you'),
       skill(SKILL_VOCAB, 'VOCAB_SET', 'VOCABULARY', 'A1', 'Pedir um café'),
-      skill(SKILL_GOING_TO, 'GRAMMAR', 'GRAMMAR', 'A2', 'Futuro com going to'),
+      skill(SKILL_GOING_TO, 'GRAMMAR', 'GRAMMAR', 'A2', 'Futuro com going to', {
+        prerequisites: [SKILL_BE],
+      }),
+      skill(SKILL_REGISTER, 'REGISTER', 'SPEAKING', 'A2', 'Registro: gonna'),
+      skill(
+        SKILL_OLD,
+        'GRAMMAR',
+        'GRAMMAR',
+        'A1',
+        'Verbo to be (versão antiga)',
+        { deprecatedAt: iso(2), replacedById: SKILL_BE },
+      ),
     ],
     registerNotes: [
-      note('gonna', 'gonna', 'going to'),
+      note('gonna', 'gonna', 'going to', {
+        cefrLevel: 'A2',
+        skillId: SKILL_REGISTER,
+        audioAssetId: AUDIO_ID,
+        audio: {
+          url: `https://cdn.example.com/${AUDIO_ID}.mp3`,
+          mimeType: 'audio/mpeg',
+          durationMs: 900,
+        },
+      }),
       note('you-coming', 'You coming?', 'Are you coming?'),
+      note('wanna-old', 'wanna', 'want to', {
+        register: 'NEUTRAL',
+        deprecatedAt: iso(3),
+        replacedById: 'gonna',
+      }),
     ],
     errorPatterns: [
       {
@@ -376,6 +435,26 @@ function initialState(): MockState {
         skillIds: [SKILL_BE],
         deprecatedAt: null,
         replacedById: null,
+      },
+      {
+        id: 'l1.missing-subject',
+        description: 'Esquece o sujeito: "Is raining".',
+        example: 'Is raining.',
+        correction: 'It is raining.',
+        explanation: 'O inglês pede sujeito em toda frase.',
+        skillIds: [],
+        deprecatedAt: null,
+        replacedById: null,
+      },
+      {
+        id: 'l1.old-pattern',
+        description: 'Padrão antigo, já substituído.',
+        example: 'x',
+        correction: 'y',
+        explanation: 'Substituído pelo padrão da idade.',
+        skillIds: [],
+        deprecatedAt: iso(3),
+        replacedById: 'l1.have-for-age',
       },
     ],
     items: [
@@ -389,11 +468,16 @@ function initialState(): MockState {
           shuffle: false,
         },
         explanation: 'Com "I", o verbo é "am".',
+        difficulty: -2.2,
+        exposureCount: 120,
+        correctRate: 0.97,
+        createdDay: 1,
       }),
       item(ITEM_FILL_ID, 'FILL_BLANK', 'She ___ from Austin.', 'A1', {
         content: { sentence: 'She ___ from Austin.' },
         acceptedAnswers: ['is'],
         explanation: 'Com "she", o verbo é "is".',
+        createdDay: 2,
       }),
       item(ITEM_MATCH_ID, 'MATCH', 'Ligue as palavras.', 'A2', {
         content: {
@@ -402,7 +486,124 @@ function initialState(): MockState {
             { left: 'dog', right: 'cachorro' },
           ],
         },
+        explanation: 'Vocabulário de animais.',
+        createdDay: 3,
       }),
+      item(ITEM_TYPE_ID, 'TYPE_ANSWER', 'Traduza: Ela é de Austin', 'A1', {
+        content: { sourceText: 'Ela é de Austin' },
+        acceptedAnswers: ["She's from Austin"],
+        explanation: 'Ela é = She is ou She’s.',
+        errorPatternMap: { 'She have from Austin': 'l1.have-for-age' },
+        difficulty: 0.9,
+        exposureCount: 80,
+        correctRate: 0.07,
+        createdDay: 4,
+      }),
+      item(ITEM_ORDER_ID, 'ORDER_WORDS', 'Monte a frase.', 'A1', {
+        content: { tokens: ['I', 'am', 'Lucas'] },
+        acceptedAnswers: ['I am Lucas'],
+        explanation: 'Sujeito, verbo, nome.',
+        status: 'DRAFT',
+        source: 'AI_DRAFT',
+        createdDay: 5,
+      }),
+      item(ITEM_LISTEN_ID, 'LISTEN_CHOOSE', 'O que a Maya disse?', 'A1', {
+        content: {
+          options: [
+            { id: 'a', text: "I'm Maya." },
+            { id: 'b', text: 'I am Lucas.' },
+          ],
+          correctOptionIds: ['a'],
+          shuffle: false,
+          audioText: "I'm Maya.",
+          audioAssetId: AUDIO_ID,
+        },
+        explanation: 'Ela se apresenta.',
+        status: 'APPROVED',
+        createdDay: 6,
+      }),
+      item(ITEM_DICTATION_ID, 'DICTATION', 'Escreva o que ouvir.', 'A1', {
+        content: {
+          audioText: 'Nice to meet you.',
+          audioAssetId: null,
+          maxPlays: 3,
+        },
+        acceptedAnswers: ['Nice to meet you'],
+        explanation: 'Cumprimento comum.',
+        status: 'DRAFT',
+        createdDay: 7,
+      }),
+      item(
+        ITEM_READING_ID,
+        'READING_COMPREHENSION',
+        'Onde o Lucas mora?',
+        'A2',
+        {
+          content: {
+            passage: 'Lucas is from Brazil and lives in Austin.',
+            spans: [],
+            options: [
+              { id: 'a', text: 'In Austin' },
+              { id: 'b', text: 'In Brazil' },
+            ],
+            correctOptionIds: ['a'],
+            shuffle: false,
+          },
+          explanation: 'O texto diz "lives in Austin".',
+          status: 'IN_REVIEW',
+          source: 'AI_DRAFT_REVIEWED',
+          createdDay: 8,
+        },
+      ),
+      item(ITEM_SWAP_ID, 'REGISTER_SWAP', 'Passe para a forma padrão.', 'A2', {
+        content: {
+          source: "I'm gonna call you.",
+          direction: 'SPOKEN_TO_STANDARD',
+          registerNoteId: 'gonna',
+        },
+        acceptedAnswers: ["I'm going to call you"],
+        explanation: 'gonna = going to.',
+        status: 'DRAFT',
+        createdDay: 9,
+      }),
+    ],
+    calibrations: [
+      {
+        itemId: ITEM_TYPE_ID,
+        calibratedAt: iso(10),
+        responses: 60,
+        pValue: 0.08,
+        estimatedDifficulty: 2.4,
+        previousDifficulty: 0.5,
+        appliedDifficulty: 0.7,
+        pointBiserial: 0.3,
+        flags: ['TOO_HARD'],
+        resolvedAt: null,
+      },
+      {
+        itemId: ITEM_TYPE_ID,
+        calibratedAt: iso(17),
+        responses: 80,
+        pValue: 0.07,
+        estimatedDifficulty: 2.6,
+        previousDifficulty: 0.7,
+        appliedDifficulty: 0.9,
+        pointBiserial: 0.12,
+        flags: ['TOO_HARD', 'LOW_DISCRIMINATION'],
+        resolvedAt: null,
+      },
+      {
+        itemId: ITEM_AM_ID,
+        calibratedAt: iso(17),
+        responses: 120,
+        pValue: 0.97,
+        estimatedDifficulty: -3.1,
+        previousDifficulty: -2,
+        appliedDifficulty: -2.2,
+        pointBiserial: 0.4,
+        flags: ['TOO_EASY'],
+        resolvedAt: null,
+      },
     ],
     failures: new Map(),
     calls: {
@@ -417,6 +618,9 @@ function initialState(): MockState {
       previews: [],
       skillQueries: [],
       itemQueries: [],
+      listQueries: [],
+      bankWrites: [],
+      resolvedFlags: [],
     },
     counter: 100,
   };
@@ -428,6 +632,12 @@ function skill(
   competency: string,
   cefrLevel: string,
   title: string,
+  extra: Partial<{
+    prerequisites: string[];
+    commonErrors: string[];
+    deprecatedAt: string | null;
+    replacedById: string | null;
+  }> = {},
 ): Json {
   return {
     id,
@@ -441,10 +651,18 @@ function skill(
     goals: [],
     deprecatedAt: null,
     replacedById: null,
+    createdAt: iso(1),
+    updatedAt: iso(1),
+    ...extra,
   };
 }
 
-function note(id: string, spokenForm: string, standardForm: string): Json {
+function note(
+  id: string,
+  spokenForm: string,
+  standardForm: string,
+  extra: Json = {},
+): Json {
   return {
     id,
     spokenForm,
@@ -454,8 +672,13 @@ function note(id: string, spokenForm: string, standardForm: string): Json {
     whenToAvoid: null,
     cefrLevel: 'A1',
     skillId: null,
+    audioAssetId: null,
+    audio: null,
     deprecatedAt: null,
     replacedById: null,
+    createdAt: iso(1),
+    updatedAt: iso(1),
+    ...extra,
   };
 }
 
@@ -464,7 +687,19 @@ function item(
   type: string,
   prompt: string,
   cefrLevel: string,
-  extra: { content: Json; acceptedAnswers?: unknown; explanation?: string },
+  extra: {
+    content: Json;
+    acceptedAnswers?: string[];
+    explanation?: string;
+    errorPatternMap?: Record<string, string>;
+    status?: string;
+    source?: string;
+    difficulty?: number;
+    discrimination?: number;
+    exposureCount?: number;
+    correctRate?: number | null;
+    createdDay?: number;
+  },
 ): Json {
   return {
     id,
@@ -473,12 +708,19 @@ function item(
     prompt,
     content: extra.content,
     acceptedAnswers: extra.acceptedAnswers ?? [],
-    explanation: extra.explanation ?? null,
-    errorPatternMap: {},
+    explanation: extra.explanation ?? 'Explicação do item.',
+    errorPatternMap: extra.errorPatternMap ?? {},
     cefrLevel,
-    difficulty: -2,
-    status: 'PUBLISHED',
-    source: 'HUMAN',
+    difficulty: extra.difficulty ?? -2,
+    discrimination: extra.discrimination ?? 1,
+    exposureCount: extra.exposureCount ?? 0,
+    correctRate: extra.correctRate ?? null,
+    status: extra.status ?? 'PUBLISHED',
+    source: extra.source ?? 'HUMAN',
+    replacedById: null,
+    replaces: null,
+    createdAt: iso(extra.createdDay ?? 1),
+    updatedAt: iso(extra.createdDay ?? 1),
     skillIds: [SKILL_BE],
   };
 }
@@ -500,7 +742,7 @@ export function failNext(route: string, failure: Failure, times = 1): void {
   ]);
 }
 
-function takeFailure(route: string): Response | null {
+export function takeFailure(route: string): Response | null {
   const list = mockState.failures.get(route);
   const failure = list?.shift();
 
@@ -520,7 +762,7 @@ function takeFailure(route: string): Response | null {
   );
 }
 
-function error(
+export function error(
   status: number,
   code: string,
   message: string,
@@ -567,7 +809,7 @@ async function readUploadedFile(
   };
 }
 
-function nextId(prefix: string): string {
+export function nextId(prefix: string): string {
   mockState.counter += 1;
 
   return `${prefix}-${String(mockState.counter)}`;
@@ -577,7 +819,7 @@ function nextId(prefix: string): string {
 // Regras espelhadas do servidor
 // ---------------------------------------------------------------------------
 
-const TRANSITIONS: Record<
+export const TRANSITIONS: Record<
   string,
   Partial<Record<ContentStatus, ContentStatus>>
 > = {
@@ -594,7 +836,7 @@ const TRANSITIONS: Record<
   },
 };
 
-function isEditable(status: ContentStatus): boolean {
+export function isEditable(status: ContentStatus): boolean {
   return status === 'DRAFT' || status === 'IN_REVIEW' || status === 'APPROVED';
 }
 
@@ -608,7 +850,7 @@ function afterEdit(version: MockVersion): void {
   version.updatedAt = new Date().toISOString();
 }
 
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return text
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
@@ -870,7 +1112,7 @@ function findVersion(id: string): MockVersion | undefined {
   return mockState.versions.find((version) => version.id === id);
 }
 
-function notFound(): Response {
+export function notFound(): Response {
   return error(404, 'NOT_FOUND', 'Não encontramos o que você procura.');
 }
 
@@ -1449,73 +1691,5 @@ export const curriculumHandlers = [
     mockState.assets.push(asset);
 
     return HttpResponse.json({ ...asset, kind: 'IMAGE' }, { status: 201 });
-  }),
-
-  // --- Taxonomia e banco de questões ---
-
-  http.get(`${BASE}/skills`, ({ request }) => {
-    const q = new URL(request.url).searchParams.get('q');
-    const terms = q === null ? [] : normalize(q).split(/\s+/).filter(Boolean);
-
-    mockState.calls.skillQueries.push(q ?? '');
-
-    const failure = takeFailure('skills');
-
-    if (failure) {
-      return failure;
-    }
-
-    const data = mockState.skills.filter((candidate) => {
-      const haystack = normalize(
-        `${String(candidate.id)} ${String(candidate.title)}`,
-      );
-
-      return terms.every((term) => haystack.includes(term));
-    });
-
-    return HttpResponse.json({ data, nextCursor: null, hasMore: false });
-  }),
-
-  http.get(`${BASE}/register-notes`, () =>
-    HttpResponse.json({
-      data: mockState.registerNotes,
-      nextCursor: null,
-      hasMore: false,
-    }),
-  ),
-
-  http.get(`${BASE}/error-patterns`, () =>
-    HttpResponse.json({
-      data: mockState.errorPatterns,
-      nextCursor: null,
-      hasMore: false,
-    }),
-  ),
-
-  http.get(`${BASE}/items/:id`, ({ params }) => {
-    const found = mockState.items.find(
-      (candidate) => candidate.id === params.id,
-    );
-
-    return found === undefined ? notFound() : HttpResponse.json(found);
-  }),
-
-  http.get(`${BASE}/items`, ({ request }) => {
-    const search = new URL(request.url).searchParams;
-
-    mockState.calls.itemQueries.push(search.toString());
-
-    const status = search.get('status');
-    const level = search.get('level');
-    const skillId = search.get('skillId');
-    const data = mockState.items.filter(
-      (candidate) =>
-        (status === null || candidate.status === status) &&
-        (level === null || candidate.cefrLevel === level) &&
-        (skillId === null ||
-          (candidate.skillIds as string[]).includes(skillId)),
-    );
-
-    return HttpResponse.json({ data, nextCursor: null, hasMore: false });
   }),
 ];

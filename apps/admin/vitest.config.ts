@@ -19,6 +19,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setup-tests.ts'],
     css: false,
+    // jsdom + digitação de formulário grande: sob carga (suíte inteira em
+    // paralelo) 5 s é curto e gera falso negativo.
+    testTimeout: 15_000,
     // e2e/ é Playwright, não Vitest — cada um fica no seu comando.
     exclude: ['**/node_modules/**', 'e2e/**'],
   },
