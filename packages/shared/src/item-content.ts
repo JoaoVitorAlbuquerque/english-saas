@@ -43,6 +43,21 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   REGISTER_SWAP: 'Trocar o registro',
 };
 
+/**
+ * Tipos que a IA sabe rascunhar (content-studio). Fica fora: MATCH e
+ * READING_COMPREHENSION, que pedem estrutura que o modo estruturado da IA
+ * não entrega com segurança.
+ */
+export const DRAFTABLE_ITEM_TYPES = [
+  'MULTIPLE_CHOICE',
+  'FILL_BLANK',
+  'ORDER_WORDS',
+  'TYPE_ANSWER',
+  'LISTEN_CHOOSE',
+  'DICTATION',
+  'REGISTER_SWAP',
+] as const satisfies readonly ItemType[];
+
 /** Tipos cuja resposta certa vive em `acceptedAnswers`. */
 export const TYPED_ANSWER_ITEM_TYPES = [
   'ORDER_WORDS',

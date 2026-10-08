@@ -429,6 +429,43 @@ chegam lá pelo token `CONTENT_GATE` (ver "Travas por inversão de
 dependência"). Efeito colateral (gerar áudio, gerar PDF) **não** passa pelo
 gate — passa por evento.
 
+**O estúdio do admin conta com rotas a mais** (`/admin/content-studio`, `EDITOR`/`ADMIN`):
+
+- **`GET drafts/estimate?kind&count`** devolve `{usdMicros, basedOn}`: a **média do custo
+  real** dos últimos 20 rascunhos `READY` do mesmo tipo (`estimateDraftCost`, em
+  `domain/draft-cost.ts`) — por rascunho na lição, **por questão ou nota** (custo ÷
+  `params.count`) × a quantidade pedida nos outros. Sem histórico (ou com o provedor fake,
+  que cobra 0), `usdMicros` é `null`: não se inventa número. Declarada **antes** de
+  `drafts/:id` (senão `estimate` é lido como id). `GET drafts` passou a ordenar por
+  `createdAt desc, id` (a ordem por UUID era arbitrária).
+- **`GET lesson-versions/:id/audio`** lista tudo que fala na versão — falas da cena, itens
+  de escuta/ditado e notas de registro — com `key` estável (`scene:<etapa>:<fala>`,
+  `item:<uuid>`, `note:<slug>`: o `ref` legível muda com a ordem), `audio {url, mimeType,
+durationMs}|null` (URL **assinada na resposta**), `openIssues` e os totais `total`/`pending`
+  (o publish só passa com `pending = 0`). **`POST lesson-versions/:id/audio/regenerate
+{keys[], speakingRate?}`** (202, só versão `APPROVED`: 409
+  `AUDIO_REGENERATION_NOT_ALLOWED`; chave que não existe: 422 `UNKNOWN_AUDIO_KEY`) enfileira
+  `tts-regenerate` na fila `media`: **não reaproveita** — o hash leva um sal aleatório
+  (`audioHash({…, salt})`; sem sal o hash é o de sempre, nenhum áudio existente se invalida) e
+  `speakingRate` (0,7–1,2) vale só daquela vez. Não muda o status da versão: só religa o
+  `audioAssetId`. **Áudio de questão e de nota é compartilhado**: gerar de novo vale para toda
+  lição que os usa.
+- **Problema de áudio é um comentário de alvo `AUDIO`**: `POST lesson-versions/:id/comments`
+  com `target: 'AUDIO'`, `targetRef` = a chave e `audioIssue` (`PRONUNCIATION | INTONATION |
+SPEED | NOISE | OTHER`, obrigatório nesse alvo; `body` pode ficar vazio). Resolver é o mesmo
+  `POST comments/:id/resolve`. Migration `add_audio_review_comments`.
+- **`GET workbooks`** devolve uma linha por unidade: `{unit, cefrLevel, publishedLessons,
+workbook: {id, status, generatedAt, sizeBytes, url, stale}|null}`. `stale` compara o
+  `sourceHash` gravado com o do conteúdo publicado **agora** (`WorkbookService.currentSourceHash`,
+  a mesma `collect` do PDF). **`GET jobs/:id`** diz o estado de um job da fila `media`
+  (`waiting | active | completed | failed | unknown` — job concluído some pela limpeza da fila:
+  `unknown`, não erro); `POST units/:id/workbook` e `audio/regenerate` devolvem o `jobId`.
+- **A QA roda dentro do request** em `POST qa/lesson-versions/:id` (inclui a revisão de língua
+  por IA: leva segundos). É dívida registrada; a tela mostra "Revisando…" e não trava o resto.
+  **Bloqueador não tem "resolver"**: só some quando a QA roda de novo sobre o conteúdo
+  corrigido — e a trava de aprovação lê **o último relatório**, que fica velho depois de uma
+  edição até alguém rodar de novo.
+
 A checagem de nível usa a lista de frequência de
 `packages/shared/src/wordlists`, gerada a partir do CSV versionado em
 `packages/shared/data` por `pnpm wordlist:import`. Palavra fora da lista
@@ -1052,7 +1089,8 @@ valida a mensagem.
 catálogo, ferramentas do Plus, progresso, perfil); o admin tem o Conteúdo
 (árvore do curso, personagens, versões e editor de lição) e a Taxonomia e o
 banco de questões (skills, erros típicos, notas de registro, editor de
-item). Alunos, assinaturas e métricas do admin ainda são placeholders** —
+item) e o Estúdio de conteúdo (rascunho por IA, fila, revisão, áudio,
+apostilas). Alunos, assinaturas e métricas do admin ainda são placeholders** —
 cada tela entra como um módulo à parte, igual ao back-end.
 
 ### Pacotes
@@ -1346,6 +1384,68 @@ items` valida tudo-ou-nada, então um autosave só gravaria o que já passa. Val
   rota), trocar a referência do item nas lições depois de criar a nova versão, excluir item,
   operações em lote, busca de item sem acento, análise de distratores por alternativa, disparar a
   calibração à mão e edição simultânea (vence quem salvar por último).
+
+### Admin → Estúdio de conteúdo (`apps/admin/src/features/studio`)
+
+| Rota                 | Tela                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `/estudio`           | `DraftQueue`: fila de rascunhos (status, custo real, quem pediu, revisão automática).       |
+| `/estudio/novo`      | `NewDraft`: abas **Lição / Questões / Notas de registro** (`?tipo=`), com o custo estimado. |
+| `/estudio/apostilas` | `Workbooks`: o PDF de cada unidade — em dia ou desatualizado, baixar, gerar de novo.        |
+
+As três moram na moldura `StudioLayout` (abas), no layout largo. O item "Estúdio IA" está na
+barra lateral e no topo de `/conteudo`.
+
+- **Pedir rascunho**: o formulário valida com os **mesmos schemas do servidor**
+  (`draft-authoring.ts` em `packages/shared`: `requestLessonDraftSchema` etc.; `lib/draft-form.ts`).
+  Lição = nível → unidade → (lição nova com identificador que acompanha o título e a **posição
+  seguinte à última**, ou uma que já existe) → objetivo, skills-alvo (até 8), personagens (até 6; o
+  **elenco da unidade já vem marcado**) e contexto da série. O pedido responde 202 e a tela cai na
+  fila com o novo em destaque (`?novo=`). **O custo estimado é a média do que pedidos parecidos
+  custaram** (`GET drafts/estimate`); sem histórico a tela diz "sem estimativa ainda".
+- **Fila**: lista de `createdAt desc`, **atualiza sozinha a cada 3 s enquanto há pedido
+  `QUEUED/GENERATING/QA_RUNNING`** (`useDrafts`, `refetchInterval`) e para quando acaba; "Atualizar agora"
+  existe de qualquer jeito. Falha mostra o motivo em português (`lib/draft-errors.ts`; o servidor só
+  guarda o código). "Revisar" abre o editor da lição com `?painel=revisao`; "Descartar" confirma e arquiva
+  o que foi criado — **as notas de registro de um rascunho de notas continuam na taxonomia** (a API não as
+  mexe), e a tela avisa.
+- **Painel lateral do editor da lição** (`review/`): a coluna da direita do `VersionEditor` virou abas —
+  **Preview, Revisão, Comentários, Áudio** —, a aberta vive em `?painel=` e cada aba leva o contador do que
+  pede atenção. O estado mora em `useReviewWorkspace` (um nível acima das abas, porque os botões "Comentar",
+  a contagem nas etapas e as travas também precisam dele); `ReviewContext` leva isso aos editores de etapa.
+  - **Revisão** (`QaPanel`): estatística de nível (% acima do nível, as palavras com a faixa, a cobertura da
+    lista), avisos por gravidade — **BLOCKER, WARNING, INFO** — e, em cada um, "Ir para o trecho". Os
+    caminhos que o servidor grava vêm em vários formatos e `lib/qa-path.ts` traduz todos: `steps.N.lines.M`,
+    `…cards.C.examples.E`, `…helpers.H`, `…openingLine`; `scene.lines.M.spans.S` e `cards.C…` (do
+    mapeamento da IA, sem a posição: valem a primeira cena e os primeiros cards); **`items.I` é a questão I da
+    prática inteira**, não da etapa (abre `/conteudo/questoes/:id` em aba nova); `level` e `targetSkills`
+    (abrem os metadados). O relatório fica "desatualizado" depois que o editor salva — só "Rodar a revisão de
+    novo" o refaz.
+  - **Aprovar fica desabilitado com bloqueador aberto** e, logo abaixo, a lista do que falta
+    (`ApproveBlockedNote`); **publicar fica desabilitado enquanto falta áudio** (`PublishBlockedNote`).
+    `EditorialActions` recebe `guards` (ação → motivo). É só atalho de tela: **a API continua sendo quem
+    decide** (`QA_BLOCKERS` e `MISSING_AUDIO` seguem no `ProblemPanel`).
+  - **Comentários**: por lição, por etapa (`targetRef` = a **ordem** da etapa: reordenar desalinha) e por
+    questão (`targetRef` = id); "Resolver" e "Mostrar os resolvidos". Problema de áudio **não** aparece aqui.
+  - **Áudio** (só aprovada, publicada ou arquivada — antes a aba explica que ele nasce na aprovação): ouvir
+    cada fala (`AudioButton`), **marcar problema** (pronúncia, entonação, velocidade, ruído, outro), **gerar
+    de novo** uma fala ou as marcadas (velocidade normal ou mais devagar, 0,85) e acompanhar o job
+    (`useMediaJob`, 2 s). Só a versão `APPROVED` gera de novo.
+- **Apostilas**: a linha mostra "em dia / desatualizada / gerando / falhou / sem apostila"; gerar fica
+  desabilitado sem lição publicada. O job é acompanhado por `GET jobs/:id`.
+- **Mocks com estado** (`src/mocks/studio-mock.ts`, lê o `mockState` do conteúdo): o rascunho **anda de
+  estágio** (na fila → gerando → revisão → pronto, ou falha) e, ao gerar, cria de verdade a versão, as
+  questões (duas com defeito de propósito) e o relatório; **a revisão reavalia o conteúdo** com as mesmas
+  regras de questão do servidor (corrigir a questão limpa o bloqueador); a trava de QA na aprovação e a de
+  áudio na publicação entram pelo `studioHooks` do `curriculum-mock`. `instantNarration` (padrão `true`) faz a
+  narração da aprovação terminar na hora — desligue para ver o áudio chegar. Chaves de `failNext`:
+  `draft-request`, `drafts-list`, `draft-discard`, `qa-get`, `qa-run`, `comment-add`, `audio-list`,
+  `audio-regenerate`, `workbooks-list`, `workbook-regenerate`. **O formulário exige UUID** (como a API) e os ids do
+  conteúdo-base do mock são `unit-1`: o teste que pede lição chama `giveUuidsToContent()`.
+- Fora do escopo: descartar rascunho de notas obsoletar as notas, retentar rascunho que falhou, rodar a QA
+  a cada salvamento (custa chamada de IA), QA em fila (hoje síncrona na API), comentário que acompanha a etapa
+  quando ela é reordenada, trocar a voz do personagem, custo em R$ (a tela mostra US$) e edição simultânea
+  (vence quem salvar por último).
 
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 

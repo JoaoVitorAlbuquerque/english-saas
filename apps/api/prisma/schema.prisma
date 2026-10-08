@@ -1034,8 +1034,22 @@ enum CommentTarget {
   VERSION @map("version")
   STEP    @map("step")
   ITEM    @map("item")
+  /// Problema marcado numa fala, questão de escuta ou nota. `targetRef` é a
+  /// chave do áudio (`scene:0:2`, `item:<uuid>`, `note:<slug>`).
+  AUDIO   @map("audio")
 
   @@map("comment_target")
+}
+
+/// O que há de errado num áudio gerado pelo TTS.
+enum AudioIssueKind {
+  PRONUNCIATION @map("pronunciation")
+  INTONATION    @map("intonation")
+  SPEED         @map("speed")
+  NOISE         @map("noise")
+  OTHER         @map("other")
+
+  @@map("audio_issue_kind")
 }
 
 /// Um pedido de rascunho para a IA.
@@ -1117,6 +1131,8 @@ model ContentComment {
   /// Ordem da etapa ou id do item, conforme o `target`.
   targetRef String?       @map("target_ref")
   body      String
+  /// Só nos comentários de alvo AUDIO.
+  audioIssue AudioIssueKind? @map("audio_issue")
 
   authorId     String    @map("author_id") @db.Uuid
   author       User      @relation(fields: [authorId], references: [id], onDelete: Cascade)

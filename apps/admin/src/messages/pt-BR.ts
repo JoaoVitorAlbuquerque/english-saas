@@ -233,8 +233,8 @@ export const messages = {
   'editor.list.moveUp': 'Subir',
   'editor.list.moveDown': 'Descer',
   'editor.list.remove': 'Remover',
-  'editor.preview.show': 'Mostrar o preview',
-  'editor.preview.hide': 'Esconder o preview',
+  'editor.preview.show': 'Mostrar o painel',
+  'editor.preview.hide': 'Esconder o painel',
 
   // --- Marcações (spans) ---
   'spans.selected': 'Trecho selecionado: "{text}"',
@@ -781,6 +781,281 @@ export const messages = {
   'items.problem.immutableFields': 'Campos que não mudam: {fields}.',
   'items.problem.inUse':
     'Tire a questão da prática destas lições (ou publique uma nova versão delas) antes de arquivar:',
+
+  // --- Estúdio de conteúdo ---
+  'nav.studio': 'Estúdio IA',
+  'tree.studio': 'Estúdio IA',
+
+  'studio.title': 'Estúdio de conteúdo',
+  'studio.subtitle':
+    'Peça rascunhos à IA, acompanhe a fila e revise antes de aprovar. Nada que a IA escreve chega ao aluno sem uma pessoa aprovar.',
+  'studio.tabs': 'Telas do estúdio',
+  'studio.tab.queue': 'Fila de rascunhos',
+  'studio.tab.new': 'Novo rascunho',
+  'studio.tab.workbooks': 'Apostilas',
+
+  'studio.status.QUEUED': 'Na fila',
+  'studio.status.GENERATING': 'Gerando',
+  'studio.status.QA_RUNNING': 'Revisão automática',
+  'studio.status.READY': 'Pronto',
+  'studio.status.FAILED': 'Falhou',
+  'studio.status.DISCARDED': 'Descartado',
+  'studio.kind.LESSON': 'Lição',
+  'studio.kind.ITEMS': 'Questões',
+  'studio.kind.REGISTER_NOTES': 'Notas de registro',
+
+  'studio.error.DRAFT_REQUEST_INVALID':
+    'O pedido não pôde ser atendido: uma skill ou um personagem não existe, ou falta a unidade da lição. Corrija e peça de novo.',
+  'studio.error.AI_VALIDATION_FAILED':
+    'A IA respondeu em um formato que não passou na conferência, mesmo depois de uma segunda tentativa. Peça de novo.',
+  'studio.error.AI_PROVIDER_UNAVAILABLE':
+    'O serviço de IA estava fora do ar. Peça de novo daqui a pouco.',
+  'studio.error.AI_INPUT_TOO_LARGE':
+    'O pedido ficou grande demais. Encurte o contexto da série e peça de novo.',
+  'studio.error.unknown': 'O rascunho falhou, sem um motivo registrado.',
+  'studio.error.other': 'O rascunho falhou (código {code}).',
+
+  // Fila
+  'studio.queue.new': 'Novo rascunho',
+  'studio.queue.refresh': 'Atualizar agora',
+  'studio.queue.autoRefresh':
+    'Há pedidos em andamento: a lista se atualiza sozinha a cada poucos segundos.',
+  'studio.queue.idle': 'Nenhum pedido em andamento.',
+  'studio.queue.filter.status': 'Status',
+  'studio.queue.filter.kind': 'Tipo de pedido',
+  'studio.queue.caption': 'Rascunhos pedidos à IA',
+  'studio.queue.col.request': 'Pedido',
+  'studio.queue.col.status': 'Status',
+  'studio.queue.col.by': 'Quem pediu',
+  'studio.queue.col.at': 'Pedido em',
+  'studio.queue.col.cost': 'Custo real',
+  'studio.queue.col.qa': 'Revisão automática',
+  'studio.queue.col.actions': 'Ações',
+  'studio.queue.unknownUser': 'Alguém da equipe',
+  'studio.queue.empty.title': 'Nenhum rascunho por aqui',
+  'studio.queue.empty.description':
+    'Peça o primeiro: uma lição inteira, questões para uma skill ou notas de registro.',
+  'studio.queue.summary.lesson': '{level} · {objective}',
+  'studio.queue.summary.noObjective': 'Lição sem objetivo informado',
+  'studio.queue.summary.items':
+    '{count} questões · {skill} · {level} · {types}',
+  'studio.queue.summary.notes': '{count} notas de registro · {level}',
+  'studio.queue.qa': 'Resultado da revisão automática',
+  'studio.queue.qa.blockers': '{count} bloqueadores',
+  'studio.queue.qa.warnings': '{count} avisos',
+  'studio.queue.qa.infos': '{count} informações',
+  'studio.queue.review': 'Revisar',
+  'studio.queue.showCreated': 'Ver o que foi criado',
+  'studio.queue.hideCreated': 'Esconder',
+  'studio.queue.item': 'Questão {n}',
+  'studio.queue.openNotes': 'Abrir as notas de registro',
+  'studio.queue.discard': 'Descartar',
+  'studio.queue.discard.title': 'Descartar este rascunho?',
+  'studio.queue.discard.description':
+    'A lição e as questões que a IA criou são arquivadas e saem do seu caminho. Quem já foi publicado não é mexido. O custo continua registrado.',
+  'studio.queue.discard.notes':
+    'O pedido sai da fila, mas as notas de registro que a IA criou continuam na taxonomia. Se não servem, marque cada uma como obsoleta lá.',
+  'studio.queue.discarded': 'Rascunho descartado.',
+  'studio.queue.discardError': 'Não deu para descartar o rascunho.',
+
+  // Novo rascunho
+  'studio.new.intro':
+    'A IA escreve o rascunho em segundo plano e ele aparece na fila. Depois é com você: revise, corrija e aprove.',
+  'studio.new.tabs': 'Tipo de rascunho',
+  'studio.new.tab.lesson': 'Lição',
+  'studio.new.tab.items': 'Questões',
+  'studio.new.tab.notes': 'Notas de registro',
+  'studio.new.choose': 'Escolha…',
+  'studio.new.loading': 'Carregando…',
+  'studio.new.submit': 'Pedir rascunho',
+  'studio.new.errors.level': 'Escolha o nível.',
+  'studio.new.errors.count': 'Informe a quantidade, em número.',
+  'studio.new.estimate.loading': 'Calculando o custo estimado…',
+  'studio.new.estimate.none':
+    'Sem estimativa ainda: o custo real aparece na fila depois do primeiro pedido.',
+  'studio.new.estimate.label': 'Custo estimado:',
+  'studio.new.estimate.basedOn': 'média de {count} pedidos parecidos',
+  'studio.new.lesson.title': 'Pedir uma lição',
+  'studio.new.lesson.unit': 'Unidade',
+  'studio.new.lesson.unitFirstLevel': 'Escolha o nível primeiro',
+  'studio.new.lesson.unitFirst': 'Escolha a unidade primeiro',
+  'studio.new.lesson.where': 'Onde a lição vai ficar',
+  'studio.new.lesson.modeNew': 'Lição nova na unidade',
+  'studio.new.lesson.modeExisting': 'Lição que já existe',
+  'studio.new.lesson.titleField': 'Título (opcional)',
+  'studio.new.lesson.titleHint': 'Sem título, a IA propõe um.',
+  'studio.new.lesson.slug': 'Identificador',
+  'studio.new.lesson.slugHint': 'Sem acento, com hífen. Não muda depois.',
+  'studio.new.lesson.order': 'Posição na unidade',
+  'studio.new.lesson.existing': 'Lição',
+  'studio.new.lesson.existingHint':
+    'O rascunho entra na versão aberta da lição; se não houver, abre a próxima versão.',
+  'studio.new.lesson.objective': 'Objetivo da lição',
+  'studio.new.lesson.objectiveHint':
+    'O que o aluno consegue fazer ao fim, em português ({min} a {max} caracteres).',
+  'studio.new.lesson.skills': 'Skills-alvo',
+  'studio.new.lesson.skillsHint':
+    'O que a lição ensina. De 1 a {max}; as obsoletas não aparecem.',
+  'studio.new.lesson.characters': 'Personagens da cena',
+  'studio.new.lesson.charactersHint':
+    'Quem fala na cena. De 1 a {max}. O elenco da unidade já vem marcado.',
+  'studio.new.lesson.inCast': 'da unidade',
+  'studio.new.lesson.context': 'O que já aconteceu na série (opcional)',
+  'studio.new.lesson.contextHint':
+    'Ajuda a cena a ter continuidade com as lições anteriores.',
+  'studio.new.lesson.errors.lesson': 'Escolha a lição.',
+  'studio.new.lesson.errors.unit': 'Escolha a unidade.',
+  'studio.new.lesson.errors.slug': 'Dê um identificador à lição.',
+  'studio.new.lesson.errors.order': 'A posição é um número, a partir de 0.',
+  'studio.new.items.title': 'Pedir questões',
+  'studio.new.items.skill': 'Skill',
+  'studio.new.items.count': 'Quantas questões',
+  'studio.new.items.countHint': 'De 1 a {max}.',
+  'studio.new.items.types': 'Tipos de questão',
+  'studio.new.items.errors.skill': 'Escolha a skill.',
+  'studio.new.items.errors.types': 'Escolha ao menos um tipo.',
+  'studio.new.notes.title': 'Pedir notas de registro',
+  'studio.new.notes.description':
+    'Notas que mostram a forma falada ao lado da forma padrão (I’m going to × I’m gonna). A IA não repete as que já existem.',
+  'studio.new.notes.count': 'Quantas notas',
+  'studio.new.notes.countHint': 'De 1 a {max}.',
+
+  // Painel lateral do editor
+  'studio.panel.tabs': 'Painel do editor',
+  'studio.panel.tab.preview': 'Preview',
+  'studio.panel.tab.revisao': 'Revisão',
+  'studio.panel.tab.comentarios': 'Comentários',
+  'studio.panel.tab.audio': 'Áudio',
+  'studio.panel.blockersSr': 'bloqueadores',
+
+  // Revisão automática
+  'studio.qa.title': 'Revisão automática',
+  'studio.qa.ranAt': 'Rodou em {date}',
+  'studio.qa.run': 'Rodar a revisão de novo',
+  'studio.qa.running': 'Revisando…',
+  'studio.qa.stale':
+    'Você editou depois desta revisão. Rode de novo para ela olhar o conteúdo de agora.',
+  'studio.qa.never':
+    'A revisão automática ainda não rodou nesta versão. Lições escritas à mão não passam por ela; rode se quiser conferir.',
+  'studio.qa.loadError': 'Não conseguimos carregar a revisão.',
+  'studio.qa.noBlockers': 'Nenhum bloqueador: dá para aprovar.',
+  'studio.qa.blockers': 'Bloqueadores',
+  'studio.qa.warnings': 'Avisos',
+  'studio.qa.infos': 'Informações',
+  'studio.qa.goToText': 'Ir para o trecho',
+  'studio.qa.goToMeta': 'Ir para os dados da lição',
+  'studio.qa.openItem': 'Abrir a questão',
+  'studio.qa.level.empty': 'Não há texto em inglês para medir o nível.',
+  'studio.qa.level.summary':
+    '{percent} das palavras estão acima de {level} ({count} de {total}).',
+  'studio.qa.level.coverage':
+    'A lista de frequência conhece {percent} das palavras; com cobertura baixa, o número vale menos.',
+  'studio.qa.level.words': 'Palavras acima do nível',
+
+  // Travas de aprovar e publicar
+  'studio.guard.approve.title':
+    'Não dá para aprovar: {count} bloqueador(es) na revisão automática.',
+  'studio.guard.approve.hint':
+    'Corrija cada um e rode a revisão de novo; só um relatório sem bloqueadores libera a aprovação.',
+  'studio.guard.approve.stale':
+    'Este relatório é anterior às suas últimas edições. Rode a revisão de novo para ver o que ainda falta.',
+  'studio.guard.publish.title':
+    'Não dá para publicar: {count} trecho(s) ainda sem áudio.',
+  'studio.guard.publish.more': 'e mais {count}',
+  'studio.guard.publish.hint':
+    'A narração roda depois da aprovação. Ouça e, se algo falhou, gere de novo na aba Áudio.',
+  'studio.guard.publish.open': 'Ver o áudio',
+
+  // Comentários
+  'studio.comments.title': 'Comentários da revisão',
+  'studio.comments.new': 'Novo comentário',
+  'studio.comments.about': 'Sobre',
+  'studio.comments.aboutClear': 'Comentar a lição inteira',
+  'studio.comments.about.version': 'A lição inteira',
+  'studio.comments.about.step': 'Etapa {n} · {type}',
+  'studio.comments.about.item': 'Questão',
+  'studio.comments.about.itemN': 'Questão {n} da prática',
+  'studio.comments.text': 'Comentário',
+  'studio.comments.add': 'Comentar',
+  'studio.comments.added': 'Comentário adicionado.',
+  'studio.comments.errors.empty': 'Escreva o comentário.',
+  'studio.comments.showResolved': 'Mostrar os resolvidos',
+  'studio.comments.list': 'Comentários',
+  'studio.comments.empty': 'Nenhum comentário aberto.',
+  'studio.comments.loadError': 'Não conseguimos carregar os comentários.',
+  'studio.comments.resolve': 'Resolver',
+  'studio.comments.resolved': 'Resolvido',
+  'studio.comments.stepButton': 'Comentar esta etapa',
+  'studio.comments.stepButtonCount': 'Comentar esta etapa ({count} abertos)',
+  'studio.comments.stepBadge': '{count} com.',
+  'studio.comments.itemButton': 'Comentar a questão {n}',
+
+  // Áudio
+  'studio.audio.title': 'Revisão de áudio',
+  'studio.audio.notYet':
+    'O áudio é gerado quando a versão é aprovada. Depois de aprovar, ouça cada fala aqui antes de publicar.',
+  'studio.audio.progress': '{done} de {total} com áudio',
+  'studio.audio.pending':
+    'A narração está sendo gerada. A lista se atualiza sozinha.',
+  'studio.audio.pendingLocked': 'Ainda há trechos sem áudio.',
+  'studio.audio.shared':
+    'O áudio de uma questão ou de uma nota de registro é compartilhado: gerar de novo vale para toda lição que a usa.',
+  'studio.audio.empty': 'Esta versão não tem nada para narrar.',
+  'studio.audio.loadError': 'Não conseguimos carregar o áudio.',
+  'studio.audio.missing': 'Sem áudio ainda',
+  'studio.audio.listen': 'Ouvir: {text}',
+  'studio.audio.select': 'Marcar para gerar de novo: {text}',
+  'studio.audio.kind.item': 'Questão',
+  'studio.audio.kind.note': 'Nota',
+  'studio.audio.issue.PRONUNCIATION': 'Pronúncia',
+  'studio.audio.issue.INTONATION': 'Entonação',
+  'studio.audio.issue.SPEED': 'Velocidade',
+  'studio.audio.issue.NOISE': 'Ruído ou corte',
+  'studio.audio.issue.OTHER': 'Outro problema',
+  'studio.audio.issues': 'Problemas marcados',
+  'studio.audio.resolve': 'Resolver',
+  'studio.audio.mark': 'Marcar problema: {text}',
+  'studio.audio.mark.short': 'Marcar problema',
+  'studio.audio.markTitle': 'Marcar problema no áudio',
+  'studio.audio.markKind': 'O que está errado',
+  'studio.audio.markNote': 'Observação (opcional)',
+  'studio.audio.markSave': 'Marcar',
+  'studio.audio.markCancel': 'Cancelar',
+  'studio.audio.marked': 'Problema marcado.',
+  'studio.audio.regenerate.short': 'Gerar de novo',
+  'studio.audio.regenerateOne': 'Gerar de novo: {text}',
+  'studio.audio.regenerateSelected': 'Gerar de novo as marcadas ({count})',
+  'studio.audio.generating': 'Gerando…',
+  'studio.audio.regenerating': 'Gerando o áudio de novo.',
+  'studio.audio.failed': 'A nova geração falhou. Tente de novo.',
+  'studio.audio.speed': 'Velocidade da nova geração',
+  'studio.audio.speed.normal': 'Normal',
+  'studio.audio.speed.slow': 'Mais devagar',
+
+  // Apostilas
+  'studio.workbooks.intro':
+    'A apostila em PDF de cada unidade sai das lições publicadas. Ela é regerada quando uma lição é publicada; se o conteúdo mudou depois do PDF, aparece como desatualizada.',
+  'studio.workbooks.caption': 'Apostilas por unidade',
+  'studio.workbooks.col.unit': 'Unidade',
+  'studio.workbooks.col.lessons': 'Lições publicadas',
+  'studio.workbooks.col.status': 'Apostila',
+  'studio.workbooks.col.generatedAt': 'Gerada em',
+  'studio.workbooks.col.size': 'Tamanho',
+  'studio.workbooks.status.NONE': 'Sem apostila',
+  'studio.workbooks.status.GENERATING': 'Gerando…',
+  'studio.workbooks.status.FAILED': 'Falhou',
+  'studio.workbooks.status.STALE': 'Desatualizada',
+  'studio.workbooks.status.UP_TO_DATE': 'Em dia',
+  'studio.workbooks.staleHint':
+    'O conteúdo publicado mudou depois deste PDF. Gere de novo.',
+  'studio.workbooks.failedUnknown': 'A geração falhou. Tente de novo.',
+  'studio.workbooks.download': 'Baixar',
+  'studio.workbooks.generate': 'Gerar',
+  'studio.workbooks.regenerate': 'Gerar de novo',
+  'studio.workbooks.noLessons': 'Sem lição publicada, não há o que pôr no PDF.',
+  'studio.workbooks.empty.title': 'Nenhuma unidade por aqui',
+  'studio.workbooks.empty.description':
+    'Crie uma unidade em Conteúdo e publique lições para gerar a apostila.',
 } as const;
 
 export type MessageKey = keyof typeof messages;

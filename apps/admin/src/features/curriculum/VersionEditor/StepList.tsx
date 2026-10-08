@@ -6,6 +6,7 @@ import { Button, Badge, cn } from '@english-saas/ui';
 import { Plus } from 'lucide-react';
 
 import { t } from '../../../messages/pt-BR';
+import { useReview } from '../../studio/review/ReviewContext';
 import { ListControls } from '../components/ListControls';
 import type { EditorStep } from '../lib/editor-reducer';
 import type { EditorValidation } from '../lib/validation';
@@ -36,6 +37,7 @@ export function StepList({
   onAdd: (type: (typeof LESSON_STEP_TYPES)[number]) => void;
 }) {
   const metaErrors = Object.keys(validation.meta).length;
+  const review = useReview();
 
   return (
     <nav
@@ -102,6 +104,13 @@ export function StepList({
                       {errors === 1
                         ? t('editor.step.errors.one')
                         : t('editor.step.errors.many', { count: errors })}
+                    </Badge>
+                  ) : null}
+                  {(review?.openByStep[String(index)] ?? 0) > 0 ? (
+                    <Badge tone="muted">
+                      {t('studio.comments.stepBadge', {
+                        count: review?.openByStep[String(index)] ?? 0,
+                      })}
                     </Badge>
                   ) : null}
                 </button>

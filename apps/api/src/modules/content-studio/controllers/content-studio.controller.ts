@@ -20,16 +20,22 @@ import { QUEUES } from 'src/infra/queue/queues';
 import {
   CommentListQueryDto,
   CreateCommentDto,
+  DraftEstimateQueryDto,
   DraftListQueryDto,
+  RegenerateAudioDto,
   RequestItemsDraftDto,
   RequestLessonDraftDto,
   RequestRegisterNotesDraftDto,
 } from '../dto/content-studio.dto';
+import { AudioReviewService } from '../services/audio-review.service';
 import { DraftService } from '../services/draft.service';
 import { QaService } from '../services/qa.service';
 import { ReviewService } from '../services/review.service';
 import { TTS_GENERATE_JOB } from '../services/tts.service';
-import { WORKBOOK_PDF_JOB } from '../services/workbook.service';
+import {
+  WORKBOOK_PDF_JOB,
+  WorkbookService,
+} from '../services/workbook.service';
 
 /**
  * Estúdio de conteúdo. Restrito a EDITOR e ADMIN.
@@ -50,6 +56,8 @@ export class ContentStudioController {
     private readonly drafts: DraftService,
     private readonly qa: QaService,
     private readonly review: ReviewService,
+    private readonly audio: AudioReviewService,
+    private readonly workbooks: WorkbookService,
     @InjectQueue(QUEUES.MEDIA) private readonly media: Queue,
   ) {}
 
@@ -89,6 +97,15 @@ export class ContentStudioController {
   @ApiOperation({ summary: 'Rascunhos, paginado por cursor' })
   async listDrafts(@Query() query: DraftListQueryDto) {
     return this.drafts.list(query);
+  }
+
+  /** Antes de `drafts/:id`: senão `estimate` seria lido como um id. */
+  @Get('drafts/estimate')
+  @ApiOperation({
+    summary: 'Custo estimado de um pedido, pela média dos últimos prontos',
+  })
+  async estimateDraft(@Query() query: DraftEstimateQueryDto) {
+    return this.drafts.estimate(query.kind, query.count);
   }
 
   @Get('drafts/:id')
@@ -142,6 +159,7 @@ export class ContentStudioController {
     return this.review.comment(id, userId, {
       target: body.target as CommentTarget,
       targetRef: body.targetRef ?? null,
+      audioIssue: body.audioIssue,
       body: body.body,
     });
   }
@@ -153,6 +171,26 @@ export class ContentStudioController {
     @ActiveUserId() userId: string,
   ) {
     return this.review.resolve(id, userId);
+  }
+
+  // --- Revisão de áudio ---
+
+  @Get('lesson-versions/:id/audio')
+  @ApiOperation({
+    summary: 'Cada fala, questão de escuta e nota, com o áudio e os problemas',
+  })
+  async listAudio(@Param('id') id: string) {
+    return this.audio.list(id);
+  }
+
+  @Post('lesson-versions/:id/audio/regenerate')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Gera de novo o áudio das falas escolhidas' })
+  async regenerateAudio(
+    @Param('id') id: string,
+    @Body() body: RegenerateAudioDto,
+  ) {
+    return this.audio.regenerate(id, body.keys, body.speakingRate);
   }
 
   // --- Produção de mídia ---
@@ -168,6 +206,38 @@ export class ContentStudioController {
     });
 
     return { jobId: job.id ?? null, queue: QUEUES.MEDIA };
+  }
+
+  @Get('workbooks')
+  @ApiOperation({
+    summary: 'Apostila de cada unidade: em dia ou desatualizada',
+  })
+  async listWorkbooks() {
+    return this.workbooks.listForAdmin();
+  }
+
+  @Get('jobs/:id')
+  @ApiOperation({ summary: 'Estado de um job da fila de mídia' })
+  async mediaJob(@Param('id') id: string) {
+    const job = await this.media.getJob(id);
+
+    if (job === undefined) {
+      // Job concluído é removido pela limpeza da fila: some, não falha.
+      return { id, state: 'unknown' as const, failedReason: null };
+    }
+
+    const state = await job.getState();
+
+    return {
+      id,
+      state:
+        state === 'active' || state === 'completed' || state === 'failed'
+          ? state
+          : state === 'unknown'
+            ? ('unknown' as const)
+            : ('waiting' as const),
+      failedReason: job.failedReason ?? null,
+    };
   }
 
   @Post('units/:id/workbook')

@@ -15,20 +15,51 @@ export type AudioTargetKind = 'SCENE_LINE' | 'ITEM' | 'REGISTER_NOTE';
 
 export type AudioTarget = {
   kind: AudioTargetKind;
-  /** Identificação estável dentro da versão, para o job e para a mensagem. */
+  /**
+   * Identificação estável, para o cliente apontar uma fala (marcar problema,
+   * pedir nova geração): `scene:<etapa>:<fala>`, `item:<uuid>`, `note:<slug>`.
+   * O `ref` é rótulo para gente ler e muda quando a ordem muda.
+   */
+  key: string;
+  /** Mensagem legível, para o erro `MISSING_AUDIO`. */
   ref: string;
+  /** Quem fala, quando é fala de cena. */
+  characterId?: string;
   /** O texto que vai ser falado. */
   text: string;
   /** Voz pedida. Vazio = usar a voz padrão do ambiente. */
   voiceId: string;
   /** Já existe `MediaAsset` ligado? */
   hasAudio: boolean;
+  /** O asset ligado, quando há. */
+  assetId: string | null;
   /** Onde gravar o id do asset depois da síntese. */
   stepOrder?: number;
   lineIndex?: number;
   itemId?: string;
   registerNoteId?: string;
 };
+
+export function sceneLineKey(stepOrder: number, lineIndex: number): string {
+  return `scene:${String(stepOrder)}:${String(lineIndex)}`;
+}
+
+export function itemAudioKey(itemId: string): string {
+  return `item:${itemId}`;
+}
+
+export function noteAudioKey(registerNoteId: string): string {
+  return `note:${registerNoteId}`;
+}
+
+/** A forma de uma chave: `scene:0:2`, `item:<uuid>`, `note:gonna`. */
+export function isAudioKey(value: string): boolean {
+  return (
+    /^scene:\d+:\d+$/.test(value) ||
+    /^item:[0-9a-f-]{36}$/i.test(value) ||
+    /^note:[a-z0-9][a-z0-9.-]*$/.test(value)
+  );
+}
 
 export type AudioPlanInput = {
   steps: readonly LessonStepInput[];
@@ -63,10 +94,13 @@ export function planAudioTargets(input: AudioPlanInput): AudioTarget[] {
     for (const [lineIndex, line] of step.content.lines.entries()) {
       targets.push({
         kind: 'SCENE_LINE',
+        key: sceneLineKey(stepOrder, lineIndex),
         ref: `step ${String(stepOrder)} / fala ${String(lineIndex + 1)}`,
+        characterId: line.characterId,
         text: line.text,
         voiceId: input.voiceByCharacterId[line.characterId] ?? '',
         hasAudio: line.audioAssetId !== undefined,
+        assetId: line.audioAssetId ?? null,
         stepOrder,
         lineIndex,
       });
@@ -87,10 +121,15 @@ export function planAudioTargets(input: AudioPlanInput): AudioTarget[] {
 
     targets.push({
       kind: 'ITEM',
+      key: itemAudioKey(item.id),
       ref: `questão ${item.id}`,
       text,
       voiceId: '',
       hasAudio: typeof content['audioAssetId'] === 'string',
+      assetId:
+        typeof content['audioAssetId'] === 'string'
+          ? content['audioAssetId']
+          : null,
       itemId: item.id,
     });
   }
@@ -98,10 +137,12 @@ export function planAudioTargets(input: AudioPlanInput): AudioTarget[] {
   for (const note of input.registerNotes) {
     targets.push({
       kind: 'REGISTER_NOTE',
+      key: noteAudioKey(note.id),
       ref: `nota de registro ${note.id}`,
       text: note.spokenForm,
       voiceId: '',
       hasAudio: note.audioAssetId !== null,
+      assetId: note.audioAssetId,
       registerNoteId: note.id,
     });
   }

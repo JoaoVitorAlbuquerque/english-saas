@@ -17,6 +17,7 @@ export * from './item-content';
 export * from './answer-normalization';
 export * from './student-view';
 export * from './item-validation';
+export * from './draft-authoring';
 export * from './item-authoring';
 export * from './taxonomy-authoring';
 export * from './learning';

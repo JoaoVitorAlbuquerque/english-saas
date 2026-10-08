@@ -1,65 +1,26 @@
 import {
-  cefrLevelSchema,
-  contentSlugSchema,
   cursorPaginationQuerySchema,
-  taxonomySlugSchema,
+  requestItemsDraftSchema,
+  requestLessonDraftSchema,
+  requestRegisterNotesDraftSchema,
 } from '@english-saas/shared';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-import { DRAFTABLE_ITEM_TYPES } from 'src/modules/ai/prompts/draft-shared';
+import { isAudioKey } from '../domain/tts-plan';
 
 /** Entrada do content-studio. */
 
 export class RequestLessonDraftDto extends createZodDto(
-  z
-    .object({
-      /** Lição que já existe. Sem ela, informe unidade, slug e posição. */
-      lessonId: z.uuid().optional(),
-      unitId: z.uuid().optional(),
-      slug: contentSlugSchema.optional(),
-      order: z.number().int().min(0).optional(),
-      title: z.string().trim().min(2).max(160).optional(),
-
-      /** Can-do em pt-BR. */
-      objective: z.string().trim().min(4).max(300),
-      level: cefrLevelSchema,
-      targetSkillIds: z.array(taxonomySlugSchema).min(1).max(8),
-      characterIds: z.array(z.uuid()).min(1).max(6),
-      /** O que já aconteceu na série, para a cena ter continuidade. */
-      unitContext: z.string().trim().max(2_000).optional(),
-    })
-    .refine(
-      (body) =>
-        body.lessonId !== undefined ||
-        (body.unitId !== undefined &&
-          body.slug !== undefined &&
-          body.order !== undefined),
-      {
-        message:
-          'Informe `lessonId`, ou `unitId` + `slug` + `order` para criar a lição.',
-        path: ['lessonId'],
-      },
-    ),
+  requestLessonDraftSchema,
 ) {}
 
 export class RequestItemsDraftDto extends createZodDto(
-  z.object({
-    skillId: taxonomySlugSchema,
-    level: cefrLevelSchema,
-    count: z.number().int().min(1).max(20),
-    types: z
-      .array(z.enum(DRAFTABLE_ITEM_TYPES))
-      .min(1)
-      .default(['MULTIPLE_CHOICE', 'FILL_BLANK', 'ORDER_WORDS']),
-  }),
+  requestItemsDraftSchema,
 ) {}
 
 export class RequestRegisterNotesDraftDto extends createZodDto(
-  z.object({
-    level: cefrLevelSchema,
-    count: z.number().int().min(1).max(15),
-  }),
+  requestRegisterNotesDraftSchema,
 ) {}
 
 export class DraftListQueryDto extends createZodDto(
@@ -78,12 +39,90 @@ export class DraftListQueryDto extends createZodDto(
   }),
 ) {}
 
+export const AUDIO_ISSUE_KINDS = [
+  'PRONUNCIATION',
+  'INTONATION',
+  'SPEED',
+  'NOISE',
+  'OTHER',
+] as const;
+
 export class CreateCommentDto extends createZodDto(
+  z
+    .object({
+      target: z.enum(['VERSION', 'STEP', 'ITEM', 'AUDIO']).default('VERSION'),
+      /**
+       * Ordem da etapa, id da questão ou chave do áudio (`scene:0:2`),
+       * conforme o `target`.
+       */
+      targetRef: z.string().trim().max(120).nullable().optional(),
+      /** Só no alvo AUDIO, e obrigatório nele. */
+      audioIssue: z.enum(AUDIO_ISSUE_KINDS).optional(),
+      /** Nota livre. No alvo AUDIO pode ficar vazia: o tipo já diz o problema. */
+      body: z.string().trim().max(2_000),
+    })
+    .superRefine((value, context) => {
+      if (value.target === 'AUDIO') {
+        if (value.audioIssue === undefined) {
+          context.addIssue({
+            code: 'custom',
+            path: ['audioIssue'],
+            message: 'Diga qual é o problema do áudio.',
+          });
+        }
+
+        if (value.targetRef === undefined || value.targetRef === null) {
+          context.addIssue({
+            code: 'custom',
+            path: ['targetRef'],
+            message: 'Aponte a fala, a questão ou a nota.',
+          });
+        } else if (!isAudioKey(value.targetRef)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['targetRef'],
+            message: 'Esta não é uma chave de áudio válida.',
+          });
+        }
+
+        return;
+      }
+
+      if (value.audioIssue !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['audioIssue'],
+          message: 'O tipo de problema só vale para comentário de áudio.',
+        });
+      }
+
+      if (value.body.length === 0) {
+        context.addIssue({
+          code: 'custom',
+          path: ['body'],
+          message: 'Escreva o comentário.',
+        });
+      }
+    }),
+) {}
+
+export class DraftEstimateQueryDto extends createZodDto(
   z.object({
-    target: z.enum(['VERSION', 'STEP', 'ITEM']).default('VERSION'),
-    /** Ordem da etapa ou id da questão, conforme o `target`. */
-    targetRef: z.string().trim().max(120).nullable().optional(),
-    body: z.string().trim().min(1).max(2_000),
+    kind: z.enum(['LESSON', 'ITEMS', 'REGISTER_NOTES']),
+    count: z.coerce.number().int().min(1).max(20).default(1),
+  }),
+) {}
+
+export class RegenerateAudioDto extends createZodDto(
+  z.object({
+    keys: z
+      .array(
+        z.string().refine(isAudioKey, 'Esta não é uma chave de áudio válida.'),
+      )
+      .min(1)
+      .max(60),
+    /** Fala mais devagar (ou mais rápido). Sem ele, a velocidade padrão. */
+    speakingRate: z.number().min(0.7).max(1.2).optional(),
   }),
 ) {}
 

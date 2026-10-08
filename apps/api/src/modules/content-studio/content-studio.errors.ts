@@ -60,6 +60,29 @@ export class DraftNotReadyError extends AppException {
   }
 }
 
+/** Nova geração só faz sentido com a narração já feita: na aprovação. */
+export class AudioNotReadyError extends AppException {
+  constructor(status: string) {
+    super(
+      'AUDIO_REGENERATION_NOT_ALLOWED',
+      'O áudio só pode ser gerado de novo depois que a versão for aprovada.',
+      HttpStatus.CONFLICT,
+      { status },
+    );
+  }
+}
+
+export class UnknownAudioKeyError extends AppException {
+  constructor(keys: readonly string[]) {
+    super(
+      'UNKNOWN_AUDIO_KEY',
+      'Algum dos áudios pedidos não existe nesta versão.',
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      { keys },
+    );
+  }
+}
+
 export class TtsTextTooLongError extends AppException {
   constructor(limit: number, length: number) {
     super(

@@ -17,6 +17,12 @@ export type AudioIdentity = {
   voiceId: string;
   /** Velocidade de fala. Entra no hash: 0.9 e 1.0 soam diferente. */
   speakingRate?: number;
+  /**
+   * Só a "nova geração" usa: força um áudio novo para o mesmo texto, voz e
+   * velocidade. Ausente, o hash é idêntico ao de antes do campo existir —
+   * nenhum áudio já produzido é invalidado.
+   */
+  salt?: string;
 };
 
 /** Caixa e espaço sobrando não mudam o áudio; o resto muda. */
@@ -39,6 +45,7 @@ export function audioHash(identity: AudioIdentity): string {
         text: normalizeAudioText(identity.text),
         voiceId: identity.voiceId,
         rate: Number(rate.toFixed(2)),
+        ...(identity.salt === undefined ? {} : { salt: identity.salt }),
       }),
     )
     .digest('hex');

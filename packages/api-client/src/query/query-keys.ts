@@ -53,4 +53,16 @@ export const queryKeys = {
   adminItemStats: (id: string) => ['admin', 'item-stats', id] as const,
   adminFlaggedItems: (filter: object) =>
     ['admin', 'flagged-items', filter] as const,
+  studioDrafts: (filter: object) =>
+    ['admin', 'studio', 'drafts', filter] as const,
+  studioEstimate: (kind: string, count: number) =>
+    ['admin', 'studio', 'estimate', kind, count] as const,
+  studioQa: (versionId: string) =>
+    ['admin', 'studio', 'qa', versionId] as const,
+  studioComments: (versionId: string, includeResolved: boolean) =>
+    ['admin', 'studio', 'comments', versionId, includeResolved] as const,
+  studioAudio: (versionId: string) =>
+    ['admin', 'studio', 'audio', versionId] as const,
+  studioWorkbooks: ['admin', 'studio', 'workbooks'] as const,
+  studioJob: (id: string) => ['admin', 'studio', 'job', id] as const,
 };

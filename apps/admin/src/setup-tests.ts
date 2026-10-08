@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
 import { resetCurriculumMock } from './mocks/curriculum-mock';
+import { resetStudioMock } from './mocks/studio-mock';
 import { server } from './mocks/server';
 
 configureApiClient({ baseUrl: 'http://localhost:3333' });
@@ -104,6 +105,7 @@ beforeAll(() => {
 afterEach(() => {
   server.resetHandlers();
   resetCurriculumMock();
+  resetStudioMock();
   cleanup();
 });
 afterAll(() => server.close());

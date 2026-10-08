@@ -228,6 +228,15 @@ export function useVersionEditorController(version: AdminVersion) {
     }
   }
 
+  /** Do aviso da revisão até um campo dos metadados (nível, skills-alvo). */
+  function jumpToMeta(field: string | null): void {
+    setActive(META_TAB);
+    setFocusTarget((current) => ({
+      path: field === null ? 'meta' : `meta.${field}`,
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
+  }
+
   function createNextVersion(): void {
     setNewVersionError(null);
     createVersion.mutate(version.lesson.id, {
@@ -268,6 +277,8 @@ export function useVersionEditorController(version: AdminVersion) {
         }
       : null,
     jumpToIssue,
+    jumpToMeta,
+    showPanel: () => setPreviewOpen(true),
     onTransitioned: (next: AdminVersion) => {
       statusRef.current = next.status;
       setStatus(next.status);

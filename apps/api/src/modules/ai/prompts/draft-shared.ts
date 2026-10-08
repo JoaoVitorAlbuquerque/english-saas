@@ -1,4 +1,5 @@
 import {
+  DRAFTABLE_ITEM_TYPES,
   cefrLevelSchema,
   spanKindSchema,
   taxonomySlugSchema,
@@ -30,15 +31,8 @@ export const markedSpanSchema = z.object({
   registerNoteId: taxonomySlugSchema.nullable(),
 });
 
-export const DRAFTABLE_ITEM_TYPES = [
-  'MULTIPLE_CHOICE',
-  'FILL_BLANK',
-  'ORDER_WORDS',
-  'TYPE_ANSWER',
-  'LISTEN_CHOOSE',
-  'DICTATION',
-  'REGISTER_SWAP',
-] as const;
+/** A lista mora no `packages/shared`, porque o formulário do admin usa a mesma. */
+export { DRAFTABLE_ITEM_TYPES };
 
 export const draftItemSchema = z.object({
   type: z.enum(DRAFTABLE_ITEM_TYPES),

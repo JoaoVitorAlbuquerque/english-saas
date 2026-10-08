@@ -12,6 +12,10 @@ import { ErrorPatterns } from '../features/taxonomy/ErrorPatterns';
 import { RegisterNotes } from '../features/taxonomy/RegisterNotes';
 import { Skills } from '../features/taxonomy/Skills';
 import { TaxonomyLayout } from '../features/taxonomy/TaxonomyLayout';
+import { DraftQueue } from '../features/studio/DraftQueue';
+import { NewDraft } from '../features/studio/NewDraft';
+import { StudioLayout } from '../features/studio/StudioLayout';
+import { Workbooks } from '../features/studio/Workbooks';
 import { Dashboard } from '../pages/Dashboard';
 import { Forbidden } from '../pages/Forbidden';
 import { NotFound } from '../pages/NotFound';
@@ -48,6 +52,12 @@ export function AppRoutes() {
             <Route path="skills" element={<Skills />} />
             <Route path="erros" element={<ErrorPatterns />} />
             <Route path="registro" element={<RegisterNotes />} />
+          </Route>
+
+          <Route path="/estudio" element={<StudioLayout />}>
+            <Route index element={<DraftQueue />} />
+            <Route path="novo" element={<NewDraft />} />
+            <Route path="apostilas" element={<Workbooks />} />
           </Route>
 
           <Route

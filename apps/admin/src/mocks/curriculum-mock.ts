@@ -34,9 +34,14 @@ export const ITEM_DICTATION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 export const ITEM_READING_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 export const ITEM_SWAP_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
-type Json = Record<string, unknown>;
+export type Json = Record<string, unknown>;
 
-type MockStep = { id: string; order: number; type: string; content: unknown };
+export type MockStep = {
+  id: string;
+  order: number;
+  type: string;
+  content: unknown;
+};
 
 export type MockVersion = {
   id: string;
@@ -72,6 +77,8 @@ export type MockUnit = {
   title: string;
   synopsis: string | null;
   status: ContentStatus;
+  /** Elenco da unidade (ids de personagem). Sem ele, a unidade vem sem elenco. */
+  castIds?: string[];
 };
 
 export type MockCharacter = {
@@ -239,7 +246,7 @@ function summaryContent(): Json {
   };
 }
 
-function fullSteps(prefix: string): MockStep[] {
+export function fullSteps(prefix: string): MockStep[] {
   const content: [string, Json][] = [
     ['SCENE', sceneContent()],
     ['EXPLANATION_CARDS', cardsContent()],
@@ -682,7 +689,7 @@ function note(
   };
 }
 
-function item(
+export function item(
   id: string,
   type: string,
   prompt: string,
@@ -836,6 +843,16 @@ export const TRANSITIONS: Record<
   },
 };
 
+/**
+ * Ganchos do estúdio de conteúdo (`studio-mock.ts`) nas transições da versão:
+ * a trava de QA na aprovação, a de áudio na publicação e o que acontece depois.
+ * O estúdio se registra ao ser carregado; sem ele, as transições são as de sempre.
+ */
+export const studioHooks: {
+  before?: (action: string, version: MockVersion) => Response | null;
+  after?: (action: string, version: MockVersion) => void;
+} = {};
+
 export function isEditable(status: ContentStatus): boolean {
   return status === 'DRAFT' || status === 'IN_REVIEW' || status === 'APPROVED';
 }
@@ -871,7 +888,13 @@ function unitView(unit: MockUnit): Json {
     synopsis: unit.synopsis,
     status: unit.status,
     coverAssetId: null,
-    cast: [],
+    cast: (unit.castIds ?? []).flatMap((id) => {
+      const character = mockState.characters.find((entry) => entry.id === id);
+
+      return character === undefined
+        ? []
+        : [{ character: characterView(character) }];
+    }),
     lessons: mockState.lessons
       .filter((lesson) => lesson.unitId === unit.id)
       .sort((a, b) => a.order - b.order)
@@ -1542,6 +1565,12 @@ export const curriculumHandlers = [
       );
     }
 
+    const blocked = studioHooks.before?.(action, version);
+
+    if (blocked) {
+      return blocked;
+    }
+
     if (action === 'submit-for-review') {
       const issues = issuesOf(version);
 
@@ -1586,6 +1615,8 @@ export const curriculumHandlers = [
         lesson.publishedVersionId = version.id;
       }
     }
+
+    studioHooks.after?.(action, version);
 
     return HttpResponse.json(versionView(version), { status: 201 });
   }),

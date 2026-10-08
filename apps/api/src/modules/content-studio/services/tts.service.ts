@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MediaKind, type Prisma } from '@prisma/client';
 import type { LessonStepInput } from '@english-saas/shared';
+import { randomUUID } from 'node:crypto';
 
 import { EnvService } from 'src/common/config/env.service';
 import { NotFoundError } from 'src/common/errors/app.exception';
@@ -23,6 +24,7 @@ import {
 } from '../domain/tts-plan';
 
 export const TTS_GENERATE_JOB = 'tts-generate';
+export const TTS_REGENERATE_JOB = 'tts-regenerate';
 
 export type TtsResult = { generated: number; reused: number };
 
@@ -51,6 +53,51 @@ export class TtsService {
   /** O que falta de áudio numa versão. Usado pela trava de publicação. */
   async pendingAudio(lessonVersionId: string): Promise<AudioTarget[]> {
     return missingAudio(await this.planFor(lessonVersionId));
+  }
+
+  /** Tudo que fala numa versão, com e sem áudio. */
+  async plan(lessonVersionId: string): Promise<AudioTarget[]> {
+    return this.planFor(lessonVersionId);
+  }
+
+  /**
+   * "Nova geração" de falas escolhidas.
+   *
+   * Diferente da síntese da aprovação, **não reaproveita**: o hash leva um
+   * sal aleatório, então a fala é sintetizada de novo mesmo com o mesmo texto,
+   * voz e velocidade (que é justamente o pedido de quem ouviu e não gostou).
+   * `speakingRate` opcional muda a velocidade só desta vez. Não mexe no status
+   * da versão: só religa o áudio.
+   */
+  async regenerateForVersion(
+    lessonVersionId: string,
+    keys: readonly string[],
+    speakingRate?: number,
+  ): Promise<TtsResult> {
+    const wanted = new Set(keys);
+    const targets = (await this.planFor(lessonVersionId)).filter((target) =>
+      wanted.has(target.key),
+    );
+    const result: TtsResult = { generated: 0, reused: 0 };
+
+    for (const target of targets) {
+      const asset = await this.synthesizeOrReuse(target, result, {
+        salt: randomUUID(),
+        ...(speakingRate === undefined ? {} : { speakingRate }),
+      });
+
+      await this.attach(lessonVersionId, target, asset.id);
+    }
+
+    this.events.emit('content.audio_generated', {
+      lessonVersionId,
+      generated: result.generated,
+      reused: result.reused,
+    });
+
+    this.logger.log({ lessonVersionId, ...result }, 'Nova geração concluída');
+
+    return result;
   }
 
   async generateForVersion(lessonVersionId: string): Promise<TtsResult> {
@@ -137,6 +184,7 @@ export class TtsService {
   private async synthesizeOrReuse(
     target: AudioTarget,
     result: TtsResult,
+    options: { salt?: string; speakingRate?: number } = {},
   ): Promise<{ id: string }> {
     const maxChars = this.envService.get('TTS_MAX_CHARS');
 
@@ -148,8 +196,14 @@ export class TtsService {
       target.voiceId === ''
         ? this.envService.get('TTS_DEFAULT_VOICE')
         : target.voiceId;
-    const speakingRate = this.envService.get('TTS_SPEAKING_RATE_A1');
-    const textHash = audioHash({ text: target.text, voiceId, speakingRate });
+    const speakingRate =
+      options.speakingRate ?? this.envService.get('TTS_SPEAKING_RATE_A1');
+    const textHash = audioHash({
+      text: target.text,
+      voiceId,
+      speakingRate,
+      ...(options.salt === undefined ? {} : { salt: options.salt }),
+    });
 
     const existing = await this.prisma.audioRendition.findUnique({
       where: { textHash_voiceId: { textHash, voiceId } },

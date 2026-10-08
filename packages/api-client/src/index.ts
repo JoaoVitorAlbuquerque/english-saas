@@ -81,3 +81,6 @@ export * from './modules/curriculum-admin/schemas';
 export * as curriculumBankService from './modules/curriculum-bank/service';
 export * from './modules/curriculum-bank/hooks';
 export * from './modules/curriculum-bank/schemas';
+export * as contentStudioService from './modules/content-studio/service';
+export * from './modules/content-studio/hooks';
+export * from './modules/content-studio/schemas';

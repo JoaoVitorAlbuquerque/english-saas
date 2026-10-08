@@ -15,6 +15,8 @@ import { buildPage, toPrismaCursorArgs } from 'src/common/pagination/cursor';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 import { QUEUES } from 'src/infra/queue/queues';
 
+import { estimateDraftCost } from '../domain/draft-cost';
+
 export const DRAFT_LESSON_JOB = 'draft-lesson';
 export const DRAFT_ITEMS_JOB = 'draft-items';
 export const DRAFT_REGISTER_NOTES_JOB = 'draft-register-notes';
@@ -45,6 +47,16 @@ export type DraftRegisterNotesParams = {
   level: CefrLevel;
   count: number;
 };
+
+function paramsCount(params: Prisma.JsonValue): number | null {
+  if (params !== null && typeof params === 'object' && !Array.isArray(params)) {
+    const count = params['count'];
+
+    return typeof count === 'number' ? count : null;
+  }
+
+  return null;
+}
 
 const draftSelect = {
   id: true,
@@ -135,11 +147,35 @@ export class DraftService {
         ...(query.status === undefined ? {} : { status: query.status }),
         ...(query.kind === undefined ? {} : { kind: query.kind }),
       },
-      orderBy: { id: 'asc' },
+      // Do mais novo para o mais antigo; o id desempata e mantém o cursor estável.
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       select: draftSelect,
     });
 
     return buildPage(rows, query.limit, (row) => row.id);
+  }
+
+  /**
+   * Quanto um pedido deve custar, pela média dos últimos rascunhos prontos do
+   * mesmo tipo. Sem histórico (ou com provedor fake, que cobra 0), `null`.
+   */
+  async estimate(kind: ContentDraftKind, count: number) {
+    const recent = await this.prisma.contentDraft.findMany({
+      where: { kind, status: ContentDraftStatus.READY },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { kind: true, costUsdMicros: true, params: true },
+    });
+
+    return estimateDraftCost(
+      recent.map((draft) => ({
+        kind: draft.kind,
+        costUsdMicros: draft.costUsdMicros,
+        count: paramsCount(draft.params),
+      })),
+      kind,
+      count,
+    );
   }
 
   async findById(id: string) {

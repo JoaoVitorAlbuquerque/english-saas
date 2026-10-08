@@ -743,4 +743,317 @@ describe('Content studio (e2e)', () => {
     expect(second.generated).toBe(0);
     expect(second.reused).toBe(content.lines.length);
   }, 60_000);
+
+  // -------------------------------------------------------------------
+  // Estúdio no admin: estimativa, ordem da fila, áudio e apostilas
+  // -------------------------------------------------------------------
+
+  it('lista os rascunhos do mais novo para o mais antigo', async () => {
+    const fixture = await buildFixture();
+
+    const first = await http()
+      .post('/admin/content-studio/drafts/register-notes')
+      .set(fixture.auth)
+      .send({ level: 'A1', count: 2 })
+      .expect(202);
+
+    await waitForDraft(first.body.id as string);
+
+    const second = await http()
+      .post('/admin/content-studio/drafts/items')
+      .set(fixture.auth)
+      .send({ skillId: fixture.skillId, level: 'A1', count: 2 })
+      .expect(202);
+
+    await waitForDraft(second.body.id as string);
+
+    const list = await http()
+      .get('/admin/content-studio/drafts')
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(list.body.data.map((draft: { id: string }) => draft.id)).toEqual([
+      second.body.id,
+      first.body.id,
+    ]);
+    expect(list.body.data[0].requestedBy.name).toBeDefined();
+  });
+
+  it('estima o custo pela média dos prontos do mesmo tipo', async () => {
+    const fixture = await buildFixture();
+
+    // Sem histórico, não há número (e o provedor fake cobra 0).
+    const empty = await http()
+      .get('/admin/content-studio/drafts/estimate?kind=LESSON')
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(empty.body).toEqual({ usdMicros: null, basedOn: 0 });
+
+    const { draftId } = await draftLesson(fixture);
+
+    await context.prisma.contentDraft.update({
+      where: { id: draftId },
+      data: { costUsdMicros: 40_000 },
+    });
+
+    const lesson = await http()
+      .get('/admin/content-studio/drafts/estimate?kind=LESSON')
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(lesson.body).toEqual({ usdMicros: 40_000, basedOn: 1 });
+
+    // Outro tipo de pedido não herda a média da lição.
+    const items = await http()
+      .get('/admin/content-studio/drafts/estimate?kind=ITEMS&count=5')
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(items.body.usdMicros).toBeNull();
+
+    await http()
+      .get('/admin/content-studio/drafts/estimate?kind=ITEMS&count=99')
+      .set(fixture.auth)
+      .expect(400);
+
+    await http()
+      .get('/admin/content-studio/drafts/estimate?kind=LESSON')
+      .set('Authorization', `Bearer ${fixture.student}`)
+      .expect(403);
+  });
+
+  /** Envia, aprova e espera a narração da aprovação terminar. */
+  async function approveAndNarrate(fixture: Fixture, versionId: string) {
+    await http()
+      .post(`/admin/curriculum/lesson-versions/${versionId}/submit-for-review`)
+      .set(fixture.auth)
+      .expect(201);
+
+    await http()
+      .post(`/admin/curriculum/lesson-versions/${versionId}/approve`)
+      .set(fixture.auth)
+      .expect(201);
+
+    await waitFor(
+      async () =>
+        (await tts.pendingAudio(versionId)).length === 0 ? true : null,
+      'a narração terminar',
+    );
+  }
+
+  it('revisão de áudio: lista as falas, marca problema e gera de novo', async () => {
+    const fixture = await buildFixture();
+    const { versionId } = await draftLesson(fixture);
+    const base = `/admin/content-studio/lesson-versions/${versionId}`;
+
+    // Antes de aprovar: tudo sem áudio, e gerar de novo é recusado.
+    const before = await http()
+      .get(`${base}/audio`)
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(before.body.total).toBeGreaterThan(0);
+    expect(before.body.pending).toBe(before.body.total);
+    expect(before.body.targets[0].audio).toBeNull();
+
+    const early = await http()
+      .post(`${base}/audio/regenerate`)
+      .set(fixture.auth)
+      .send({ keys: [before.body.targets[0].key] })
+      .expect(409);
+
+    expect(early.body.error.code).toBe('AUDIO_REGENERATION_NOT_ALLOWED');
+
+    await approveAndNarrate(fixture, versionId);
+
+    const after = await http()
+      .get(`${base}/audio`)
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(after.body.pending).toBe(0);
+    expect(after.body.versionStatus).toBe('APPROVED');
+
+    const line = after.body.targets.find(
+      (target: { kind: string }) => target.kind === 'SCENE_LINE',
+    );
+
+    expect(line.key).toBe('scene:0:0');
+    expect(line.label).toMatch(/Maya|Lucas/);
+    expect(line.audio.url).toContain('X-Amz-Signature');
+    expect(line.audio.durationMs).toBeGreaterThan(0);
+
+    // Problema de áudio é um comentário de alvo AUDIO: exige tipo e chave válida.
+    const noKind = await http()
+      .post(`${base}/comments`)
+      .set(fixture.auth)
+      .send({ target: 'AUDIO', targetRef: line.key, body: '' })
+      .expect(400);
+
+    expect(JSON.stringify(noKind.body)).toContain('audioIssue');
+
+    await http()
+      .post(`${base}/comments`)
+      .set(fixture.auth)
+      .send({ target: 'AUDIO', targetRef: 'banana', audioIssue: 'SPEED' })
+      .expect(400);
+
+    const problem = await http()
+      .post(`${base}/comments`)
+      .set(fixture.auth)
+      .send({
+        target: 'AUDIO',
+        targetRef: line.key,
+        audioIssue: 'INTONATION',
+        body: 'Soa como afirmação, é pergunta.',
+      })
+      .expect(201);
+
+    expect(problem.body.audioIssue).toBe('INTONATION');
+
+    const flagged = await http()
+      .get(`${base}/audio`)
+      .set(fixture.auth)
+      .expect(200);
+    const flaggedLine = flagged.body.targets.find(
+      (target: { key: string }) => target.key === line.key,
+    );
+
+    expect(flaggedLine.openIssues).toHaveLength(1);
+    expect(flaggedLine.openIssues[0].audioIssue).toBe('INTONATION');
+
+    // O texto livre continua obrigatório nos outros alvos.
+    await http()
+      .post(`${base}/comments`)
+      .set(fixture.auth)
+      .send({ target: 'STEP', targetRef: '0', body: '' })
+      .expect(400);
+
+    // Nova geração: chave inexistente é 422; a boa troca o áudio da fala.
+    await http()
+      .post(`${base}/audio/regenerate`)
+      .set(fixture.auth)
+      .send({ keys: ['scene:9:9'] })
+      .expect(422);
+
+    const assetOf = async () => {
+      const scene = await context.prisma.lessonStep.findFirstOrThrow({
+        where: { lessonVersionId: versionId, type: 'SCENE' },
+        select: { content: true },
+      });
+
+      return (
+        scene.content as unknown as { lines: { audioAssetId?: string }[] }
+      ).lines[0]?.audioAssetId;
+    };
+    const oldAsset = await assetOf();
+
+    const regenerated = await http()
+      .post(`${base}/audio/regenerate`)
+      .set(fixture.auth)
+      .send({ keys: [line.key], speakingRate: 0.8 })
+      .expect(202);
+
+    expect(regenerated.body.queue).toBe('media');
+
+    const newAsset = await waitFor(async () => {
+      const current = await assetOf();
+
+      return current !== undefined && current !== oldAsset ? current : null;
+    }, 'a fala ser gerada de novo');
+
+    expect(newAsset).not.toBe(oldAsset);
+
+    // A versão segue aprovada e com todos os áudios: dá para publicar.
+    expect((await tts.pendingAudio(versionId)).length).toBe(0);
+    await expect(gate.assertCanPublish(versionId)).resolves.toBeUndefined();
+
+    const status = await http()
+      .get(`/admin/curriculum/lesson-versions/${versionId}`)
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(status.body.status).toBe('APPROVED');
+  }, 180_000);
+
+  it('apostilas: lista por unidade, acusa desatualizada e acompanha o job', async () => {
+    const fixture = await buildFixture();
+    const { versionId } = await draftLesson(fixture);
+
+    // Unidade sem lição publicada: aparece, sem apostila.
+    const none = await http()
+      .get('/admin/content-studio/workbooks')
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(none.body).toHaveLength(1);
+    expect(none.body[0]).toMatchObject({
+      cefrLevel: 'A1',
+      publishedLessons: 0,
+      workbook: null,
+    });
+
+    await approveAndNarrate(fixture, versionId);
+    await http()
+      .post(`/admin/curriculum/lesson-versions/${versionId}/publish`)
+      .set(fixture.auth)
+      .expect(201);
+
+    const ready = await waitFor(async () => {
+      const list = await http()
+        .get('/admin/content-studio/workbooks')
+        .set(fixture.auth)
+        .expect(200);
+
+      return list.body[0].workbook === null ? null : list.body[0];
+    }, 'a apostila aparecer na lista');
+
+    expect(ready.publishedLessons).toBe(1);
+    expect(ready.workbook.stale).toBe(false);
+    expect(ready.workbook.url).toContain('X-Amz-Signature');
+    expect(ready.workbook.sizeBytes).toBeGreaterThan(1_000);
+
+    // O conteúdo publicado mudou depois do PDF: a apostila está velha.
+    await context.prisma.lessonVersion.update({
+      where: { id: versionId },
+      data: { title: 'Outro título' },
+    });
+
+    const stale = await http()
+      .get('/admin/content-studio/workbooks')
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(stale.body[0].workbook.stale).toBe(true);
+
+    // Regerar devolve o job, e o estado dele é consultável.
+    const job = await http()
+      .post(`/admin/content-studio/units/${fixture.unitId}/workbook`)
+      .set(fixture.auth)
+      .expect(202);
+
+    const state = await http()
+      .get(`/admin/content-studio/jobs/${String(job.body.jobId)}`)
+      .set(fixture.auth)
+      .expect(200);
+
+    expect(['waiting', 'active', 'completed', 'unknown']).toContain(
+      state.body.state,
+    );
+
+    await waitFor(async () => {
+      const list = await http()
+        .get('/admin/content-studio/workbooks')
+        .set(fixture.auth)
+        .expect(200);
+
+      return list.body[0].workbook.stale === false ? true : null;
+    }, 'a apostila ser regerada');
+
+    await http()
+      .get('/admin/content-studio/workbooks')
+      .set('Authorization', `Bearer ${fixture.student}`)
+      .expect(403);
+  }, 180_000);
 });

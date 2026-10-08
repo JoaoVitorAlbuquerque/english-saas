@@ -11,6 +11,7 @@ import {
   ArrowUp,
   ListChecks,
   Plus,
+  Sparkles,
   Tags,
   Users,
 } from 'lucide-react';
@@ -240,6 +241,13 @@ export function CurriculumTree() {
           >
             <Tags className="size-5" aria-hidden="true" />
             {t('tree.taxonomy')}
+          </Link>
+          <Link
+            to="/estudio"
+            className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-4 text-base font-medium text-ink hover:bg-ground"
+          >
+            <Sparkles className="size-5" aria-hidden="true" />
+            {t('tree.studio')}
           </Link>
           <Link
             to="/conteudo/personagens"

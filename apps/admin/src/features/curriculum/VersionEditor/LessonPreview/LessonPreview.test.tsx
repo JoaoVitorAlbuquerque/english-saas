@@ -54,13 +54,13 @@ describe('Preview da lição', () => {
       await openPreview();
 
       await userEvent.click(
-        screen.getByRole('button', { name: 'Esconder o preview' }),
+        screen.getByRole('button', { name: 'Esconder o painel' }),
       );
 
       expect(screen.queryByTestId('preview-frame')).not.toBeInTheDocument();
 
       await userEvent.click(
-        screen.getByRole('button', { name: 'Mostrar o preview' }),
+        screen.getByRole('button', { name: 'Mostrar o painel' }),
       );
 
       expect(await screen.findByTestId('preview-frame')).toBeInTheDocument();

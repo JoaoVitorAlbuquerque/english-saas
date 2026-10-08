@@ -32,10 +32,15 @@ import {
   summarize,
   warn,
 } from './domain/qa-report';
+import { estimateDraftCost } from './domain/draft-cost';
 import {
+  isAudioKey,
+  itemAudioKey,
   missingAudio,
+  noteAudioKey,
   planAudioTargets,
   registerNoteIdsInSteps,
+  sceneLineKey,
 } from './domain/tts-plan';
 
 const MAYA = randomUUID();
@@ -656,6 +661,16 @@ describe('audioHash', () => {
     ).not.toBe(audioHash({ text: 'Hi.', voiceId: 'v1', speakingRate: 1 }));
   });
 
+  it('o sal força outro áudio; sem sal o hash é o de sempre', () => {
+    const base = { text: 'Hi.', voiceId: 'v1' };
+
+    expect(audioHash({ ...base, salt: 'a' })).not.toBe(audioHash(base));
+    expect(audioHash({ ...base, salt: 'a' })).not.toBe(
+      audioHash({ ...base, salt: 'b' }),
+    );
+    expect(audioHash({ ...base, salt: undefined })).toBe(audioHash(base));
+  });
+
   it('aspa curva vale como reta', () => {
     expect(normalizeAudioText('I’m')).toBe("i'm");
   });
@@ -869,5 +884,115 @@ describe('collectItemSegments', () => {
 
     expect(englishOf(segments)).toEqual(['Biscuit ___ a dog.', 'is']);
     expect(segments[0]?.path).toBe('items.0.sentence');
+  });
+});
+
+describe('chaves de áudio', () => {
+  it('cada alvo tem uma chave estável e válida', () => {
+    expect(sceneLineKey(0, 2)).toBe('scene:0:2');
+    expect(itemAudioKey(ITEM)).toBe(`item:${ITEM}`);
+    expect(noteAudioKey('gonna')).toBe('note:gonna');
+
+    for (const key of [
+      sceneLineKey(3, 11),
+      itemAudioKey(ITEM),
+      noteAudioKey('register.gonna'),
+    ]) {
+      expect(isAudioKey(key)).toBe(true);
+    }
+  });
+
+  it('recusa o que não é chave', () => {
+    for (const key of ['', 'scene:a:1', 'item:123', 'note:', 'x:1:2']) {
+      expect(isAudioKey(key)).toBe(false);
+    }
+  });
+
+  it('planAudioTargets entrega a chave, o personagem e o asset ligado', () => {
+    const targets = planAudioTargets({
+      steps: [
+        {
+          type: 'SCENE' as const,
+          content: {
+            location: 'Austin',
+            characterIds: [MAYA],
+            lines: [
+              {
+                characterId: MAYA,
+                text: 'Hi!',
+                translation: 'Oi!',
+                audioAssetId: ASSET,
+                spans: [],
+              },
+            ],
+          },
+        },
+      ],
+      voiceByCharacterId: {},
+      items: [
+        { id: ITEM, type: 'DICTATION', content: { audioText: 'Hello.' } },
+      ],
+      registerNotes: [{ id: 'gonna', spokenForm: 'gonna', audioAssetId: null }],
+    });
+
+    expect(targets.map((target) => target.key)).toEqual([
+      'scene:0:0',
+      `item:${ITEM}`,
+      'note:gonna',
+    ]);
+    expect(targets[0]).toMatchObject({ characterId: MAYA, assetId: ASSET });
+    expect(targets[1]?.assetId).toBeNull();
+  });
+});
+
+describe('estimateDraftCost', () => {
+  const lesson = (costUsdMicros: number | null) => ({
+    kind: 'LESSON' as const,
+    costUsdMicros,
+    count: null,
+  });
+  const items = (costUsdMicros: number | null, count: number | null) => ({
+    kind: 'ITEMS' as const,
+    costUsdMicros,
+    count,
+  });
+
+  it('sem histórico não inventa número', () => {
+    expect(estimateDraftCost([], 'LESSON', 1)).toEqual({
+      usdMicros: null,
+      basedOn: 0,
+    });
+  });
+
+  it('lição: média dos pedidos de lição', () => {
+    expect(
+      estimateDraftCost([lesson(40_000), lesson(60_000)], 'LESSON', 1),
+    ).toEqual({ usdMicros: 50_000, basedOn: 2 });
+  });
+
+  it('questões: custo por questão vezes a quantidade pedida', () => {
+    // 10 questões a 20 mil e 5 a 15 mil: 2 mil e 3 mil por questão; média 2.500.
+    expect(
+      estimateDraftCost([items(20_000, 10), items(15_000, 5)], 'ITEMS', 8),
+    ).toEqual({ usdMicros: 20_000, basedOn: 2 });
+  });
+
+  it('só olha o mesmo tipo de pedido', () => {
+    expect(
+      estimateDraftCost([lesson(40_000), items(9_000, 3)], 'ITEMS', 3).basedOn,
+    ).toBe(1);
+  });
+
+  it('ignora custo zero ou nulo (provedor fake) e contagem ausente', () => {
+    expect(
+      estimateDraftCost(
+        [lesson(0), lesson(null), items(5_000, null), items(5_000, 0)],
+        'LESSON',
+        1,
+      ),
+    ).toEqual({ usdMicros: null, basedOn: 0 });
+    expect(estimateDraftCost([items(5_000, null)], 'ITEMS', 4).usdMicros).toBe(
+      null,
+    );
   });
 });

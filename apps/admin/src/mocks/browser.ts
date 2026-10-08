@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { setupWorker } from 'msw/browser';
 
 import { editorSessionFixture, handlers } from './handlers';
+import { seedReadyLessonDraft } from './studio-mock';
 
 const API_URL = 'http://localhost:3333';
 
@@ -34,3 +35,16 @@ const e2eAuthHandlers = [
  * `VITE_E2E_MOCKS`. Os testes do Vitest usam `mocks/server.ts` (Node).
  */
 export const worker = setupWorker(...e2eAuthHandlers, ...handlers);
+
+/**
+ * Os testes de ponta a ponta do estúdio precisam de um rascunho de lição já
+ * pronto (com a revisão e os bloqueadores) e o estado do mock vive nesta página:
+ * eles pedem por aqui, depois de abrir o painel. Só existe no build de e2e.
+ */
+declare global {
+  interface Window {
+    __studioMock?: { seedReadyLessonDraft: typeof seedReadyLessonDraft };
+  }
+}
+
+window.__studioMock = { seedReadyLessonDraft };

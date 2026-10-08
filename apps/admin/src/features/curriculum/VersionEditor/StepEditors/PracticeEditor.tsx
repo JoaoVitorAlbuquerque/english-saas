@@ -8,9 +8,11 @@ import {
   type PracticeContent,
 } from '@english-saas/shared';
 import { Badge, Button, Checkbox, Select } from '@english-saas/ui';
+import { MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 
 import { t } from '../../../../messages/pt-BR';
+import { useReview } from '../../../studio/review/ReviewContext';
 import { ListControls } from '../../components/ListControls';
 import { SkillPicker } from '../../components/SkillPicker';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -35,7 +37,9 @@ function PracticeItemRow({
   onRemove: () => void;
 }) {
   const item = useAdminItem(itemId);
+  const review = useReview();
   const label = t('practice.item', { n: index + 1 });
+  const openComments = review?.openByItem[itemId] ?? 0;
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
@@ -60,6 +64,23 @@ function PracticeItemRow({
           </>
         )}
       </div>
+      {review ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={t('studio.comments.itemButton', { n: index + 1 })}
+          leftIcon={<MessageSquare className="size-4" aria-hidden="true" />}
+          onClick={() =>
+            review.comment({
+              target: 'ITEM',
+              ref: itemId,
+              label: t('studio.comments.about.itemN', { n: index + 1 }),
+            })
+          }
+        >
+          {openComments > 0 ? String(openComments) : null}
+        </Button>
+      ) : null}
       {readOnly ? null : (
         <ListControls
           label={label}

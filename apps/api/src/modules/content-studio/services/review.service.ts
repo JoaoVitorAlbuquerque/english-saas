@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CommentTarget, ContentStatus, ItemSource } from '@prisma/client';
+import {
+  CommentTarget,
+  ContentStatus,
+  ItemSource,
+  type AudioIssueKind,
+} from '@prisma/client';
 import type { LessonStepInput } from '@english-saas/shared';
 
 import { NotFoundError } from 'src/common/errors/app.exception';
@@ -28,6 +33,7 @@ export class ReviewService {
         target: true,
         targetRef: true,
         body: true,
+        audioIssue: true,
         resolvedAt: true,
         resolvedById: true,
         createdAt: true,
@@ -36,10 +42,46 @@ export class ReviewService {
     });
   }
 
+  /** Problemas de áudio ainda abertos, por chave de áudio. */
+  async openAudioIssues(lessonVersionId: string) {
+    const rows = await this.prisma.contentComment.findMany({
+      where: {
+        lessonVersionId,
+        target: CommentTarget.AUDIO,
+        resolvedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        targetRef: true,
+        audioIssue: true,
+        body: true,
+        createdAt: true,
+      },
+    });
+
+    const byKey = new Map<string, typeof rows>();
+
+    for (const row of rows) {
+      if (row.targetRef === null) {
+        continue;
+      }
+
+      byKey.set(row.targetRef, [...(byKey.get(row.targetRef) ?? []), row]);
+    }
+
+    return byKey;
+  }
+
   async comment(
     lessonVersionId: string,
     authorId: string,
-    input: { target: CommentTarget; targetRef?: string | null; body: string },
+    input: {
+      target: CommentTarget;
+      targetRef?: string | null;
+      audioIssue?: AudioIssueKind | undefined;
+      body: string;
+    },
   ) {
     const version = await this.prisma.lessonVersion.findUnique({
       where: { id: lessonVersionId },
@@ -56,6 +98,7 @@ export class ReviewService {
         authorId,
         target: input.target,
         targetRef: input.targetRef ?? null,
+        audioIssue: input.audioIssue ?? null,
         body: input.body,
       },
       select: {
@@ -63,6 +106,7 @@ export class ReviewService {
         target: true,
         targetRef: true,
         body: true,
+        audioIssue: true,
         createdAt: true,
       },
     });

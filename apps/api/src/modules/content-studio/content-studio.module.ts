@@ -10,6 +10,7 @@ import { ContentDraftsProcessor } from './jobs/content-drafts.processor';
 import { ContentListener } from './jobs/content.listener';
 import { ContentQaProcessor } from './jobs/content-qa.processor';
 import { MediaProcessor } from './jobs/media.processor';
+import { AudioReviewService } from './services/audio-review.service';
 import { ContentStudioGate } from './services/content-gate.service';
 import { DraftGeneratorService } from './services/draft-generator.service';
 import { DraftService } from './services/draft.service';
@@ -43,6 +44,7 @@ import { WorkbookService } from './services/workbook.service';
   providers: [
     DraftService,
     DraftGeneratorService,
+    AudioReviewService,
     QaService,
     ReviewService,
     TtsService,

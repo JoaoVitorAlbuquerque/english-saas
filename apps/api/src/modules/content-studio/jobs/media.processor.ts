@@ -5,13 +5,22 @@ import type { Job } from 'bullmq';
 import { QUEUES } from 'src/infra/queue/queues';
 import { defaultWorkerOptions } from 'src/infra/queue/register-queue';
 
-import { TTS_GENERATE_JOB, TtsService } from '../services/tts.service';
+import {
+  TTS_GENERATE_JOB,
+  TTS_REGENERATE_JOB,
+  TtsService,
+} from '../services/tts.service';
 import {
   WORKBOOK_PDF_JOB,
   WorkbookService,
 } from '../services/workbook.service';
 
-type MediaJobData = { lessonVersionId?: string; unitId?: string };
+type MediaJobData = {
+  lessonVersionId?: string;
+  unitId?: string;
+  keys?: string[];
+  speakingRate?: number;
+};
 
 /**
  * Produção de mídia: narração e apostila.
@@ -40,6 +49,20 @@ export class MediaProcessor extends WorkerHost {
         }
 
         return this.tts.generateForVersion(lessonVersionId);
+      }
+
+      case TTS_REGENERATE_JOB: {
+        const { lessonVersionId, keys, speakingRate } = job.data;
+
+        if (lessonVersionId === undefined || keys === undefined) {
+          return { skipped: true };
+        }
+
+        return this.tts.regenerateForVersion(
+          lessonVersionId,
+          keys,
+          speakingRate,
+        );
       }
 
       case WORKBOOK_PDF_JOB: {

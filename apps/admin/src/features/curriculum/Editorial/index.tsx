@@ -1,9 +1,11 @@
 import type { AdminVersion } from '@english-saas/api-client';
 import type { ContentStatus, LessonStepType } from '@english-saas/shared';
+import type { ReactNode } from 'react';
 import { Button } from '@english-saas/ui';
 
 import { t } from '../../../messages/pt-BR';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import type { EditorialAction } from '../lib/editorial';
 import { ProblemPanel } from './ProblemPanel';
 import { useEditorialController } from './useEditorialController';
 
@@ -17,6 +19,12 @@ export type EditorialActionsProps = {
   onJumpToIssue?: (order: number, path: string) => void;
   editorHref?: string;
   size?: 'sm' | 'md';
+  /**
+   * Ações travadas por algo de fora do fluxo (bloqueador da revisão
+   * automática, áudio faltando): o botão fica desabilitado e o motivo — a
+   * lista do que falta — aparece logo abaixo. A API continua sendo quem decide.
+   */
+  guards?: Partial<Record<EditorialAction, ReactNode>>;
 };
 
 /**
@@ -35,6 +43,7 @@ export function EditorialActions({
   onJumpToIssue,
   editorHref,
   size = 'md',
+  guards = {},
 }: EditorialActionsProps) {
   const controller = useEditorialController({
     versionId,
@@ -54,7 +63,7 @@ export function EditorialActions({
               key={action}
               size={size}
               variant={index === 0 ? 'primary' : 'ghost'}
-              disabled={controller.isRunning}
+              disabled={controller.isRunning || guards[action] !== undefined}
               onClick={() => controller.request(action)}
             >
               {t(`editorial.action.${action}`)}
@@ -62,6 +71,12 @@ export function EditorialActions({
           ))}
         </div>
       ) : null}
+
+      {controller.actions.map((action) =>
+        guards[action] === undefined ? null : (
+          <div key={`guard-${action}`}>{guards[action]}</div>
+        ),
+      )}
 
       {controller.problem ? (
         <ProblemPanel

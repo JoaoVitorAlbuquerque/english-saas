@@ -12,9 +12,15 @@ import {
   buildStorageKey,
 } from 'src/infra/storage/storage-keys';
 
+import { AssetUrlService } from 'src/modules/curriculum/services/asset-url.service';
+
 import { renderWorkbookPdf, type WorkbookData } from './workbook-pdf';
 
 export const WORKBOOK_PDF_JOB = 'workbook-pdf';
+
+function hashOf(data: WorkbookData): string {
+  return createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
 
 /**
  * Apostila em PDF de uma unidade.
@@ -34,13 +40,12 @@ export class WorkbookService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly events: EventBusService,
+    private readonly assets: AssetUrlService,
   ) {}
 
   async generateForUnit(unitId: string): Promise<{ workbookId: string }> {
     const data = await this.collect(unitId);
-    const sourceHash = createHash('sha256')
-      .update(JSON.stringify(data))
-      .digest('hex');
+    const sourceHash = hashOf(data);
 
     const pdf = await renderWorkbookPdf(data);
     const key = buildStorageKey(
@@ -104,6 +109,82 @@ export class WorkbookService {
     this.logger.log({ unitId, sizeBytes: pdf.byteLength }, 'Apostila gerada');
 
     return { workbookId: workbook.id };
+  }
+
+  /** O hash do conteúdo publicado **agora**: diferente do gravado, a apostila está velha. */
+  async currentSourceHash(unitId: string): Promise<string> {
+    return hashOf(await this.collect(unitId));
+  }
+
+  /**
+   * Uma linha por unidade, para o admin: tem apostila? está em dia? tem lição
+   * publicada para gerar? A URL do PDF é assinada na resposta.
+   */
+  async listForAdmin() {
+    const units = await this.prisma.unit.findMany({
+      orderBy: [{ level: { order: 'asc' } }, { order: 'asc' }],
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        level: { select: { cefrLevel: true } },
+        lessons: {
+          where: { publishedVersionId: { not: null } },
+          select: { id: true },
+        },
+        workbooks: {
+          orderBy: { order: 'asc' },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            generatedAt: true,
+            sourceHash: true,
+            asset: {
+              select: {
+                id: true,
+                kind: true,
+                storageKey: true,
+                mimeType: true,
+                durationMs: true,
+                sizeBytes: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const withWorkbook = units.flatMap((unit) =>
+      unit.workbooks[0] === undefined ? [] : [unit.workbooks[0].asset],
+    );
+    const urls = await this.assets.resolveMap(withWorkbook);
+
+    return Promise.all(
+      units.map(async (unit) => {
+        const workbook = unit.workbooks[0];
+
+        return {
+          unit: { id: unit.id, slug: unit.slug, title: unit.title },
+          cefrLevel: unit.level.cefrLevel,
+          publishedLessons: unit.lessons.length,
+          workbook:
+            workbook === undefined
+              ? null
+              : {
+                  id: workbook.id,
+                  status: workbook.status,
+                  generatedAt: workbook.generatedAt,
+                  sizeBytes: workbook.asset.sizeBytes,
+                  url: urls[workbook.asset.id]?.url ?? null,
+                  stale:
+                    workbook.sourceHash === null ||
+                    workbook.sourceHash !==
+                      (await this.currentSourceHash(unit.id)),
+                },
+        };
+      }),
+    );
   }
 
   /** Junta o conteúdo publicado da unidade no formato que o PDF consome. */

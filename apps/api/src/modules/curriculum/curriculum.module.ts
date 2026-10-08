@@ -61,6 +61,8 @@ import { TaxonomyService } from './services/taxonomy.service';
     // O content-studio (5) escreve lição por aqui, em vez de mexer nas
     // tabelas do módulo 4 por fora.
     LessonAuthoringService,
+    // O content-studio (5) assina a URL do áudio e do PDF na hora da resposta.
+    AssetUrlService,
   ],
 })
 export class CurriculumModule {}
