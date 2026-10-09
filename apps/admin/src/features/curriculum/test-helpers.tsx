@@ -7,7 +7,10 @@ import { render } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { AppRoutes } from '../../app/router';
-import { editorSessionFixture } from '../../mocks/handlers';
+import {
+  adminSessionFixture,
+  editorSessionFixture,
+} from '../../mocks/handlers';
 import { useAuthStore } from '../../stores/auth-store';
 
 export const API_URL = 'http://localhost:3333';
@@ -19,13 +22,20 @@ function LocationProbe() {
 }
 
 /**
- * O painel inteiro numa rota, com o editor já logado. O estado da sessão e
+ * O painel inteiro numa rota, com o editor já logado (ou o administrador,
+ * nas telas de gestão). O estado da sessão e
  * dos avisos é global: sem zerar, um teste vazaria para o seguinte.
  */
-export function renderAdminAt(path: string) {
+export function renderAdminAt(
+  path: string,
+  options: { role?: 'EDITOR' | 'ADMIN' } = {},
+) {
+  const session =
+    options.role === 'ADMIN' ? adminSessionFixture : editorSessionFixture;
+
   useAuthStore.setState({
     status: 'authenticated',
-    user: editorSessionFixture.user as never,
+    user: session.user as never,
   });
   getToasts().forEach((item) => dismissToast(item.id));
 

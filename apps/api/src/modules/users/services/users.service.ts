@@ -37,8 +37,20 @@ export type AdminUserRow = {
   role: Role;
   emailVerifiedAt: Date | null;
   deletedAt: Date | null;
+  anonymizedAt: Date | null;
   createdAt: Date;
 };
+
+const ADMIN_USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  emailVerifiedAt: true,
+  deletedAt: true,
+  anonymizedAt: true,
+  createdAt: true,
+} as const;
 
 export type ProfileUpdate = {
   goals?: LearningGoal[];
@@ -470,29 +482,83 @@ export class UsersService {
   // Painel interno
   // -------------------------------------------------------------------
 
-  /** Listagem paginada por cursor, para o painel de administração. */
+  /**
+   * Listagem paginada por cursor, para o painel de administração. `q` olha
+   * nome **e** e-mail, sem diferença de caixa. Mais novo primeiro (ordenar
+   * por UUID daria ordem arbitrária).
+   */
   async listForAdmin(query: {
+    q?: string | undefined;
     cursor?: string | undefined;
     limit: number;
   }): Promise<Paginated<AdminUserRow>> {
     const { take, ...cursorArgs } = toPrismaCursorArgs(query);
+    const term = query.q?.trim() ?? '';
 
     const rows = await this.prisma.user.findMany({
       take,
       ...cursorArgs,
-      orderBy: { id: 'asc' },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        emailVerifiedAt: true,
-        deletedAt: true,
-        createdAt: true,
-      },
+      where:
+        term === ''
+          ? {}
+          : {
+              OR: [
+                { name: { contains: term, mode: 'insensitive' } },
+                { email: { contains: term, mode: 'insensitive' } },
+              ],
+            },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: ADMIN_USER_SELECT,
     });
 
     return buildPage(rows, query.limit, (row) => row.id);
+  }
+
+  /**
+   * A ficha do aluno para o admin: conta (mesmo excluída ou anonimizada —
+   * quem olha é o suporte), perfil de estudo e interesses. Sem perfil
+   * (onboarding não feito), `profile` é `null`.
+   */
+  async getForAdmin(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: ADMIN_USER_SELECT,
+    });
+
+    if (user === null) {
+      throw new NotFoundError('Não encontramos este aluno.');
+    }
+
+    const [profile, interests] = await Promise.all([
+      this.prisma.studentProfile.findUnique({
+        where: { userId },
+        select: {
+          goals: true,
+          goalNote: true,
+          preferredStudyTime: true,
+          selfReportedLevel: true,
+          timezone: true,
+          nativeLanguage: true,
+          targetDate: true,
+          availabilityMinutes: true,
+        },
+      }),
+      this.listInterests(userId),
+    ]);
+
+    return {
+      user,
+      profile:
+        profile === null
+          ? null
+          : {
+              ...profile,
+              availabilityMinutes: normalizeAvailability(
+                profile.availabilityMinutes as Partial<AvailabilityMinutes>,
+              ),
+            },
+      interests,
+    };
   }
 
   // -------------------------------------------------------------------

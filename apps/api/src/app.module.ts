@@ -9,6 +9,7 @@ import { EnvModule } from './common/config/env.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { InfraModule } from './infra/infra.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AssessmentModule } from './modules/assessment/assessment.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -68,6 +69,7 @@ import { UsersModule } from './modules/users/users.module';
     GeneratorModule,
     ProgressModule,
     NotificationsModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 
+import { adminHandlers } from './admin-mock';
 import { bankHandlers } from './bank-mock';
 import { curriculumHandlers } from './curriculum-mock';
 import { studioHandlers } from './studio-mock';
@@ -15,6 +16,18 @@ export const editorSessionFixture = {
     emailVerifiedAt: new Date().toISOString(),
   },
   accessToken: 'fake-access-token',
+  csrfToken: 'fake-csrf-token',
+};
+
+export const adminSessionFixture = {
+  user: {
+    id: 'admin-1',
+    name: 'Admin Silva',
+    email: 'admin@exemplo.com',
+    role: 'ADMIN',
+    emailVerifiedAt: new Date().toISOString(),
+  },
+  accessToken: 'fake-admin-access-token',
   csrfToken: 'fake-csrf-token',
 };
 
@@ -34,6 +47,7 @@ export const handlers = [
   ...curriculumHandlers,
   ...bankHandlers,
   ...studioHandlers,
+  ...adminHandlers,
 
   http.post(`${API_URL}/auth/signin`, async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };

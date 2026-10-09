@@ -1,5 +1,6 @@
 import {
-  AI_CREDIT_COSTS,
+  DEFAULT_AI_CREDIT_COSTS,
+  mergeCreditCosts,
   balanceFrom,
   creditCycleKey,
   monthlyTopUp,
@@ -233,14 +234,33 @@ describe('billing — créditos', () => {
   });
 
   it('usos restantes arredondam para baixo e nunca ficam negativos', () => {
-    expect(remainingUses(10, 'TUTOR_CORRECTION')).toBe(10);
-    expect(remainingUses(10, 'TUTOR_ROLEPLAY')).toBe(3);
-    expect(remainingUses(4, 'GENERATOR_TOPIC')).toBe(0);
-    expect(remainingUses(-2, 'TUTOR_CORRECTION')).toBe(0);
+    const costs = DEFAULT_AI_CREDIT_COSTS;
+
+    expect(remainingUses(10, 'TUTOR_CORRECTION', costs)).toBe(10);
+    expect(remainingUses(10, 'TUTOR_ROLEPLAY', costs)).toBe(3);
+    expect(remainingUses(4, 'GENERATOR_TOPIC', costs)).toBe(0);
+    expect(remainingUses(-2, 'TUTOR_CORRECTION', costs)).toBe(0);
+  });
+
+  it('usos restantes seguem o custo que o admin definiu', () => {
+    const costs = mergeCreditCosts([{ feature: 'TUTOR_ROLEPLAY', cost: 5 }]);
+
+    expect(remainingUses(10, 'TUTOR_ROLEPLAY', costs)).toBe(2);
+    expect(remainingUses(10, 'TUTOR_CORRECTION', costs)).toBe(10);
+  });
+
+  it('custos da tabela substituem o padrão; feature sem crédito é ignorada', () => {
+    expect(
+      mergeCreditCosts([
+        { feature: 'GENERATOR_TOPIC', cost: 8 },
+        { feature: 'PDF_DOWNLOAD', cost: 99 },
+      ]),
+    ).toEqual({ ...DEFAULT_AI_CREDIT_COSTS, GENERATOR_TOPIC: 8 });
+    expect(mergeCreditCosts([])).toEqual(DEFAULT_AI_CREDIT_COSTS);
   });
 
   it('custos do pedido: correção 1, roleplay 3, material por tema 5', () => {
-    expect(AI_CREDIT_COSTS).toMatchObject({
+    expect(DEFAULT_AI_CREDIT_COSTS).toMatchObject({
       TUTOR_CORRECTION: 1,
       TUTOR_ROLEPLAY: 3,
       GENERATOR_TOPIC: 5,

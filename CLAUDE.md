@@ -173,7 +173,7 @@ dos que vêm antes dele.
 | 14  | `progress`                      | 7, 9, 10   | Painel do aluno, métricas do admin, agregação diária noturna. ✅ pronto                               |
 | 15  | `notifications`                 | 10         | E-mail e Web Push, lembretes do planner por fuso, preferências e limite de frequência. ✅ pronto      |
 | 16  | `mobile`                        | 14         | App (fora do escopo atual — web primeiro)                                                             |
-| 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas                                               |
+| 17  | `admin`                         | 5, 11      | Painel interno: conteúdo, alunos, assinaturas, métricas, auditoria. ✅ gestão (rotas e telas)         |
 | 18  | `deploy`                        | todos      | Infra de produção, migrations, observabilidade, backup                                                |
 
 ---
@@ -746,8 +746,10 @@ admin), **direitos** (`EntitlementsService`) e **créditos de IA**
   Paulo, isso cai às 21:05 do último dia do mês. Nunca calcule renovação no
   front.
 - **"Cota do tutor" e "créditos do Plus" são o mesmo mecanismo.** Um saldo
-  só, custo por feature em
-  [credits.ts](apps/api/src/modules/billing/domain/credits.ts). O FREE
+  só; o custo por feature tem padrão em
+  [credits.ts](apps/api/src/modules/billing/domain/credits.ts)
+  (`DEFAULT_AI_CREDIT_COSTS`) e o admin muda na tabela `ai_credit_costs` (ver
+  "Gestão do admin"). O FREE
   também tem cota (pequena). O crédito do ciclo **repõe até a cota** — sobra
   não acumula acima dela, mas também não se perde.
 - Todo lançamento roda com **trava consultiva do Postgres por aluno**
@@ -1013,6 +1015,41 @@ o de **revisões acumulando** e o **resumo semanal** do progresso (14).
   HMAC (`aluno.tipo`, sem estado), o front chama
   `POST /notifications/unsubscribe`.
 
+### Gestão do admin (admin)
+
+Módulo 17: só HTTP, em cima dos serviços dos outros módulos (por isso vem depois de todos). Regra e dado
+continuam nos donos. Tudo `@Roles('ADMIN')` — **EDITOR e STUDENT recebem 403**.
+
+- **`GET admin/users?q&cursor&limit`** busca em nome **e** e-mail (`contains`, sem diferença de caixa), do mais
+  novo ao mais antigo (`createdAt desc, id`; ordenar por UUID dava ordem arbitrária). A linha traz
+  `deletedAt` (exclusão pedida) e `anonymizedAt`.
+- **A ficha do aluno** (`admin/users/:id/…`) é uma rota fina por seção, cada uma delegando ao serviço dono — o
+  mesmo que responde `GET /me/*`, então o formato é o mesmo: `GET :id` (conta, perfil de estudo, interesses),
+  `progress?weeks`, `plan` (`{plan, pace}`, **`plan: null` sem plano — não é 404**), `history`, `subscription`,
+  `credits`, `credits/history`, `ai-usage?from&to`. De propósito **não há rota de `learner-profile`**: ela traz as
+  frases reais do aluno e a tela não precisa delas (o painel de progresso já dá nível, forças e fraquezas).
+  `GET admin/ai/usage` não serve ao painel: é `@IsPublic()` atrás de basic auth.
+- **Custo em créditos por ação mora na tabela `ai_credit_costs`** (só o que o admin mudou; sem linha vale o
+  padrão `DEFAULT_AI_CREDIT_COSTS`). `CreditCostService.all()` lê a cada reserva — tabela de quatro linhas — e
+  `reserve`, `GET /me/credits` e `EntitlementsService.getQuota` passam por ele. **O valor novo vale na hora**; o
+  estorno usa o valor do próprio lançamento, então mudar o custo não bagunça reserva em andamento.
+  `GET|PATCH admin/billing/credit-costs[/:feature {cost}]` (inteiro de 1 a 100: custo zero deixaria a IA de graça).
+- **Auditoria** (`infra/audit`, módulo `@Global` que só depende do Prisma, para billing e progress registrarem sem
+  importar o `admin`): tabela `admin_audit_logs`, **só insere** — nenhuma rota edita ou apaga. `AuditService.record`
+  é chamado **explicitamente no controller, depois do sucesso** (só ele tem o "antes" do diff, via `diffFields`);
+  ação que falha (400/404/409) não deixa rastro. A gravação é _best-effort_: se falhar vira log de erro e a ação, que
+  já aconteceu, não é desfeita. Ações (`AUDIT_ACTIONS` em `packages/shared`): `credits.bonus` (`{amount, reason,
+balanceAfter}`), `plan.update` (`{tier, billingPeriod, changes: {campo: {from, to}}}` — só o que mudou),
+  `credit-cost.update` (`{feature, from, to}`), `metrics.rebuild` (`{from, to}`) e `student.view` (abrir a ficha: é
+  dado pessoal, LGPD). **`details` nunca guarda conteúdo do aluno**; `actorId` não tem FK (a linha sobrevive à
+  anonimização) e `actorEmail` é o retrato do momento.
+- **`GET admin/audit-log?action&actorId&targetId&from&to`** (`from`/`to` são instantes ISO; o painel manda os
+  limites do dia no fuso de quem olha) devolve do mais recente ao mais antigo, paginado por cursor, e resolve o
+  alvo `user` para o e-mail **de hoje** (`targetLabel`) — a auditoria guarda só o id, para a anonimização valer
+  também aqui.
+- Os limites dos formulários (bônus, plano, custo) e o tipo de cada ação auditada vivem em
+  `packages/shared/src/admin-management.ts`: a API valida e o painel confere com os mesmos schemas.
+
 ### Erros e logs
 
 - Erro de negócio: `AppException` (ou as subclasses em
@@ -1089,8 +1126,9 @@ valida a mensagem.
 catálogo, ferramentas do Plus, progresso, perfil); o admin tem o Conteúdo
 (árvore do curso, personagens, versões e editor de lição) e a Taxonomia e o
 banco de questões (skills, erros típicos, notas de registro, editor de
-item) e o Estúdio de conteúdo (rascunho por IA, fila, revisão, áudio,
-apostilas). Alunos, assinaturas e métricas do admin ainda são placeholders** —
+item), o Estúdio de conteúdo (rascunho por IA, fila, revisão, áudio,
+apostilas) e a Gestão, só para ADMIN (alunos, planos e custo dos créditos,
+métricas, auditoria). O painel inicial do admin (`/`) ainda é placeholder** —
 cada tela entra como um módulo à parte, igual ao back-end.
 
 ### Pacotes
@@ -1446,6 +1484,61 @@ barra lateral e no topo de `/conteudo`.
   a cada salvamento (custa chamada de IA), QA em fila (hoje síncrona na API), comentário que acompanha a etapa
   quando ela é reordenada, trocar a voz do personagem, custo em R$ (a tela mostra US$) e edição simultânea
   (vence quem salvar por último).
+
+### Admin → Gestão (`apps/admin/src/features/management`, somente ADMIN)
+
+| Rota              | Tela                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| `/alunos`         | `Students`: busca por nome ou e-mail (debounce de 300 ms, `?q` na API), situação da conta, "Carregar mais". |
+| `/alunos/:userId` | `StudentProfile`: ficha com nível, pontos fortes/fracos, plano, histórico, assinatura, créditos, uso de IA. |
+| `/assinaturas`    | `Plans`: preço, cota e "à venda" de cada plano + **custo em créditos por ação**, editáveis por linha.       |
+| `/metricas?aba=`  | `Metrics`: filtro de período e abas **Engajamento**, **Conteúdo**, **Custos**.                              |
+| `/auditoria`      | `AuditLog`: quem fez o quê, em quem e o que mudou; filtros por ação e dia.                                  |
+
+Estão no layout largo, atrás de `RoleGuard` (`app/RoleGuard.tsx`): o **EDITOR** continua no painel e vê "Área
+de administração" no lugar da tela; as entradas somem do menu dele (`adminOnly` em `nav-items.ts`). É só
+atalho de tela — a API (`@Roles('ADMIN')`) é quem recusa. O menu do ADMIN ganha **Filas (Bull Board)**: abre
+`${VITE_API_URL}/admin/queues` em outra aba, e o Bull Board tem **login próprio** (basic auth do servidor, não o
+JWT) — o aviso está ao lado do link.
+
+- **Ficha do aluno**: a conta carrega primeiro; **cada seção é uma leitura própria** (`Section` +
+  `toSection`), então a que falha mostra o erro no lugar dela e as outras seguem. As respostas têm o formato das
+  rotas `/me/*` e usam os mesmos schemas (progresso, assinatura, créditos, histórico). **As frases reais do
+  aluno (`learner-profile`) não aparecem**: nível, forças, fraquezas e erros vêm do painel de progresso (14), que
+  só traz descrição e correção. **Abrir a ficha deixa rastro na auditoria** (`student.view`), por isso a leitura da
+  conta não refaz sozinha ao voltar para a aba (`refetchOnWindowFocus: false`).
+- **Conceder créditos** (`GrantDialog`): quantidade 1–10 000 e **motivo obrigatório** (≤ 200), com os limites de
+  `BONUS_LIMITS` em `packages/shared` (a API valida com o mesmo schema). Os erros só aparecem depois da primeira
+  tentativa; mostra "o saldo vai de X para Y". O motivo vai para o extrato do aluno **e** para a auditoria.
+- **Planos**: o preço é digitado em **reais** (`parseBrlToCents`: `69,90`, `69.90`, `R$ 1.234,56`) e vai em
+  centavos; só o que mudou entra no `PATCH` (`planPatch`). O FREE não tem preço. A linha é montada com `key` que
+  inclui os valores do servidor, então depois de salvar ela recomeça refletindo o que ficou gravado. Avisos fixos:
+  preço novo não mexe em quem já assina; a cota nova vale no próximo crédito do ciclo; o custo novo vale na hora.
+- **Métricas**: um pedido por período (`GET admin/metrics?from&to`). **Os atalhos (7/30/90/180 dias) partem do
+  `period.to` que a API devolveu no padrão** (ontem no fuso das métricas) — o front nunca adivinha "ontem". 30
+  dias é o padrão e limpa `?de=&ate=`. O intervalo livre confere antes de mandar (vazio, ao contrário, mais de 180
+  dias — o mesmo que a API recusa). Gráficos com o mesmo padrão do F8 (`LineChart`, `BarChart`,
+  `GroupedBarChart`; "Ver como tabela", `null` = lacuna). A **matriz de retenção é tabela**: o número escrito em
+  toda célula e a cor só reforça; semana que ainda não aconteceu fica vazia. Receita é a mensalidade contratada
+  (MRR) distribuída pelos dias — **não é caixa** — e o custo de IA sai em R$ pelo câmbio fixo que a tela mostra.
+  Recurso de IA desconhecido aparece como veio (`aiFeatureLabel`). `level-scale.ts` é cópia da do app do aluno.
+- **Auditoria**: o filtro de dia vira os limites do dia **no fuso de quem olha** (`localDayBounds`), porque o
+  servidor guarda instantes UTC. O texto de cada linha é montado em `lib/audit-text.ts` lendo `details` com
+  cuidado — ação nova ou campo faltando não quebra a tela.
+- **Mocks com estado** (`src/mocks/admin-mock.ts`): 30 contas (uma excluída, uma anonimizada, um editor e um
+  admin), extrato que recebe o bônus, planos e custos editáveis, métricas geradas pelo período e um log **que o
+  próprio mock alimenta** a cada ação. Valida os pedidos com os schemas do servidor. Chaves de `failNext`:
+  `users-list`, `student-overview`, `student-progress`, `student-plan`, `student-history`,
+  `student-subscription`, `student-credits`, `student-credit-history`, `student-ai-usage`, `bonus-grant`,
+  `plans-list`, `plan-update`, `credit-costs`, `credit-cost-update`, `metrics`, `audit-list`.
+  `renderAdminAt(path, {role: 'ADMIN'})` entra como administrador (padrão: editor); no Playwright é
+  `localStorage.__e2e_role__ = 'ADMIN'`.
+- **Testes do admin rodam com no máximo 4 processos** (`poolOptions.forks.maxForks` em `vitest.config.ts`) e
+  `asyncUtilTimeout` de 5 s: com todos os núcleos ocupados os `findBy` estouravam e testes que passam sozinhos
+  falhavam, um arquivo diferente a cada rodada.
+- Fora do escopo: mudar o papel de um usuário, suspender ou editar aluno, cancelar assinatura ou estornar pelo
+  admin, exportar CSV, botão de "recalcular métricas" (a rota existe e é auditada, sem tela), auditoria das
+  escritas de EDITOR (publicar, aprovar…), alertas de custo e KPIs no painel inicial.
 
 ### Tokens do design system (`packages/ui/src/styles/tokens.css`)
 

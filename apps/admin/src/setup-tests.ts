@@ -1,13 +1,20 @@
 import '@testing-library/jest-dom/vitest';
 import { configureApiClient } from '@english-saas/api-client';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
+import { resetAdminMock } from './mocks/admin-mock';
 import { resetCurriculumMock } from './mocks/curriculum-mock';
 import { resetStudioMock } from './mocks/studio-mock';
 import { server } from './mocks/server';
 
 configureApiClient({ baseUrl: 'http://localhost:3333' });
+
+// O padrão do Testing Library é 1 s para `findBy`/`waitFor`. Com a suíte inteira
+// em paralelo (jsdom + MSW + gráficos) isso é curto e gera falso negativo:
+// cada teste passa sozinho. O teto só vale quando a tela demora — quando
+// acerta, o `findBy` volta na hora.
+configure({ asyncUtilTimeout: 5_000 });
 
 // jsdom não implementa ResizeObserver; alguns primitivos do Radix (Checkbox,
 // Popover) o usam para medir tamanho no mount.
@@ -106,6 +113,7 @@ afterEach(() => {
   server.resetHandlers();
   resetCurriculumMock();
   resetStudioMock();
+  resetAdminMock();
   cleanup();
 });
 afterAll(() => server.close());

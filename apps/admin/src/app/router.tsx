@@ -16,10 +16,16 @@ import { DraftQueue } from '../features/studio/DraftQueue';
 import { NewDraft } from '../features/studio/NewDraft';
 import { StudioLayout } from '../features/studio/StudioLayout';
 import { Workbooks } from '../features/studio/Workbooks';
+import { AuditLog } from '../features/management/AuditLog';
+import { Metrics } from '../features/management/Metrics';
+import { Plans } from '../features/management/Plans';
+import { StudentProfile } from '../features/management/StudentProfile';
+import { Students } from '../features/management/Students';
 import { Dashboard } from '../pages/Dashboard';
 import { Forbidden } from '../pages/Forbidden';
 import { NotFound } from '../pages/NotFound';
 import { AuthGuard } from './AuthGuard';
+import { RoleGuard } from './RoleGuard';
 
 /** As rotas sem o roteador — os testes montam num `MemoryRouter`. */
 export function AppRoutes() {
@@ -64,6 +70,15 @@ export function AppRoutes() {
             path="/conteudo/versoes/:versionId"
             element={<VersionEditor />}
           />
+
+          {/* Gestão: só ADMIN (a API também recusa o editor). */}
+          <Route element={<RoleGuard />}>
+            <Route path="/alunos" element={<Students />} />
+            <Route path="/alunos/:userId" element={<StudentProfile />} />
+            <Route path="/assinaturas" element={<Plans />} />
+            <Route path="/metricas" element={<Metrics />} />
+            <Route path="/auditoria" element={<AuditLog />} />
+          </Route>
         </Route>
       </Route>
 

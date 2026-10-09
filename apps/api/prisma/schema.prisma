@@ -2526,3 +2526,45 @@ model NotificationLog {
   @@index([userId, type, createdAt])
   @@map("notification_logs")
 }
+
+/// Custo em créditos de um uso de IA, quando o admin mudou o padrão
+/// (`DEFAULT_AI_CREDIT_COSTS`). Feature sem linha usa o padrão.
+model AiCreditCost {
+  feature Feature @id
+
+  cost        Int
+  /// Quem mudou por último. Sem FK: a trilha de quem mexeu mora na auditoria.
+  updatedById String? @map("updated_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_credit_costs")
+}
+
+/// Trilha das ações de ADMIN (conceder crédito, mudar plano, abrir o perfil de
+/// um aluno…). Append-only: nenhuma rota edita ou apaga. `actorId` não tem FK
+/// de propósito — a linha sobrevive à anonimização do ator, e `actorEmail` é
+/// o retrato do momento. `details` nunca guarda conteúdo do aluno.
+model AdminAuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  actorId    String  @map("actor_id") @db.Uuid
+  actorEmail String  @map("actor_email")
+  /// `credits.bonus`, `plan.update`, `student.view`…
+  action     String
+  /// `user`, `plan`, `credit_cost`, `metrics`.
+  targetType String  @map("target_type")
+  targetId   String? @map("target_id")
+  details    Json    @default("{}")
+  requestId  String? @map("request_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetId, createdAt])
+  @@map("admin_audit_logs")
+}

@@ -7,11 +7,8 @@ import { buildPage, toPrismaCursorArgs } from 'src/common/pagination/cursor';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 
 import { InsufficientCreditsError } from '../billing.errors';
-import {
-  AI_CREDIT_COSTS,
-  monthlyTopUp,
-  type CreditFeature,
-} from '../domain/credits';
+import { monthlyTopUp, type CreditFeature } from '../domain/credits';
+import { CreditCostService } from './credit-cost.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -38,7 +35,10 @@ export type CreditLedgerEntryView = {
  */
 @Injectable()
 export class AiCreditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly costs: CreditCostService,
+  ) {}
 
   async balanceFor(userId: string, tx: Tx = this.prisma): Promise<number> {
     const result = await tx.aiCreditLedgerEntry.aggregate({
@@ -74,7 +74,7 @@ export class AiCreditService {
     userId: string,
     feature: CreditFeature,
   ): Promise<CreditReservation> {
-    const cost = AI_CREDIT_COSTS[feature];
+    const cost = await this.costs.of(feature);
 
     return this.prisma.$transaction(async (tx) => {
       await this.lockUser(tx, userId);

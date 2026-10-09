@@ -4,11 +4,7 @@ import { SubscriptionStatus, type PlanTier } from '@prisma/client';
 import { PrismaService } from 'src/infra/prisma/prisma.service';
 import { RedisService } from 'src/infra/redis/redis.service';
 
-import {
-  AI_CREDIT_COSTS,
-  isCreditFeature,
-  remainingUses,
-} from '../domain/credits';
+import { isCreditFeature, remainingUses } from '../domain/credits';
 import {
   canAccessLesson,
   canUseFeature,
@@ -23,6 +19,7 @@ import {
   planCacheTtlSeconds,
 } from '../domain/subscription-state';
 import { AiCreditService } from './ai-credit.service';
+import { CreditCostService } from './credit-cost.service';
 import { PlansService } from './plans.service';
 
 export type CurrentPlan = {
@@ -61,6 +58,7 @@ export class EntitlementsService {
     private readonly prisma: PrismaService,
     private readonly plans: PlansService,
     private readonly credits: AiCreditService,
+    private readonly costs: CreditCostService,
     private readonly redis: RedisService,
   ) {}
 
@@ -224,9 +222,10 @@ export class EntitlementsService {
   }
 
   async getQuota(userId: string, feature: Feature): Promise<Quota> {
-    const [plan, balance] = await Promise.all([
+    const [plan, balance, costs] = await Promise.all([
       this.currentPlan(userId),
       this.credits.balanceFor(userId),
+      this.costs.all(),
     ]);
     const credit = isCreditFeature(feature);
 
@@ -235,10 +234,10 @@ export class EntitlementsService {
       tier: plan.tier,
       // Acesso a lição depende da unidade: aqui "pode" = o plano tem lição.
       allowed: feature === 'LESSON_ACCESS' || canUseFeature(plan.tier, feature),
-      creditCost: credit ? AI_CREDIT_COSTS[feature] : 0,
+      creditCost: credit ? costs[feature] : 0,
       balance,
       monthlyAiCredits: plan.monthlyAiCredits,
-      remainingUses: credit ? remainingUses(balance, feature) : null,
+      remainingUses: credit ? remainingUses(balance, feature, costs) : null,
     };
   }
 }

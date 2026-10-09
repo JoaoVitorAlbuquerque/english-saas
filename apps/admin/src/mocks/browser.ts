@@ -1,13 +1,19 @@
 import { http, HttpResponse } from 'msw';
 import { setupWorker } from 'msw/browser';
 
-import { editorSessionFixture, handlers } from './handlers';
+import {
+  adminSessionFixture,
+  editorSessionFixture,
+  handlers,
+} from './handlers';
 import { seedReadyLessonDraft } from './studio-mock';
 
 const API_URL = 'http://localhost:3333';
 
 /** O teste liga com `page.addInitScript` — ver `e2e/curriculum.spec.ts`. */
 export const E2E_AUTHENTICATED_KEY = '__e2e_authenticated__';
+/** `ADMIN` entra como administrador; sem a chave, entra como editor. */
+export const E2E_ROLE_KEY = '__e2e_role__';
 
 function isAuthenticatedScenario(): boolean {
   try {
@@ -22,10 +28,20 @@ function isAuthenticatedScenario(): boolean {
  * mas o smoke do login precisa do padrão (sem sessão). Resolver que devolve
  * `undefined` cai no próximo handler.
  */
+function scenarioSession() {
+  try {
+    return window.localStorage.getItem(E2E_ROLE_KEY) === 'ADMIN'
+      ? adminSessionFixture
+      : editorSessionFixture;
+  } catch {
+    return editorSessionFixture;
+  }
+}
+
 const e2eAuthHandlers = [
   http.post(`${API_URL}/auth/refresh`, () =>
     isAuthenticatedScenario()
-      ? HttpResponse.json(editorSessionFixture)
+      ? HttpResponse.json(scenarioSession())
       : undefined,
   ),
 ];

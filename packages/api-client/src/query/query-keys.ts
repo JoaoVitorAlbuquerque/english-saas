@@ -65,4 +65,28 @@ export const queryKeys = {
     ['admin', 'studio', 'audio', versionId] as const,
   studioWorkbooks: ['admin', 'studio', 'workbooks'] as const,
   studioJob: (id: string) => ['admin', 'studio', 'job', id] as const,
+  adminUsers: (filter: object) => ['admin', 'users', filter] as const,
+  /** Prefixo de tudo da ficha de um aluno — `invalidateQueries` por aqui. */
+  adminStudent: (id: string) => ['admin', 'student', id] as const,
+  adminStudentOverview: (id: string) =>
+    ['admin', 'student', id, 'overview'] as const,
+  adminStudentProgress: (id: string, weeks: number) =>
+    ['admin', 'student', id, 'progress', weeks] as const,
+  adminStudentPlan: (id: string) => ['admin', 'student', id, 'plan'] as const,
+  adminStudentHistory: (id: string) =>
+    ['admin', 'student', id, 'history'] as const,
+  adminStudentSubscription: (id: string) =>
+    ['admin', 'student', id, 'subscription'] as const,
+  adminStudentCredits: (id: string) =>
+    ['admin', 'student', id, 'credits'] as const,
+  adminStudentCreditHistory: (id: string) =>
+    ['admin', 'student', id, 'credits', 'history'] as const,
+  adminStudentAiUsage: (id: string) =>
+    ['admin', 'student', id, 'ai-usage'] as const,
+  adminPlans: ['admin', 'billing', 'plans'] as const,
+  adminCreditCosts: ['admin', 'billing', 'credit-costs'] as const,
+  adminMetrics: (range: object | null) => ['admin', 'metrics', range] as const,
+  /** Prefixo do log — toda ação de admin invalida por aqui. */
+  adminAuditAll: ['admin', 'audit'] as const,
+  adminAudit: (filter: object) => ['admin', 'audit', filter] as const,
 };

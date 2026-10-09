@@ -1,4 +1,10 @@
-import { cursorPaginationQuerySchema } from '@english-saas/shared';
+import {
+  creditCostValueSchema,
+  creditFeatureSchema,
+  cursorPaginationQuerySchema,
+  grantBonusSchema,
+  updatePlanSchema,
+} from '@english-saas/shared';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -22,24 +28,14 @@ export class CheckoutDto extends createZodDto(
   }),
 ) {}
 
-export class UpdatePlanDto extends createZodDto(
-  z
-    .object({
-      priceCents: z.number().int().min(0).max(10_000_000).optional(),
-      monthlyAiCredits: z.number().int().min(0).max(100_000).optional(),
-      active: z.boolean().optional(),
-    })
-    .refine(
-      (data) => Object.values(data).some((value) => value !== undefined),
-      {
-        message: 'Informe ao menos um campo para alterar.',
-      },
-    ),
+export class UpdatePlanDto extends createZodDto(updatePlanSchema) {}
+
+export class GrantBonusDto extends createZodDto(grantBonusSchema) {}
+
+export class CreditCostParamDto extends createZodDto(
+  z.object({ feature: creditFeatureSchema }),
 ) {}
 
-export class GrantBonusDto extends createZodDto(
-  z.object({
-    amount: z.number().int().min(1).max(10_000),
-    reason: z.string().trim().min(1).max(200),
-  }),
+export class UpdateCreditCostDto extends createZodDto(
+  z.object({ cost: creditCostValueSchema }),
 ) {}

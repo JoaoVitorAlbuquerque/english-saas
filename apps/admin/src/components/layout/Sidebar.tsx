@@ -1,10 +1,21 @@
+import { getApiBaseUrl } from '@english-saas/api-client';
 import { cn } from '@english-saas/ui';
+import { ExternalLink, ListTodo } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 import { t } from '../../messages/pt-BR';
+import { isAdmin, useAuthStore } from '../../stores/auth-store';
 import { NAV_ITEMS } from './nav-items';
 
+/** O Bull Board mora na API (`/admin/queues`) e tem login próprio (basic auth). */
+function queuesUrl(): string {
+  return `${getApiBaseUrl()}/admin/queues`;
+}
+
 export function Sidebar() {
+  const admin = useAuthStore((state) => isAdmin(state.user));
+  const items = NAV_ITEMS.filter((item) => admin || !item.adminOnly);
+
   return (
     <nav
       aria-label="Navegação principal"
@@ -13,36 +24,43 @@ export function Sidebar() {
       <span className="mb-4 px-2 font-display text-lg text-ink">
         english-saas admin
       </span>
-      {NAV_ITEMS.map(({ to, label, icon: Icon, disabled }) =>
-        disabled ? (
-          <span
-            key={to}
-            aria-disabled="true"
-            className="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted/60"
+      {items.map(({ to, label, icon: Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === '/'}
+          className={({ isActive }) =>
+            cn(
+              'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium',
+              isActive
+                ? 'bg-accent/10 text-accent'
+                : 'text-muted hover:bg-ground',
+            )
+          }
+        >
+          <Icon className="size-5" aria-hidden="true" />
+          {label}
+        </NavLink>
+      ))}
+
+      {admin ? (
+        <div className="mt-auto border-t border-line pt-3">
+          <a
+            href={queuesUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-describedby="queues-hint"
+            className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted hover:bg-ground"
           >
-            <Icon className="size-5" aria-hidden="true" />
-            {label}
-            <span className="ml-auto text-xs">{t('nav.comingSoon')}</span>
-          </span>
-        ) : (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              cn(
-                'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium',
-                isActive
-                  ? 'bg-accent/10 text-accent'
-                  : 'text-muted hover:bg-ground',
-              )
-            }
-          >
-            <Icon className="size-5" aria-hidden="true" />
-            {label}
-          </NavLink>
-        ),
-      )}
+            <ListTodo className="size-5" aria-hidden="true" />
+            {t('nav.queues')}
+            <ExternalLink className="ml-auto size-4" aria-hidden="true" />
+          </a>
+          <p id="queues-hint" className="mt-1 px-3 text-xs text-muted">
+            {t('nav.queuesHint')}
+          </p>
+        </div>
+      ) : null}
     </nav>
   );
 }

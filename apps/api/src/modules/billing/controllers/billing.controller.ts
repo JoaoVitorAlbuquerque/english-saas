@@ -12,9 +12,10 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ActiveUserId } from 'src/common/decorators/active-user-id.decorator';
 import { IsPublic } from 'src/common/decorators/is-public.decorator';
 
-import { AI_CREDIT_COSTS, nextCreditGrantAt } from '../domain/credits';
+import { nextCreditGrantAt } from '../domain/credits';
 import { CheckoutDto, CreditHistoryQueryDto } from '../dto/billing.dto';
 import { AiCreditService } from '../services/ai-credit.service';
+import { CreditCostService } from '../services/credit-cost.service';
 import { EntitlementsService } from '../services/entitlements.service';
 import { PlansService } from '../services/plans.service';
 import { SubscriptionService } from '../services/subscription.service';
@@ -27,6 +28,7 @@ export class BillingController {
     private readonly subscriptions: SubscriptionService,
     private readonly entitlements: EntitlementsService,
     private readonly credits: AiCreditService,
+    private readonly costs: CreditCostService,
   ) {}
 
   @IsPublic()
@@ -64,16 +66,17 @@ export class BillingController {
   @Get('me/credits')
   @ApiOperation({ summary: 'Saldo de créditos de IA e quanto cada uso custa' })
   async myCredits(@ActiveUserId() userId: string) {
-    const [plan, balance] = await Promise.all([
+    const [plan, balance, costs] = await Promise.all([
       this.entitlements.currentPlan(userId),
       this.credits.balanceFor(userId),
+      this.costs.all(),
     ]);
 
     return {
       tier: plan.tier,
       balance,
       monthlyAiCredits: plan.monthlyAiCredits,
-      costs: AI_CREDIT_COSTS,
+      costs,
       // Instante (UTC) do próximo crédito do ciclo — o app mostra no fuso
       // do aluno. Repõe até a cota: quem está acima dela não recebe nada.
       nextGrantAt: nextCreditGrantAt(new Date()).toISOString(),

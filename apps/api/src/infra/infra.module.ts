@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from './audit/audit.module';
 import { EventsModule } from './events/events.module';
 import { LoggerModule } from './logger/logger.module';
 import { MailModule } from './mail/mail.module';
@@ -22,6 +23,7 @@ import { TtsModule } from './tts/tts.module';
   imports: [
     LoggerModule,
     PrismaModule,
+    AuditModule,
     RedisModule,
     QueueModule,
     QueueAdminModule,
@@ -34,6 +36,7 @@ import { TtsModule } from './tts/tts.module';
   exports: [
     LoggerModule,
     PrismaModule,
+    AuditModule,
     RedisModule,
     QueueModule,
     StorageModule,

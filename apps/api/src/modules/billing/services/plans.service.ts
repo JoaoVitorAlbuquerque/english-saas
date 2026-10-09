@@ -86,6 +86,18 @@ export class PlansService {
     return plan?.monthlyAiCredits ?? 0;
   }
 
+  async get(id: string): Promise<PlanView> {
+    const plan = await this.prisma.subscriptionPlan.findUnique({
+      where: { id },
+    });
+
+    if (plan === null) {
+      throw new NotFoundError('Plano não encontrado.');
+    }
+
+    return toPlanView(plan);
+  }
+
   async update(id: string, patch: PlanPatch): Promise<PlanView> {
     const existing = await this.prisma.subscriptionPlan.findUnique({
       where: { id },

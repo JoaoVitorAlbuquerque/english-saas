@@ -22,3 +22,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 export function hasAdminAccess(user: SessionUser | null): boolean {
   return user !== null && ALLOWED_ROLES.includes(user.role);
 }
+
+/** Gestão (alunos, planos, métricas, auditoria) é só do administrador. */
+export function isAdmin(user: SessionUser | null): boolean {
+  return user !== null && user.role === 'ADMIN';
+}
